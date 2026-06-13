@@ -116,6 +116,32 @@ def cmd_volume(args: argparse.Namespace) -> int:
     return 0
 
 
+def _xy(s: str) -> tuple[float, float]:
+    a, b = s.split(",")
+    return float(a), float(b)
+
+
+def cmd_profile(args: argparse.Namespace) -> int:
+    import json as _json
+
+    from openreco.measure import measure_profile
+
+    result = measure_profile(args.dsm, _xy(getattr(args, "from")), _xy(args.to), args.n)
+    print(f"  length_m  {result['length_m']}")
+    print(f"  z_min     {result['z_min']}")
+    print(f"  z_max     {result['z_max']}")
+    print(f"  relief_m  {result['relief_m']}")
+    print(f"  samples   {len(result['samples'])}")
+    if args.out:
+        coords = [[s["x"], s["y"], s["z"]] for s in result["samples"] if s["z"] is not None]
+        geo = {"type": "Feature", "properties": {"length_m": result["length_m"]},
+               "geometry": {"type": "LineString", "coordinates": coords}}
+        with open(args.out, "w", encoding="utf-8") as f:
+            _json.dump(geo, f)
+        print(f"  wrote     {args.out}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="openreco", description="OpenReco photogrammetry pipeline")
     p.add_argument("--version", action="version", version=f"openreco {__version__}")
@@ -150,6 +176,14 @@ def build_parser() -> argparse.ArgumentParser:
     pv.add_argument("dsm", help="path to a DSM GeoTIFF (e.g. output/dsm.tif)")
     pv.add_argument("--base", default="min", help="reference: min | mean | <elevation>")
     pv.set_defaults(func=cmd_volume)
+
+    pp = sub.add_parser("profile", help="elevation cross-section across a DSM")
+    pp.add_argument("dsm", help="path to a DSM GeoTIFF")
+    pp.add_argument("--from", required=True, metavar="X,Y", help="start point in DSM CRS units")
+    pp.add_argument("--to", required=True, metavar="X,Y", help="end point in DSM CRS units")
+    pp.add_argument("--n", type=int, default=200, help="number of samples")
+    pp.add_argument("--out", help="optional GeoJSON LineString output path")
+    pp.set_defaults(func=cmd_profile)
     return p
 
 

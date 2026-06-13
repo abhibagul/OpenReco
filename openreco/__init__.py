@@ -14,8 +14,8 @@ def __getattr__(name: str):
         from openreco import api
 
         return getattr(api, name)
-    if name == "measure_volume":
-        from openreco.measure import measure_volume
+    if name in ("measure_volume", "measure_profile"):
+        from openreco import measure
 
-        return measure_volume
+        return getattr(measure, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

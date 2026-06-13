@@ -56,3 +56,31 @@ def measure_volume(dsm_path: str | Path, base: str | float = "min") -> dict[str,
         "cells": int(valid.sum()),
         "cell_size_m": round(cell, 6),
     }
+
+
+def measure_profile(dsm_path: str | Path, p_from: tuple[float, float],
+                    p_to: tuple[float, float], n: int = 200) -> dict[str, Any]:
+    """Elevation cross-section along the segment p_from -> p_to (both in the DSM's CRS units).
+    Samples `n` points and returns per-sample distance/x/y/z plus min/max/length summary."""
+    import rasterio
+
+    with rasterio.open(dsm_path) as ds:
+        xs = np.linspace(p_from[0], p_to[0], n)
+        ys = np.linspace(p_from[1], p_to[1], n)
+        zs = np.array([v[0] for v in ds.sample(np.column_stack([xs, ys]))], dtype=np.float64)
+        nodata = ds.nodata
+    if nodata is not None and not np.isnan(nodata):
+        zs[zs == nodata] = np.nan
+    seg_len = float(np.hypot(p_to[0] - p_from[0], p_to[1] - p_from[1]))
+    dist = np.linspace(0, seg_len, n)
+    samples = [{"dist_m": round(float(d), 3), "x": round(float(x), 3), "y": round(float(y), 3),
+                "z": (round(float(z), 3) if np.isfinite(z) else None)}
+               for d, x, y, z in zip(dist, xs, ys, zs)]
+    finite = zs[np.isfinite(zs)]
+    return {
+        "length_m": round(seg_len, 3),
+        "samples": samples,
+        "z_min": round(float(finite.min()), 3) if finite.size else None,
+        "z_max": round(float(finite.max()), 3) if finite.size else None,
+        "relief_m": round(float(finite.max() - finite.min()), 3) if finite.size else None,
+    }
