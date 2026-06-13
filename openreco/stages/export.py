@@ -16,6 +16,7 @@ from typing import Any
 
 from openreco.engine.context import Issue, RunContext, Severity, StageResult
 from openreco.engine.stage import Stage, register_stage
+from openreco.io.gltf import write_glb
 from openreco.io.pointcloud import read_mesh_ply, write_obj
 from openreco.viewer import TEMPLATE_DIR
 
@@ -23,7 +24,7 @@ from openreco.viewer import TEMPLATE_DIR
 @register_stage
 class Export(Stage):
     type = "export"
-    version = "1"
+    version = "2"  # v2: adds portable glTF (.glb) mesh export
 
     def default_params(self) -> dict[str, Any]:
         return {"output_dir": "output", "copy_to_project": True}
@@ -55,6 +56,8 @@ class Export(Stage):
             v, fcs, vc = read_mesh_ply(mesh_src)
             write_obj(site / "mesh.obj", v, fcs, vc)
             included.append("mesh.obj")
+            write_glb(site / "mesh.glb", v, fcs, vc)   # portable glTF for VFX/AEC/web pipelines
+            included.append("mesh.glb")
 
         # rasters
         for dep, name, fn in (("dsm", "dsm", "dsm.tif"), ("ortho", "ortho", "ortho.tif")):

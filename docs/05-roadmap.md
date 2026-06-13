@@ -21,7 +21,8 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - ✅ **Python API mirroring CLI 1:1** (`openreco.Project`: open/create/add_stage/run/resume/diff/save).
 - ✅ **Richer processing report** (summary cards, QA by severity, GPS/GCP residuals, repro block).
 - ✅ **GCP-based georeferencing** (file → triangulation → Umeyama; validated on real aerial data).
-- Coded-target auto-detection + sub-pixel refine; coverage maps in the report.
+- ✅ **glTF (.glb) export** (portable colored mesh; hand-written container, no dependency).
+- Coded-target auto-detection + sub-pixel refine; coverage maps in the report; USD/COPC/3D Tiles.
 - Learned matching (LightGlue/ALIKED); GLOMAP global SfM; hierarchical for large sets.
 - Texturing: UV atlas + multi-image blend + de-lighting → PBR. Mesh cleanup/decimation/hole-fill.
 - Coded/non-coded GCP auto-detect + sub-pixel; geoid/NTv2; georeferenced BA; DTM; seamline+inpaint.
