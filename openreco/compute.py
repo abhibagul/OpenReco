@@ -62,3 +62,45 @@ def colmap_has_cuda() -> bool:
 def gpu_dense_available() -> bool:
     """True when real GPU dense MVS can run (CUDA GPU + a COLMAP binary to drive it)."""
     return colmap_has_cuda()
+
+
+@lru_cache(maxsize=1)
+def torch_device() -> str | None:
+    """Best available torch device for the portable (plane-sweep) dense backend, or None if torch
+    is absent. Covers every vendor from one codebase: 'cuda' (NVIDIA), 'mps' (Apple Silicon),
+    'cpu' (anywhere; AMD ROCm also presents as 'cuda' on torch-rocm builds)."""
+    try:
+        import torch
+    except Exception:  # noqa: BLE001
+        return None
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def select_dense_backend(prefer: str = "auto") -> str:
+    """Pick a dense MVS backend by capability:
+       colmap_cuda  — best quality, NVIDIA + CUDA COLMAP binary
+       planesweep   — portable torch plane-sweep (CUDA/MPS/ROCm/CPU)
+       sparse       — no dense; reuse the SfM sparse cloud
+    `prefer` forces a specific backend (validated against availability by the caller)."""
+    if prefer != "auto":
+        return prefer
+    if colmap_has_cuda():
+        return "colmap_cuda"
+    if torch_device() is not None:
+        return "planesweep"
+    return "sparse"
+
+
+def describe() -> dict:
+    """Human/JSON-friendly capability snapshot (for reports / the 'doctor')."""
+    return {
+        "nvidia_gpu": has_nvidia_gpu(),
+        "colmap": str(find_colmap()) if find_colmap() else None,
+        "colmap_cuda": colmap_has_cuda(),
+        "torch_device": torch_device(),
+        "auto_dense_backend": select_dense_backend(),
+    }

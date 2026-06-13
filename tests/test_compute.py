@@ -38,3 +38,19 @@ def test_gpu_dense_available_when_both_present(tmp_path, monkeypatch):
     monkeypatch.setattr(compute, "find_colmap", lambda: fake)
     assert compute.gpu_dense_available() is True
     _clear()
+
+
+def test_select_dense_backend_priority(monkeypatch):
+    # colmap_cuda wins when available
+    monkeypatch.setattr(compute, "colmap_has_cuda", lambda: True)
+    monkeypatch.setattr(compute, "torch_device", lambda: "cuda")
+    assert compute.select_dense_backend() == "colmap_cuda"
+    # else torch plane-sweep (covers AMD/Apple/CPU)
+    monkeypatch.setattr(compute, "colmap_has_cuda", lambda: False)
+    monkeypatch.setattr(compute, "torch_device", lambda: "mps")
+    assert compute.select_dense_backend() == "planesweep"
+    # else sparse
+    monkeypatch.setattr(compute, "torch_device", lambda: None)
+    assert compute.select_dense_backend() == "sparse"
+    # explicit preference is honored verbatim
+    assert compute.select_dense_backend("planesweep") == "planesweep"

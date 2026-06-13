@@ -38,10 +38,14 @@ class Mvs(Stage):
         return {
             "quality": "medium",            # low | medium | high (image size for dense)
             "geometric_consistency": True,
-            "dense_backend": "auto",        # auto | cuda | sparse
-            "cache_size_gb": 8,             # PatchMatch RAM cache
+            "dense_backend": "auto",        # auto | colmap_cuda | planesweep | sparse
+            "cache_size_gb": 8,             # PatchMatch RAM cache (colmap_cuda)
             "gpu_index": 0,
             "allow_sparse_fallback": True,
+            # planesweep (portable torch backend) knobs:
+            "planesweep_max_dim": 700,
+            "planesweep_depths": 48,
+            "planesweep_neighbors": 4,
         }
 
     def run(self, ctx: RunContext) -> StageResult:
@@ -71,24 +75,92 @@ class Mvs(Stage):
 
     # ---- dense -------------------------------------------------------------------------
     def _dense_or_fallback(self, ctx, model_dir, image_dir, rec):
-        backend = ctx.params["dense_backend"]
-        want_cuda = backend in ("auto", "cuda")
-        if want_cuda and compute.gpu_dense_available():
-            try:
-                xyz, rgb, normals = self._cuda_dense(ctx, model_dir, image_dir)
-                return "dense", xyz, rgb, normals
-            except Exception as exc:  # noqa: BLE001
-                if backend == "cuda" or not ctx.params["allow_sparse_fallback"]:
-                    raise
-                ctx.logger.warning("GPU dense failed (%r) — falling back to sparse cloud", exc)
-        elif backend == "cuda":
-            raise RuntimeError("dense_backend=cuda but no CUDA GPU + COLMAP binary found "
-                               "(set OPENRECO_COLMAP or install the CUDA build)")
+        # 'cuda' kept as an alias for 'colmap_cuda'
+        prefer = ctx.params["dense_backend"]
+        prefer = "colmap_cuda" if prefer == "cuda" else prefer
+        backend = compute.select_dense_backend(prefer)
+        forced = prefer != "auto"
+
+        if backend == "colmap_cuda":
+            if compute.gpu_dense_available():
+                try:
+                    xyz, rgb, normals = self._cuda_dense(ctx, model_dir, image_dir)
+                    return "dense", xyz, rgb, normals
+                except Exception as exc:  # noqa: BLE001
+                    if forced and not ctx.params["allow_sparse_fallback"]:
+                        raise
+                    ctx.logger.warning("COLMAP CUDA dense failed (%r) — trying next backend", exc)
+            elif forced:
+                raise RuntimeError("dense_backend=colmap_cuda but no CUDA GPU + COLMAP binary "
+                                   "(set OPENRECO_COLMAP or install the CUDA build)")
+
+        if backend == "planesweep" or (backend == "colmap_cuda" and compute.torch_device()):
+            if compute.torch_device():
+                try:
+                    xyz, rgb = self._planesweep_dense(ctx, image_dir, rec)
+                    if len(xyz) >= 1000:
+                        return "dense_planesweep", xyz, rgb, None
+                    ctx.logger.warning("plane-sweep produced few points — falling back to sparse")
+                except Exception as exc:  # noqa: BLE001
+                    if forced and not ctx.params["allow_sparse_fallback"]:
+                        raise
+                    ctx.logger.warning("plane-sweep dense failed (%r) — falling back to sparse", exc)
+            elif forced:
+                raise RuntimeError("dense_backend=planesweep but torch is not installed")
+
         if not ctx.params["allow_sparse_fallback"]:
             raise RuntimeError("dense MVS unavailable and sparse fallback disabled")
         ctx.logger.warning("no GPU dense path — using sparse SfM cloud as fallback")
         xyz, rgb = points_from_reconstruction(rec)
         return "sparse_fallback", xyz, rgb, None
+
+    def _planesweep_dense(self, ctx, image_dir: str, rec):
+        """Portable torch plane-sweep dense (CUDA/MPS/CPU). Builds per-view cameras + a depth range
+        from the sparse points, then sweeps depth planes."""
+        from PIL import Image
+
+        from openreco.mvs_planesweep import planesweep_dense
+
+        dev = compute.torch_device()
+        max_dim = int(ctx.params["planesweep_max_dim"])
+        image_dir = Path(image_dir)
+
+        # per-image camera params (downscaled to <= max_dim, K scaled to match)
+        views, cam_RT = [], {}
+        for iid in rec.reg_image_ids():
+            img = rec.image(iid)
+            cam = rec.camera(img.camera_id)
+            m = np.asarray(img.cam_from_world().matrix())          # 3x4 world->cam
+            k = np.asarray(cam.calibration_matrix())
+            cam_RT[iid] = (m[:3, :3], m[:3, 3])
+            f = min(1.0, max_dim / max(cam.width, cam.height))
+            tw, th = max(1, int(cam.width * f)), max(1, int(cam.height * f))
+            pil = Image.open(image_dir / img.name).convert("RGB").resize((tw, th))
+            ks = k.copy()
+            ks[:2, :] *= f
+            views.append({"rgb": np.asarray(pil, np.uint8), "K": ks, "R": m[:3, :3],
+                          "t": m[:3, 3], "C": np.asarray(img.projection_center())})
+
+        depths = []
+        pts = list(rec.points3D.values())
+        rng = np.random.default_rng(0)
+        sel = pts if len(pts) <= 5000 else [pts[i] for i in rng.choice(len(pts), 5000, replace=False)]
+        for p in sel:
+            el = p.track.elements[0]
+            rt = cam_RT.get(el.image_id)
+            if rt is not None:
+                z = float((rt[0] @ np.asarray(p.xyz) + rt[1])[2])
+                if z > 0:
+                    depths.append(z)
+        if len(depths) < 10:
+            raise RuntimeError("insufficient sparse depth to set plane-sweep range")
+        dmin, dmax = (float(x) for x in np.percentile(depths, [5, 95]))
+        ctx.logger.info("plane-sweep dense on torch:%s (%d views, depth %.2f..%.2f, max_dim=%d)",
+                        dev, len(views), dmin, dmax, max_dim)
+        ctx.progress(0.3, f"plane-sweep stereo ({dev})")
+        return planesweep_dense(views, dmin, dmax, dev,
+                                n_depths=int(ctx.params["planesweep_depths"]),
+                                n_neighbors=int(ctx.params["planesweep_neighbors"]))
 
     def _cuda_dense(self, ctx, model_dir: Path, image_dir: str):
         colmap = str(compute.find_colmap())
@@ -146,7 +218,11 @@ class Mvs(Stage):
                 hint="ensure a CUDA GPU + COLMAP binary (OPENRECO_COLMAP) for true dense"))
         elif result.metrics["mode"] == "dense":
             issues.append(Issue(Severity.INFO,
-                f"GPU dense reconstruction: {result.metrics['num_points']:,} points"))
+                f"GPU dense reconstruction (COLMAP CUDA): {result.metrics['num_points']:,} points"))
+        elif result.metrics["mode"] == "dense_planesweep":
+            issues.append(Issue(Severity.INFO,
+                f"portable plane-sweep dense (torch): {result.metrics['num_points']:,} points "
+                "— vendor-neutral; COLMAP CUDA gives higher quality on NVIDIA"))
         if result.metrics["num_points"] < 1000:
             issues.append(Issue(Severity.WARNING, f"only {result.metrics['num_points']} points"))
         return issues

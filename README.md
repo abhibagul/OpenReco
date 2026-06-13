@@ -98,7 +98,7 @@ the full CUDA Toolkit **and** MSVC — the pip `nvcc` wheel alone is not enough.
 |---|---|
 | DAG engine, caching, CLI, Python API, project format, report | **Solid** |
 | SfM (incremental + GLOMAP), GPS/GCP georeferencing, DSM, contours, coverage, volumes, exports | **Solid**, validated on real data |
-| **Dense MVS (GPU)** | **Solid with an NVIDIA GPU** — real COLMAP PatchMatch stereo + fusion (e.g. 265k points / a 1.4M-face Poisson mesh on the 11-image sample). **CPU falls back to the sparse cloud** (flagged). |
+| **Dense MVS (hardware-agnostic)** | **NVIDIA:** COLMAP PatchMatch CUDA (highest quality; 265k pts on the sample). **Any GPU/CPU:** a portable **PyTorch plane-sweep** backend (CUDA/Apple-MPS/AMD-ROCm/CPU — validated on CUDA *and* CPU; 2.6M pts on the sample). **No GPU & no torch:** sparse-cloud fallback. Auto-selected by `compute.select_dense_backend`. |
 | Orthophoto, DTM | **Approximate** — point-cloud (not image-resampled) ortho; morphological (DSM-based) DTM |
 | **Texturing** | **Solid** — decimate + UV-unwrap (xatlas) + atlas bake from the best source image → textured OBJ/MTL/PNG. (Single best image per face; multi-image blending / PBR are next.) |
 | Multi-image texture blending / PBR · GUI · cloud/collaboration · learned matching · USD/COPC/3D-Tiles | **Not yet** — see roadmap |

@@ -79,9 +79,15 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 
 ## Phase 3 — Parity wave 2 + differentiation · ≈6–12 months
 - ✅ **GPU dense MVS** — real COLMAP PatchMatch stereo + fusion via a CUDA-enabled COLMAP binary
-  (`openreco/compute.py` detection, `mvs` stage drives it; CPU sparse fallback). Validated on an
-  NVIDIA GTX 1650 Ti: 265k dense points + a 1.4M-face dense Poisson mesh on the 11-image sample.
-- **Rust + wgpu** hot-stage rewrites → GPU HAL → **native Apple Silicon / AMD** acceleration.
+  (`openreco/compute.py` detection, `mvs` stage drives it). Validated on an NVIDIA GTX 1650 Ti:
+  265k dense points + a 1.4M-face dense Poisson mesh on the 11-image sample.
+- ✅ **Hardware-agnostic dense (portable backend)** — a **PyTorch plane-sweep** MVS
+  (`mvs_planesweep.py`) that runs on **CUDA / Apple-Silicon MPS / AMD ROCm / CPU** from one
+  codebase; `compute.select_dense_backend()` auto-picks colmap_cuda → planesweep → sparse.
+  Validated on CUDA (2.6M pts) and CPU (synthetic-plane correctness). Lower quality than COLMAP
+  CUDA but vendor-neutral — covers the non-NVIDIA gap without AGPL OpenMVS.
+- Future: a **Rust + wgpu** kernel rewrite for a native (non-torch) cross-vendor HAL; quality
+  parity (NCC windows, better consistency filtering, normal estimation) for the plane-sweep path.
 - Out-of-core proven at scale; tiled models + streaming.
 - ◑ **3DGS branch (gsplat)** on shared poses — `splat` stage **implemented** (init from sparse cloud,
   train via gsplat.rasterization, export standard 3DGS .ply). Runs in a gsplat-capable CUDA env;
