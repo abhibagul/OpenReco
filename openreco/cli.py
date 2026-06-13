@@ -104,6 +104,18 @@ def cmd_stages(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_volume(args: argparse.Namespace) -> int:
+    from openreco.measure import measure_volume
+
+    base: str | float = args.base
+    if base not in ("min", "mean"):
+        base = float(base)
+    result = measure_volume(args.dsm, base)
+    for k, v in result.items():
+        print(f"  {k:16s} {v}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="openreco", description="OpenReco photogrammetry pipeline")
     p.add_argument("--version", action="version", version=f"openreco {__version__}")
@@ -133,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     pst = sub.add_parser("stages", help="list registered stage types")
     pst.set_defaults(func=cmd_stages)
+
+    pv = sub.add_parser("volume", help="cut/fill volume of a DSM GeoTIFF")
+    pv.add_argument("dsm", help="path to a DSM GeoTIFF (e.g. output/dsm.tif)")
+    pv.add_argument("--base", default="min", help="reference: min | mean | <elevation>")
+    pv.set_defaults(func=cmd_volume)
     return p
 
 
