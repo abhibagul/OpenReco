@@ -89,6 +89,24 @@ def write_obj(path: Path, vertices: np.ndarray, faces: np.ndarray,
     path.write_text("\n".join(lines), encoding="ascii")
 
 
+def write_textured_obj(obj_path: Path, vertices: np.ndarray, faces: np.ndarray,
+                       uvs: np.ndarray, texture_filename: str) -> None:
+    """Wavefront OBJ + MTL referencing a baked texture. `uvs` are per-vertex [0,1] (xatlas, v-down);
+    written as OBJ vt with v flipped to OBJ's bottom-left origin."""
+    mtl_path = obj_path.with_suffix(".mtl")
+    mtl_name = "openreco_tex"
+    mtl_path.write_text(
+        f"newmtl {mtl_name}\nKa 1 1 1\nKd 1 1 1\nd 1\nillum 1\nmap_Kd {texture_filename}\n",
+        encoding="ascii",
+    )
+    lines = [f"mtllib {mtl_path.name}", f"usemtl {mtl_name}"]
+    lines += [f"v {x:.6f} {y:.6f} {z:.6f}" for x, y, z in vertices]
+    lines += [f"vt {u:.6f} {1.0 - v:.6f}" for u, v in uvs]
+    for a, b, c in faces + 1:  # OBJ is 1-indexed; vertex and texcoord indices coincide here
+        lines.append(f"f {a}/{a} {b}/{b} {c}/{c}")
+    obj_path.write_text("\n".join(lines), encoding="ascii")
+
+
 def read_ply(path: Path) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
     """Read a binary-little-endian point PLY. Returns (xyz, rgb|None, normals|None). Handles the
     fields written here plus COLMAP fused.ply (x y z nx ny nz red green blue)."""

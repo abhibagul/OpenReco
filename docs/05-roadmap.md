@@ -33,7 +33,9 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - Coded-target auto-detection + sub-pixel refine; USD/COPC/3D Tiles; learned matching;
   point-cloud ground classification (CSF/PMF) for a true DTM.
 - Learned matching (LightGlue/ALIKED); GLOMAP global SfM; hierarchical for large sets.
-- Texturing: UV atlas + multi-image blend + de-lighting → PBR. Mesh cleanup/decimation/hole-fill.
+- ✅ **Texturing**: mesh decimation (fast-simplification) + UV unwrap (xatlas) + atlas bake from the
+  best source image per face → textured OBJ/MTL/PNG. Validated on the Sceaux dense mesh (150k faces,
+  2048² atlas, 11 images, 60% coverage). Next: multi-image blending + de-lighting → PBR; textured glTF.
 - Coded/non-coded GCP auto-detect + sub-pixel; geoid/NTv2; georeferenced BA; DTM; seamline+inpaint.
 - Point-cloud classification (ground/veg/building); volumes, cross-sections.
 - Exports: USD/USDZ, COPC, 3D Tiles, FBX, DXF, KML. Desktop GUI (evaluate Tauri vs Qt at that point).

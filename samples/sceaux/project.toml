@@ -50,6 +50,12 @@ inputs = ["mvs"]
 params = { resolution_m = 0.03 }
 
 [[stage]]
+id = "texture"
+type = "texture"
+inputs = ["mesh", "georef", "ingest"]
+params = { target_faces = 150000, atlas_resolution = 2048 }
+
+[[stage]]
 id = "export"
 type = "export"
-inputs = ["mvs", "mesh", "dsm", "ortho"]
+inputs = ["mvs", "mesh", "texture", "dsm", "ortho"]

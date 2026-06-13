@@ -75,6 +75,10 @@ class Export(Stage):
         if "contours" in ctx.inputs:
             self._copy(ctx, "contours", "contours", site / "contours.geojson")
             included.append("contours.geojson")
+        if "texture" in ctx.inputs:  # textured model: obj + mtl + atlas png (kept together)
+            for art, fn in (("obj", "textured.obj"), ("mtl", "textured.mtl"), ("texture", "texture.png")):
+                self._copy(ctx, "texture", art, site / fn)
+                included.append(fn)
 
         # viewer
         self._write_viewer(ctx, site, crs, unit,

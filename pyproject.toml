@@ -24,6 +24,8 @@ slice = [
   "laspy",      # BSD — LAS/LAZ I/O
   "numpy",
   "pillow",     # PIL license (permissive) — EXIF
+  "xatlas",     # MIT — UV unwrapping (texturing)
+  "fast-simplification",  # MIT — mesh decimation (texturing)
 ]
 dev = ["pytest", "ruff"]
 

@@ -100,8 +100,9 @@ the full CUDA Toolkit **and** MSVC — the pip `nvcc` wheel alone is not enough.
 | SfM (incremental + GLOMAP), GPS/GCP georeferencing, DSM, contours, coverage, volumes, exports | **Solid**, validated on real data |
 | **Dense MVS (GPU)** | **Solid with an NVIDIA GPU** — real COLMAP PatchMatch stereo + fusion (e.g. 265k points / a 1.4M-face Poisson mesh on the 11-image sample). **CPU falls back to the sparse cloud** (flagged). |
 | Orthophoto, DTM | **Approximate** — point-cloud (not image-resampled) ortho; morphological (DSM-based) DTM |
+| **Texturing** | **Solid** — decimate + UV-unwrap (xatlas) + atlas bake from the best source image → textured OBJ/MTL/PNG. (Single best image per face; multi-image blending / PBR are next.) |
+| Multi-image texture blending / PBR · GUI · cloud/collaboration · learned matching · USD/COPC/3D-Tiles | **Not yet** — see roadmap |
 | Neural 3D Gaussian Splatting (`splat` stage) | **Implemented, environment-gated** — trains on the shared SfM poses via gsplat, exports a standard 3DGS `.ply`. Needs torch+CUDA and a gsplat-capable CUDA toolchain (nvcc + headers + host compiler); not validated on this Windows box (no full CUDA Toolkit). See [Neural branch](#neural-branch-3d-gaussian-splatting). |
-| GUI · cloud/collaboration · learned matching · USD/COPC/3D-Tiles · texturing/PBR | **Not yet** — see roadmap |
 
 ## Repository layout
 
@@ -133,7 +134,7 @@ and [05-roadmap.md](docs/05-roadmap.md).
 
 ## Roadmap highlights (next)
 
-GPU dense MVS + texturing/PBR · neural branch (3D Gaussian Splatting on shared SfM poses) ·
+Multi-image texture blending + de-lighting → PBR · neural branch (3D Gaussian Splatting on shared SfM poses) ·
 learned matching · point-cloud ground classification (true DTM) · USD/COPC/3D-Tiles streaming ·
 desktop GUI & browser collaboration. Full plan in [docs/05-roadmap.md](docs/05-roadmap.md).
 
