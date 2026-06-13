@@ -60,10 +60,14 @@ class Export(Stage):
             included.append("mesh.glb")
 
         # rasters
-        for dep, name, fn in (("dsm", "dsm", "dsm.tif"), ("ortho", "ortho", "ortho.tif")):
+        for dep, name, fn in (("dsm", "dsm", "dsm.tif"), ("ortho", "ortho", "ortho.tif"),
+                              ("coverage", "coverage", "coverage.tif")):
             if dep in ctx.inputs:
                 self._copy(ctx, dep, name, site / fn)
                 included.append(fn)
+        if "coverage" in ctx.inputs and "preview" in ctx.inputs["coverage"].artifacts:
+            self._copy(ctx, "coverage", "preview", site / "coverage.png")
+            included.append("coverage.png")
 
         # viewer
         self._write_viewer(ctx, site, crs, unit,

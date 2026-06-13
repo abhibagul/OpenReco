@@ -51,6 +51,12 @@ inputs = ["mvs"]
 params = { resolution_m = 0.5 }
 
 [[stage]]
+id = "coverage"
+type = "coverage"
+inputs = ["georef"]
+params = { resolution_m = 2.0, min_overlap = 3 }
+
+[[stage]]
 id = "export"
 type = "export"
-inputs = ["mvs", "mesh", "dsm", "ortho"]
+inputs = ["mvs", "mesh", "dsm", "ortho", "coverage"]
