@@ -60,7 +60,8 @@ class Export(Stage):
             included.append("mesh.glb")
 
         # rasters
-        for dep, name, fn in (("dsm", "dsm", "dsm.tif"), ("ortho", "ortho", "ortho.tif"),
+        for dep, name, fn in (("dsm", "dsm", "dsm.tif"), ("dtm", "dtm", "dtm.tif"),
+                              ("ortho", "ortho", "ortho.tif"),
                               ("coverage", "coverage", "coverage.tif")):
             if dep in ctx.inputs:
                 self._copy(ctx, dep, name, site / fn)

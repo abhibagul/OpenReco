@@ -63,6 +63,12 @@ inputs = ["dsm"]
 params = { interval_m = 10.0 }
 
 [[stage]]
+id = "dtm"
+type = "dtm"
+inputs = ["dsm"]
+params = { window_m = 20.0 }
+
+[[stage]]
 id = "export"
 type = "export"
-inputs = ["mvs", "mesh", "dsm", "ortho", "coverage", "contours"]
+inputs = ["mvs", "mesh", "dsm", "dtm", "ortho", "coverage", "contours"]
