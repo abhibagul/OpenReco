@@ -35,7 +35,8 @@ flowchart LR
 
 ## 3. Sparse SfM + self-calibration + bundle adjustment
 - **Default:** COLMAP **incremental** mapper; self-calibrating intrinsics; robust BA (Ceres).
-- **Alternative [P2]:** **GLOMAP** global SfM for large unordered sets (faster, BSD).
+- **✅ Alternative (implemented):** **GLOMAP** global SfM (`mapper="global"`) — rotation averaging +
+  global positioning, for large unordered sets (BSD). Validated on Sceaux (11/11 registered).
 - **Out:** camera poses, refined intrinsics, sparse point cloud, per-image reproj error.
 - **Failures:** drift on long corridors → suggest sequential matching / more overlap; multiple
   disconnected models → report + let user pick/merge.
