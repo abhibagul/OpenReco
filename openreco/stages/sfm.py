@@ -27,12 +27,13 @@ from openreco.engine.stage import Stage, register_stage
 @register_stage
 class Sfm(Stage):
     type = "sfm"
-    version = "1"
+    version = "2"  # v2: adds mapper option (incremental | global/GLOMAP)
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
         return {
             "matcher": "exhaustive",   # exhaustive | sequential | spatial(GPS)
+            "mapper": "incremental",   # incremental (robust, ordered) | global (GLOMAP: faster, large unordered sets)
             "camera_mode": "auto",     # auto | single | per_folder | per_image
             "max_image_size": 2000,    # downscale long edge for feature extraction
             "max_num_features": 8192,
@@ -77,12 +78,18 @@ class Sfm(Stage):
         ctx.progress(0.4, f"matching ({ctx.params['matcher']})")
         self._match(pycolmap, db_path, ctx.params["matcher"], device)
 
-        ctx.progress(0.7, "incremental mapping + bundle adjustment")
-        recons = pycolmap.incremental_mapping(
-            database_path=db_path,
-            image_path=image_dir,
-            output_path=recon_dir,
-        )
+        mapper = ctx.params["mapper"]
+        ctx.progress(0.7, f"{mapper} mapping + bundle adjustment")
+        if mapper == "global":
+            recons = pycolmap.global_mapping(
+                database_path=db_path, image_path=image_dir, output_path=recon_dir
+            )
+        elif mapper == "incremental":
+            recons = pycolmap.incremental_mapping(
+                database_path=db_path, image_path=image_dir, output_path=recon_dir
+            )
+        else:
+            raise ValueError(f"unknown mapper {mapper!r} (use 'incremental' or 'global')")
         if not recons:
             raise RuntimeError("SfM produced no reconstruction (insufficient/weak matches)")
 

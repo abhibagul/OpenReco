@@ -23,7 +23,8 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - ✅ **GCP-based georeferencing** (file → triangulation → Umeyama; validated on real aerial data).
 - ✅ **glTF (.glb) export** (portable colored mesh; hand-written container, no dependency).
 - ✅ **Coverage / overlap map** (per-image ground footprints → overlap GeoTIFF + PNG; QA + report cards).
-- Coded-target auto-detection + sub-pixel refine; USD/COPC/3D Tiles export.
+- ✅ **GLOMAP global SfM** option (`mapper=global`) alongside incremental.
+- Coded-target auto-detection + sub-pixel refine; USD/COPC/3D Tiles export; learned matching.
 - Learned matching (LightGlue/ALIKED); GLOMAP global SfM; hierarchical for large sets.
 - Texturing: UV atlas + multi-image blend + de-lighting → PBR. Mesh cleanup/decimation/hole-fill.
 - Coded/non-coded GCP auto-detect + sub-pixel; geoid/NTv2; georeferenced BA; DTM; seamline+inpaint.
