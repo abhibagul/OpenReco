@@ -25,7 +25,8 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - ✅ **Coverage / overlap map** (per-image ground footprints → overlap GeoTIFF + PNG; QA + report cards).
 - ✅ **GLOMAP global SfM** option (`mapper=global`) alongside incremental.
 - ✅ **Contour lines** from the DSM (marching squares → WGS84 GeoJSON; standard survey product).
-- Coded-target auto-detection + sub-pixel refine; USD/COPC/3D Tiles export; learned matching.
+- ✅ **Volume measurement** (cut/fill from the DSM; `openreco volume` + `openreco.measure_volume`).
+- Coded-target auto-detection + sub-pixel refine; cross-sections; USD/COPC/3D Tiles; learned matching.
 - Learned matching (LightGlue/ALIKED); GLOMAP global SfM; hierarchical for large sets.
 - Texturing: UV atlas + multi-image blend + de-lighting → PBR. Mesh cleanup/decimation/hole-fill.
 - Coded/non-coded GCP auto-detect + sub-pixel; geoid/NTv2; georeferenced BA; DTM; seamline+inpaint.
