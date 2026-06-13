@@ -76,6 +76,13 @@ inputs = ["dsm"]
 params = { window_m = 20.0 }
 
 [[stage]]
+id = "classify"
+type = "classify"
+inputs = ["mvs"]
+# point-cloud ground classification -> classified LAS + bare-earth DTM from ground points
+params = { cell_m = 5.0, ground_threshold_m = 0.5, dtm_resolution_m = 1.0 }
+
+[[stage]]
 id = "export"
 type = "export"
-inputs = ["mvs", "mesh", "dsm", "dtm", "ortho", "coverage", "contours"]
+inputs = ["mvs", "mesh", "dsm", "dtm", "ortho", "coverage", "contours", "classify"]

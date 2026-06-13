@@ -5,6 +5,7 @@ ships only the `dummy_*` stages used to prove the engine. Phase 1 adds the real
 photogrammetry stages (ingest, sfm, georef, mvs, mesh, dsm, ortho, export).
 """
 
+from openreco.stages import classify  # noqa: F401
 from openreco.stages import contours  # noqa: F401
 from openreco.stages import coverage  # noqa: F401
 from openreco.stages import dsm  # noqa: F401
@@ -20,5 +21,5 @@ from openreco.stages import sfm  # noqa: F401
 from openreco.stages import splat  # noqa: F401
 from openreco.stages import texture  # noqa: F401
 
-__all__ = ["contours", "coverage", "dsm", "dtm", "dummy", "export", "georef", "ingest", "mesh",
-           "mvs", "refine", "sfm", "splat", "texture"]
+__all__ = ["classify", "contours", "coverage", "dsm", "dtm", "dummy", "export", "georef",
+           "ingest", "mesh", "mvs", "refine", "sfm", "splat", "texture"]

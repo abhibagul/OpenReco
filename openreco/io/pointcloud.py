@@ -209,7 +209,8 @@ def read_mesh_ply(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def write_las(path: Path, xyz_world: np.ndarray, rgb: np.ndarray | None,
-              crs_epsg: int | None, origin: np.ndarray) -> None:
+              crs_epsg: int | None, origin: np.ndarray,
+              classification: np.ndarray | None = None) -> None:
     import laspy
 
     header = laspy.LasHeader(point_format=2 if rgb is not None else 0, version="1.4")
@@ -229,4 +230,6 @@ def write_las(path: Path, xyz_world: np.ndarray, rgb: np.ndarray | None,
         las.red = rgb[:, 0].astype(np.uint16) * 257
         las.green = rgb[:, 1].astype(np.uint16) * 257
         las.blue = rgb[:, 2].astype(np.uint16) * 257
+    if classification is not None:
+        las.classification = classification.astype(np.uint8)
     las.write(str(path))

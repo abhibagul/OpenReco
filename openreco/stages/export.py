@@ -81,6 +81,14 @@ class Export(Stage):
         if "contours" in ctx.inputs:
             self._copy(ctx, "contours", "contours", site / "contours.geojson")
             included.append("contours.geojson")
+        if "classify" in ctx.inputs:  # classified point cloud + bare-earth DTM
+            arts = ctx.inputs["classify"].artifacts
+            if "las" in arts:
+                self._copy(ctx, "classify", "las", site / "classified.las")
+                included.append("classified.las")
+            if "dtm" in arts:
+                self._copy(ctx, "classify", "dtm", site / "dtm_ground.tif")
+                included.append("dtm_ground.tif")
         has_texture = "texture" in ctx.inputs
         if has_texture:  # textured model: obj + mtl + atlas png (kept together) + self-contained glb
             for art, fn in (("obj", "textured.obj"), ("mtl", "textured.mtl"),
