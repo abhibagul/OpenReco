@@ -28,14 +28,28 @@ from typing import Any
 from openreco import stages as _stages  # noqa: F401 — importing registers built-in stages
 from openreco.engine.manifest import Manifest, StageSpec, load_manifest
 from openreco.engine.runner import RunOutcome, Runner, compute_keys
-from openreco.engine.stage import registered_types
+from openreco.engine.stage import get_stage, registered_types
 
-__all__ = ["Project", "registered_stages"]
+__all__ = ["Project", "registered_stages", "stage_info"]
 
 
 def registered_stages() -> list[str]:
     """Names of all registered stage types."""
     return registered_types()
+
+
+def stage_info(type_name: str | None = None) -> list[dict[str, Any]] | dict[str, Any]:
+    """Introspect registered stages — for building a UI stage palette and parameter panels.
+    Returns, per stage: type, version, deterministic, default_params, params_schema. Pass a
+    `type_name` for a single stage's info."""
+    def info(t: str) -> dict[str, Any]:
+        s = get_stage(t)
+        return {"type": t, "version": s.version, "deterministic": s.deterministic,
+                "default_params": s.default_params(), "params_schema": s.params_schema()}
+
+    if type_name is not None:
+        return info(type_name)
+    return [info(t) for t in registered_types()]
 
 
 class Project:
@@ -78,10 +92,13 @@ class Project:
         return self.manifest.project_dir
 
     # ---- execution ---------------------------------------------------------------------
-    def run(self, force: list[str] | None = None, force_all: bool = False) -> RunOutcome:
+    def run(self, force: list[str] | None = None, force_all: bool = False,
+            on_event: Any = None, cancel: Any = None) -> RunOutcome:
         """Execute the pipeline (cache-aware). `force` recomputes named stages; `force_all`
-        recomputes everything."""
-        return Runner(self.manifest, force=(["*"] if force_all else force)).run()
+        recomputes everything. `on_event(dict)` receives live run events (stage_start/progress/
+        stage_done/run_done) and `cancel()->bool` enables cooperative cancellation — both for UIs."""
+        return Runner(self.manifest, force=(["*"] if force_all else force),
+                      on_event=on_event, cancel=cancel).run()
 
     def resume(self) -> RunOutcome:
         """Alias of run() — the cache provides checkpoint/resume semantics."""
@@ -136,13 +153,17 @@ class Project:
         return f"Project(name={self.manifest.name!r}, stages={[s.id for s in self.manifest.stages]})"
 
 
+def _toml_value(v: Any) -> str:
+    if isinstance(v, bool):
+        return str(v).lower()
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, (list, tuple)):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    if isinstance(v, dict):
+        return "{ " + ", ".join(f"{k} = {_toml_value(x)}" for k, x in v.items()) + " }"
+    return f'"{v}"'
+
+
 def _toml_inline(d: dict[str, Any]) -> str:
-    parts = []
-    for k, v in d.items():
-        if isinstance(v, bool):
-            parts.append(f"{k} = {str(v).lower()}")
-        elif isinstance(v, (int, float)):
-            parts.append(f"{k} = {v}")
-        else:
-            parts.append(f'{k} = "{v}"')
-    return "{ " + ", ".join(parts) + " }"
+    return "{ " + ", ".join(f"{k} = {_toml_value(v)}" for k, v in d.items()) + " }"

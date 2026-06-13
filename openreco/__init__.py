@@ -10,7 +10,7 @@ __version__ = "0.0.1"
 def __getattr__(name: str):
     # Lazily expose the Python API (openreco.Project / openreco.registered_stages) without
     # importing heavy stage deps at package import time.
-    if name in ("Project", "registered_stages"):
+    if name in ("Project", "registered_stages", "stage_info"):
         from openreco import api
 
         return getattr(api, name)

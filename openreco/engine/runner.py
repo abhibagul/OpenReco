@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from openreco import __version__
 from openreco.engine.cache import Cache, compute_key
@@ -45,6 +45,7 @@ class StageRun:
     metrics: dict[str, Any] = field(default_factory=dict)
     issues: list[Issue] = field(default_factory=list)
     params: dict[str, Any] = field(default_factory=dict)  # resolved params (reproducibility)
+    artifacts: dict[str, str] = field(default_factory=dict)  # logical name -> absolute path (UI layer tree)
     error: str | None = None
 
 
@@ -91,6 +92,7 @@ class RunOutcome:
                     "metrics": s.metrics,
                     "issues": [i.to_dict() for i in s.issues],
                     "params": s.params,
+                    "artifacts": s.artifacts,
                     "error": s.error,
                 }
                 for s in self.stages
@@ -128,15 +130,30 @@ def compute_keys(manifest: Manifest) -> dict[str, dict[str, Any]]:
 
 
 class Runner:
-    def __init__(self, manifest: Manifest, *, force: list[str] | None = None):
+    def __init__(self, manifest: Manifest, *, force: list[str] | None = None,
+                 on_event: Callable[[dict], None] | None = None,
+                 cancel: Callable[[], bool] | None = None):
         self.manifest = manifest
         self.cache = Cache(manifest.cache_dir)
         self.device = _detect_device()
         # stage ids to force-recompute even on cache hit (or ["*"] for all)
         self.force = set(force or [])
+        # UI hooks: on_event(dict) for live progress; cancel() -> True to stop cooperatively
+        self.on_event = on_event or (lambda e: None)
+        self.cancel = cancel or (lambda: False)
 
     def _forced(self, stage_id: str) -> bool:
         return "*" in self.force or stage_id in self.force
+
+    def _emit(self, kind: str, **data: Any) -> None:
+        try:
+            self.on_event({"event": kind, **data})
+        except Exception:  # noqa: BLE001 — a bad UI callback must not break a run
+            pass
+
+    @staticmethod
+    def _resolve_artifacts(result: StageResult, cache_dir: Path) -> dict[str, str]:
+        return {name: str((cache_dir / rel).resolve()) for name, rel in result.artifacts.items()}
 
     def run(self) -> RunOutcome:
         dag = Dag.build(self.manifest.stages)
@@ -162,11 +179,14 @@ class Runner:
             key = compute_key(spec.type, stage.version, params, input_keys)
             keys[sid] = key
 
-            # if any upstream failed/was skipped, skip this one
-            if any(dep in failed_upstream for dep in spec.inputs):
+            # cooperative cancellation between stages
+            if self.cancel() or (failed_upstream and any(dep in failed_upstream for dep in spec.inputs)):
+                reason = "cancelled" if self.cancel() else "upstream failed"
+                status = StageStatus.CANCELLED if self.cancel() else StageStatus.SKIPPED
                 failed_upstream.add(sid)
-                stage_runs.append(StageRun(sid, spec.type, key, StageStatus.SKIPPED, params=params))
-                logger.warning("skip %s (upstream failed)", sid)
+                stage_runs.append(StageRun(sid, spec.type, key, status, params=params))
+                self._emit("stage_skipped", id=sid, type=spec.type, reason=reason)
+                logger.warning("skip %s (%s)", sid, reason)
                 continue
 
             entry = self.cache.entry(key)
@@ -177,10 +197,13 @@ class Runner:
                 issues = self._safe_validate(stage, result, spec, params, entry.dir, results, result_dirs)
                 stage_runs.append(
                     StageRun(sid, spec.type, key, StageStatus.CACHED, 0.0, result.metrics, issues,
-                             params=params)
+                             params=params, artifacts=self._resolve_artifacts(result, entry.dir))
                 )
+                self._emit("stage_done", id=sid, type=spec.type, status="cached",
+                           metrics=result.metrics)
                 logger.info("cached %s  [%s]", sid, key[:12])
                 continue
+            self._emit("stage_start", id=sid, type=spec.type)
 
             # execute
             cache_dir = self.cache.open_for_write(key)
@@ -197,6 +220,7 @@ class Runner:
                     StageRun(sid, spec.type, key, StageStatus.FAILED, dt, params=params,
                              error=repr(exc))
                 )
+                self._emit("stage_done", id=sid, type=spec.type, status="failed", error=repr(exc))
                 logger.error("FAILED %s: %r", sid, exc)
                 continue
 
@@ -218,11 +242,13 @@ class Runner:
             result_dirs[sid] = cache_dir
             stage_runs.append(
                 StageRun(sid, spec.type, key, StageStatus.EXECUTED, dt, result.metrics, issues,
-                         params=params)
+                         params=params, artifacts=self._resolve_artifacts(result, cache_dir))
             )
+            self._emit("stage_done", id=sid, type=spec.type, status="executed", metrics=result.metrics)
 
         finished = datetime.now(timezone.utc)
-        ok = not any(s.status in (StageStatus.FAILED, StageStatus.SKIPPED) for s in stage_runs)
+        ok = not any(s.status in (StageStatus.FAILED, StageStatus.SKIPPED, StageStatus.CANCELLED)
+                     for s in stage_runs)
         outcome = RunOutcome(
             project=self.manifest.name,
             started=started.isoformat(),
@@ -232,6 +258,7 @@ class Runner:
             run_dir=run_dir,
         )
         self._write_run(outcome, run_dir)
+        self._emit("run_done", ok=ok, stages=len(stage_runs), report=str(outcome.report))
         return outcome
 
     def _make_context(
@@ -256,7 +283,10 @@ class Runner:
             project_dir=self.manifest.project_dir,
             device=self.device,
             logger=stage_logger,
-            progress=lambda frac, msg, _l=stage_logger: _l.debug("progress %.0f%% %s", frac * 100, msg),
+            progress=lambda frac, msg, _id=sid: (
+                stage_logger.debug("progress %.0f%% %s", frac * 100, msg),
+                self._emit("progress", id=_id, frac=float(frac), message=msg))[0],
+            is_cancelled=self.cancel,
         )
 
     def _safe_validate(self, stage, result, spec, params, cache_dir, results, result_dirs) -> list[Issue]:
