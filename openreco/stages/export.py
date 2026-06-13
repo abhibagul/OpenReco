@@ -86,6 +86,10 @@ class Export(Stage):
                 if rel.endswith((".tif", ".png")):
                     self._copy(ctx, "indices", art, site / rel)
                     included.append(rel)
+        if "tiles" in ctx.inputs:     # streamable tiled 3D model (copy the whole tiles/ dir)
+            src_tiles = ctx.input_artifact("tiles", "tiles")
+            shutil.copytree(src_tiles, site / "tiles", dirs_exist_ok=True)
+            included.append("tiles/")
         if "classify" in ctx.inputs:  # classified point cloud + bare-earth DTM
             arts = ctx.inputs["classify"].artifacts
             if "las" in arts:

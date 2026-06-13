@@ -36,6 +36,44 @@ def enu_to_ecef_transform(crs_epsg: int, origin: np.ndarray) -> tuple[np.ndarray
     return m, (lat, lon)
 
 
+def _box(bmin: np.ndarray, bmax: np.ndarray) -> list[float]:
+    """3D Tiles oriented bounding box [center, x-half-axis, y-half-axis, z-half-axis]."""
+    c = (bmin + bmax) / 2.0
+    h = (bmax - bmin) / 2.0
+    return [float(c[0]), float(c[1]), float(c[2]),
+            float(h[0]), 0.0, 0.0, 0.0, float(h[1]), 0.0, 0.0, 0.0, float(h[2])]
+
+
+def write_tiled_tileset(out_path: Path, children: list[dict], crs_epsg: int | None,
+                        origin: np.ndarray, root_min: np.ndarray, root_max: np.ndarray):
+    """Multi-tile tileset: a root placing the local frame on the globe (ENU->ECEF when
+    georeferenced, else identity) with one child per tile. `children` items:
+    {uri, bbox_min, bbox_max}. Returns (lat, lon) | None."""
+    if crs_epsg:
+        m, latlon = enu_to_ecef_transform(crs_epsg, np.asarray(origin, float))
+        transform = m.T.flatten().tolist()
+    else:
+        transform, latlon = np.eye(4).flatten().tolist(), None
+    child_tiles = [{
+        "boundingVolume": {"box": _box(np.asarray(c["bbox_min"]), np.asarray(c["bbox_max"]))},
+        "geometricError": 0.0,
+        "content": {"uri": c["uri"]},
+    } for c in children]
+    tileset = {
+        "asset": {"version": "1.1", "gltfUpAxis": "Z"},
+        "geometricError": float(np.linalg.norm(root_max - root_min)),
+        "root": {
+            "transform": transform,
+            "boundingVolume": {"box": _box(np.asarray(root_min), np.asarray(root_max))},
+            "geometricError": float(np.linalg.norm(root_max - root_min)) / 2.0,
+            "refine": "ADD",
+            "children": child_tiles,
+        },
+    }
+    out_path.write_text(json.dumps(tileset, indent=2), encoding="utf-8")
+    return latlon
+
+
 def write_tileset(out_path: Path, glb_name: str, crs_epsg: int, origin: np.ndarray,
                   bbox_min: np.ndarray, bbox_max: np.ndarray) -> tuple[float, float]:
     """Write a 3D Tiles 1.1 tileset.json placing `glb_name` on the globe. Returns the (lat, lon)

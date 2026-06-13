@@ -90,6 +90,13 @@ inputs = ["ortho"]
 params = { indices = ["exg", "vari", "gli"] }
 
 [[stage]]
+id = "tiles"
+type = "tiles"
+inputs = ["mesh", "mvs"]
+# split the mesh into streamable georeferenced 3D Tiles
+params = { grid = 4 }
+
+[[stage]]
 id = "export"
 type = "export"
-inputs = ["mvs", "mesh", "dsm", "dtm", "ortho", "coverage", "contours", "classify", "indices"]
+inputs = ["mvs", "mesh", "dsm", "dtm", "ortho", "coverage", "contours", "classify", "indices", "tiles"]
