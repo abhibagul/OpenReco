@@ -67,6 +67,15 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - ✅ **Vegetation indices** (`indices`): RGB indices (ExG/VARI/GLI) on plain RGB orthos + NDVI/GNDVI
   when a NIR band is present → georeferenced index GeoTIFFs + colorized previews. Validated on the
   aerial RGB ortho. Next: reflectance-panel calibration, true multispectral band alignment.
+- ✅ **LiDAR / external point-cloud fusion** (`fuse`): ICP (Kabsch) co-registration of a LAS/PLY
+  cloud onto the dense cloud + merge. Validated: 120k-pt offset copy re-registers, RMS 0.24 m.
+- ✅ **Panorama stitching** (`panorama`): skimage SIFT + RANSAC homography + warp/blend. Validated
+  on 3 real images → 1493×1008, 83% coverage.
+- ✅ **Tiled models** (`tiles`): mesh → N×N streamable 3D-Tiles (georeferenced). 3.36M faces → 16 tiles.
+- ✅ **Batch processing** (`openreco batch`): run many projects (sequential/parallel) + aggregate
+  report. (Distributed/network workers still future.)
+- ✅ **Coded-target auto-detection** (`markers`): OpenCV ArUco/AprilTag → per-marker observations +
+  GCP-observation CSV for georef. Validated on synthetic multi-view markers.
 
 ## Phase 3 — Parity wave 2 + differentiation · ≈6–12 months
 - ✅ **GPU dense MVS** — real COLMAP PatchMatch stereo + fusion via a CUDA-enabled COLMAP binary
