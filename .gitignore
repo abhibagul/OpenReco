@@ -12,6 +12,8 @@ samples/*/images/
 *.tiff
 # generated shareable bundles (any project)
 **/output/
+# machine-generated GCP files derived from user data
+aerialdata/gcps.csv
 # but DO keep the viewer's own template assets if any are added later
 !openreco/viewer/template/**
 
