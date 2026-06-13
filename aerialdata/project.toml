@@ -83,6 +83,13 @@ inputs = ["mvs"]
 params = { cell_m = 5.0, ground_threshold_m = 0.5, dtm_resolution_m = 1.0 }
 
 [[stage]]
+id = "indices"
+type = "indices"
+inputs = ["ortho"]
+# RGB vegetation indices (NDVI/GNDVI auto-enable if a NIR band/file is present)
+params = { indices = ["exg", "vari", "gli"] }
+
+[[stage]]
 id = "export"
 type = "export"
-inputs = ["mvs", "mesh", "dsm", "dtm", "ortho", "coverage", "contours", "classify"]
+inputs = ["mvs", "mesh", "dsm", "dtm", "ortho", "coverage", "contours", "classify", "indices"]

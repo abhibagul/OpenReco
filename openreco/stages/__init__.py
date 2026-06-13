@@ -13,6 +13,7 @@ from openreco.stages import dtm  # noqa: F401
 from openreco.stages import dummy  # noqa: F401 — import-for-side-effect (registration)
 from openreco.stages import export  # noqa: F401
 from openreco.stages import georef  # noqa: F401
+from openreco.stages import indices  # noqa: F401
 from openreco.stages import ingest  # noqa: F401
 from openreco.stages import mesh  # noqa: F401
 from openreco.stages import mvs  # noqa: F401
@@ -22,4 +23,4 @@ from openreco.stages import splat  # noqa: F401
 from openreco.stages import texture  # noqa: F401
 
 __all__ = ["classify", "contours", "coverage", "dsm", "dtm", "dummy", "export", "georef",
-           "ingest", "mesh", "mvs", "refine", "sfm", "splat", "texture"]
+           "indices", "ingest", "mesh", "mvs", "refine", "sfm", "splat", "texture"]

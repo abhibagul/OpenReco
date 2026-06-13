@@ -81,6 +81,11 @@ class Export(Stage):
         if "contours" in ctx.inputs:
             self._copy(ctx, "contours", "contours", site / "contours.geojson")
             included.append("contours.geojson")
+        if "indices" in ctx.inputs:  # vegetation index rasters + colorized previews
+            for art, rel in ctx.inputs["indices"].artifacts.items():
+                if rel.endswith((".tif", ".png")):
+                    self._copy(ctx, "indices", art, site / rel)
+                    included.append(rel)
         if "classify" in ctx.inputs:  # classified point cloud + bare-earth DTM
             arts = ctx.inputs["classify"].artifacts
             if "las" in arts:
