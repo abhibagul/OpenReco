@@ -1,0 +1,56 @@
+# Real aerial UAV validation: 48 DJI Phantom nadir images with GPS (Colorado, ~UTM 13N).
+# Run:  openreco run aerialdata
+# This is the UAV "hero" path: metric georeferencing from EXIF GPS -> georeferenced
+# DSM + orthomosaic (true CRS GeoTIFFs that open in QGIS).
+
+[project]
+name = "aerial-colorado"
+
+[[stage]]
+id = "ingest"
+type = "ingest"
+params = { image_dir = ".", blur_relative = 0.1 }
+
+[[stage]]
+id = "sfm"
+type = "sfm"
+inputs = ["ingest"]
+# downscale for CPU speed; exhaustive is fine for ~48 images
+params = { matcher = "exhaustive", max_image_size = 1600 }
+
+[[stage]]
+id = "georef"
+type = "georef"
+inputs = ["sfm", "ingest"]
+# method=auto -> GPS alignment; crs_epsg=0 -> auto-pick UTM zone from GPS
+params = { method = "auto" }
+
+[[stage]]
+id = "mvs"
+type = "mvs"
+inputs = ["georef", "ingest"]
+# CPU -> sparse fallback (flagged); dense needs CUDA
+
+[[stage]]
+id = "mesh"
+type = "mesh"
+inputs = ["mvs"]
+# 2.5D Delaunay is the natural terrain surface (and feeds the DSM)
+params = { method = "delaunay_2_5d" }
+
+[[stage]]
+id = "dsm"
+type = "dsm"
+inputs = ["mvs"]
+params = { resolution_m = 1.0 }
+
+[[stage]]
+id = "ortho"
+type = "ortho"
+inputs = ["mvs"]
+params = { resolution_m = 0.5 }
+
+[[stage]]
+id = "export"
+type = "export"
+inputs = ["mvs", "mesh", "dsm", "ortho"]

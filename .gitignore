@@ -3,8 +3,17 @@
 .openreco/
 # sample imagery is fetched via scripts/fetch_sample.py, not committed
 samples/*/images/
-# generated shareable bundles
-samples/*/output/
+# input imagery / datasets (keep project.toml manifests, not the raw images)
+*.JPG
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+# generated shareable bundles (any project)
+**/output/
+# but DO keep the viewer's own template assets if any are added later
+!openreco/viewer/template/**
 
 # Python
 *.egg-info/

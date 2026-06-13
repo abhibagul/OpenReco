@@ -32,7 +32,7 @@ def _load(ctx: RunContext):
 @register_stage
 class Dsm(Stage):
     type = "dsm"
-    version = "1"
+    version = "2"  # v2: DSM elevations are true-world (local z + georef origin z)
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
@@ -41,7 +41,10 @@ class Dsm(Stage):
     def run(self, ctx: RunContext) -> StageResult:
         xyz, rgb, epsg, origin = _load(ctx)
         res = float(ctx.params["resolution_m"])
-        dsm, _ortho, west, north = grid_topdown(xyz, xyz[:, 2], rgb, res, ctx.params["fill_holes"])
+        # elevations must be true-world too: local z + origin z (else the DSM is offset by the
+        # georef origin's altitude). X/Y get the origin added via the geotransform below.
+        z_world = xyz[:, 2] + origin[2]
+        dsm, _ortho, west, north = grid_topdown(xyz, z_world, rgb, res, ctx.params["fill_holes"])
         # true-world top-left = local corner + CRS origin
         write_geotiff(ctx.artifact_path("dsm.tif"), dsm, west + origin[0], north + origin[1],
                       res, epsg, nodata=float("nan"))
