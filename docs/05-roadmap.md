@@ -64,6 +64,10 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - Point-cloud classification (ground/veg/building); volumes, cross-sections.
 - Exports: USD/USDZ, COPC, 3D Tiles, FBX, DXF, KML. Desktop GUI (evaluate Tauri vs Qt at that point).
 
+- ✅ **Vegetation indices** (`indices`): RGB indices (ExG/VARI/GLI) on plain RGB orthos + NDVI/GNDVI
+  when a NIR band is present → georeferenced index GeoTIFFs + colorized previews. Validated on the
+  aerial RGB ortho. Next: reflectance-panel calibration, true multispectral band alignment.
+
 ## Phase 3 — Parity wave 2 + differentiation · ≈6–12 months
 - ✅ **GPU dense MVS** — real COLMAP PatchMatch stereo + fusion via a CUDA-enabled COLMAP binary
   (`openreco/compute.py` detection, `mvs` stage drives it; CPU sparse fallback). Validated on an
