@@ -44,6 +44,7 @@ class StageRun:
     seconds: float = 0.0
     metrics: dict[str, Any] = field(default_factory=dict)
     issues: list[Issue] = field(default_factory=list)
+    params: dict[str, Any] = field(default_factory=dict)  # resolved params (reproducibility)
     error: str | None = None
 
 
@@ -89,6 +90,7 @@ class RunOutcome:
                     "seconds": round(s.seconds, 4),
                     "metrics": s.metrics,
                     "issues": [i.to_dict() for i in s.issues],
+                    "params": s.params,
                     "error": s.error,
                 }
                 for s in self.stages
@@ -158,7 +160,7 @@ class Runner:
             # if any upstream failed/was skipped, skip this one
             if any(dep in failed_upstream for dep in spec.inputs):
                 failed_upstream.add(sid)
-                stage_runs.append(StageRun(sid, spec.type, key, StageStatus.SKIPPED))
+                stage_runs.append(StageRun(sid, spec.type, key, StageStatus.SKIPPED, params=params))
                 logger.warning("skip %s (upstream failed)", sid)
                 continue
 
@@ -169,7 +171,8 @@ class Runner:
                 result_dirs[sid] = entry.dir
                 issues = self._safe_validate(stage, result, spec, params, entry.dir, results, result_dirs)
                 stage_runs.append(
-                    StageRun(sid, spec.type, key, StageStatus.CACHED, 0.0, result.metrics, issues)
+                    StageRun(sid, spec.type, key, StageStatus.CACHED, 0.0, result.metrics, issues,
+                             params=params)
                 )
                 logger.info("cached %s  [%s]", sid, key[:12])
                 continue
@@ -186,7 +189,8 @@ class Runner:
                 dt = time.perf_counter() - t0
                 failed_upstream.add(sid)
                 stage_runs.append(
-                    StageRun(sid, spec.type, key, StageStatus.FAILED, dt, error=repr(exc))
+                    StageRun(sid, spec.type, key, StageStatus.FAILED, dt, params=params,
+                             error=repr(exc))
                 )
                 logger.error("FAILED %s: %r", sid, exc)
                 continue
@@ -208,7 +212,8 @@ class Runner:
             results[sid] = result
             result_dirs[sid] = cache_dir
             stage_runs.append(
-                StageRun(sid, spec.type, key, StageStatus.EXECUTED, dt, result.metrics, issues)
+                StageRun(sid, spec.type, key, StageStatus.EXECUTED, dt, result.metrics, issues,
+                         params=params)
             )
 
         finished = datetime.now(timezone.utc)
