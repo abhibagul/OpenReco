@@ -48,6 +48,23 @@ cd samples/sceaux/output && python serve.py   # then open http://localhost:8000/
 Other commands: `openreco resume <proj>` (continue from cache), `openreco diff a.toml b.toml`
 (which stages would recompute), `openreco stages` (list stage types).
 
+### Python API (mirrors the CLI 1:1)
+
+```python
+import openreco
+
+proj = openreco.Project.open("samples/sceaux")
+outcome = proj.run()                       # cache-aware; re-run is a no-op
+print(outcome.ok, outcome.stage("sfm").metrics, outcome.report)
+
+# or build a pipeline programmatically (no TOML needed)
+proj = (openreco.Project.create("/tmp/job", name="demo", crs="EPSG:32633")
+        .add_stage("ingest", "ingest", params={"image_dir": "images"})
+        .add_stage("sfm", "sfm", inputs=["ingest"]))
+proj.run(force=["sfm"])
+proj.diff(other_proj)                      # predict which stages would recompute
+```
+
 ### Status & honest caveats
 - **Dense MVS needs CUDA.** On a CPU-only machine the `mvs` stage falls back to the SfM sparse
   cloud (loudly flagged); mesh/DSM are correspondingly coarse. True dense needs a GPU.

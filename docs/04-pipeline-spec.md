@@ -41,10 +41,12 @@ flowchart LR
   disconnected models → report + let user pick/merge.
 
 ## 4. Georeferencing
-- **Default (v1):** similarity transform from EXIF-GPS camera centers → target CRS (pyproj);
-  optional **GCP file** (image px ↔ world coords) for a constrained transform; scale bars supported.
-- **[P2]:** coded/non-coded target auto-detect + sub-pixel refine; geoid/datum incl. NTv2 grids; full
-  georeferenced BA (GPS/GCP as observations inside the adjustment, not just post-hoc fit).
+- **Default (v1):** similarity transform from EXIF-GPS camera centers → target CRS (pyproj).
+- **✅ GCP file (implemented):** `name,X,Y,Z,image,u,v` CSV → DLT-triangulate each GCP in the
+  reconstruction, Umeyama similarity fit to world coords, report per-GCP residuals. Validated on
+  real aerial data (RMS 0.04 m on synthetic-exact GCPs vs 2.74 m for consumer GPS).
+- **[P2]:** coded/non-coded target **auto-detect** + sub-pixel refine; scale bars; geoid/datum incl.
+  NTv2 grids; full georeferenced BA (GPS/GCP as observations inside the adjustment, not post-hoc fit).
 - **Out:** world-CRS poses + transform; GCP residual table. **Failures:** <3 GCPs / poor GPS → fall
   back to arbitrary scale + warn that products are non-metric.
 

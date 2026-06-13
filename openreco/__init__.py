@@ -5,3 +5,13 @@ checkpoint/resume, deterministic re-runs, and a project-as-code manifest.
 """
 
 __version__ = "0.0.1"
+
+
+def __getattr__(name: str):
+    # Lazily expose the Python API (openreco.Project / openreco.registered_stages) without
+    # importing heavy stage deps at package import time.
+    if name in ("Project", "registered_stages"):
+        from openreco import api
+
+        return getattr(api, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

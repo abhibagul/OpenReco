@@ -18,11 +18,9 @@ import logging
 import sys
 
 from openreco import __version__, stages  # noqa: F401 — import registers stages
-from openreco.engine.cache import compute_key
-from openreco.engine.dag import Dag
 from openreco.engine.manifest import load_manifest
-from openreco.engine.runner import Runner, StageStatus
-from openreco.engine.stage import get_stage, registered_types
+from openreco.engine.runner import Runner, StageStatus, compute_keys
+from openreco.engine.stage import registered_types
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -31,22 +29,6 @@ def _setup_logging(verbose: bool) -> None:
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
-
-
-def _keys_for_manifest(manifest) -> dict[str, dict]:
-    """Compute the content-address key for every stage in a manifest (no execution)."""
-    dag = Dag.build(manifest.stages)
-    keys: dict[str, str] = {}
-    info: dict[str, dict] = {}
-    for sid in dag.order:
-        spec = dag.specs[sid]
-        stage = get_stage(spec.type)
-        params = {**stage.default_params(), **spec.params}
-        input_keys = [keys[d] for d in spec.inputs]
-        key = compute_key(spec.type, stage.version, params, input_keys)
-        keys[sid] = key
-        info[sid] = {"type": spec.type, "params": params, "inputs": spec.inputs, "key": key}
-    return info
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -74,8 +56,8 @@ def cmd_resume(args: argparse.Namespace) -> int:
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
-    a = _keys_for_manifest(load_manifest(args.a))
-    b = _keys_for_manifest(load_manifest(args.b))
+    a = compute_keys(load_manifest(args.a))
+    b = compute_keys(load_manifest(args.b))
     ids = sorted(set(a) | set(b))
     changed = 0
     print(f"diff {args.a}  ->  {args.b}\n")
