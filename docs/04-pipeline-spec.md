@@ -73,6 +73,8 @@ flowchart LR
 
 ## 8. Derived products
 - **DSM [v1]:** rasterize dense cloud to a gridded surface (PDAL/GDAL), GeoTIFF.
+- **✅ Contours:** marching-squares iso-lines from the DSM → WGS84 GeoJSON (one MultiLineString
+  per elevation). **Coverage map:** per-image ground footprints → overlap-count GeoTIFF + PNG.
 - **Orthomosaic [v1]:** orthorectify source images using mesh/DSM + poses, mosaic + blend → GeoTIFF.
 - **[P2]:** DTM (ground classification then interpolate), seamline editing + inpainting, volumes,
   cross-sections, point-cloud classification, NDVI/multispectral.
