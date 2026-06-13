@@ -74,6 +74,24 @@ out.ok, out.stage("sfm").metrics, out.report
 openreco.measure_volume("aerialdata/output/dsm.tif", base="min")
 ```
 
+## Neural branch (3D Gaussian Splatting)
+
+The `splat` stage trains a 3D Gaussian Splatting model on the **same SfM camera solution** as the
+metric geometry — the hybrid that goes beyond a single fixed output: a measurable mesh *and* a
+photoreal, real-time, view-dependent splat from one capture. It initializes Gaussians from the
+sparse cloud, optimizes position/scale/rotation/opacity/color against the images via
+`gsplat.rasterization`, and exports a standard 3DGS `.ply` for any splat viewer.
+
+Setup (CUDA GPU required):
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu124   # match your CUDA
+pip install gsplat                                                     # JIT-compiles CUDA kernels on first use
+```
+gsplat compiles its kernels on first use, so it needs a working CUDA toolchain (nvcc + CUDA
+headers + a host C++ compiler). On Linux a CUDA Toolkit install suffices; on **Windows** you need
+the full CUDA Toolkit **and** MSVC — the pip `nvcc` wheel alone is not enough. Then add a stage:
+`{ id = "splat", type = "splat", inputs = ["refine", "ingest"] }`.
+
 ## Maturity
 
 | Area | State |
@@ -82,7 +100,8 @@ openreco.measure_volume("aerialdata/output/dsm.tif", base="min")
 | SfM (incremental + GLOMAP), GPS/GCP georeferencing, DSM, contours, coverage, volumes, exports | **Solid**, validated on real data |
 | **Dense MVS (GPU)** | **Solid with an NVIDIA GPU** — real COLMAP PatchMatch stereo + fusion (e.g. 265k points / a 1.4M-face Poisson mesh on the 11-image sample). **CPU falls back to the sparse cloud** (flagged). |
 | Orthophoto, DTM | **Approximate** — point-cloud (not image-resampled) ortho; morphological (DSM-based) DTM |
-| GUI · cloud/collaboration · neural (3DGS/NeRF) · learned matching · USD/COPC/3D-Tiles · texturing/PBR | **Not yet** — see roadmap |
+| Neural 3D Gaussian Splatting (`splat` stage) | **Implemented, environment-gated** — trains on the shared SfM poses via gsplat, exports a standard 3DGS `.ply`. Needs torch+CUDA and a gsplat-capable CUDA toolchain (nvcc + headers + host compiler); not validated on this Windows box (no full CUDA Toolkit). See [Neural branch](#neural-branch-3d-gaussian-splatting). |
+| GUI · cloud/collaboration · learned matching · USD/COPC/3D-Tiles · texturing/PBR | **Not yet** — see roadmap |
 
 ## Repository layout
 

@@ -44,7 +44,10 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
   NVIDIA GTX 1650 Ti: 265k dense points + a 1.4M-face dense Poisson mesh on the 11-image sample.
 - **Rust + wgpu** hot-stage rewrites → GPU HAL → **native Apple Silicon / AMD** acceleration.
 - Out-of-core proven at scale; tiled models + streaming.
-- **3DGS/NeRF branch (gsplat)** on shared poses; splat↔mesh fusion; difficult-surface mode.
+- ◑ **3DGS branch (gsplat)** on shared poses — `splat` stage **implemented** (init from sparse cloud,
+  train via gsplat.rasterization, export standard 3DGS .ply). Runs in a gsplat-capable CUDA env;
+  on this Windows box it's blocked by the CUDA compile toolchain (no full Toolkit/nvcc). Next:
+  densification, SH view-dependence, splat↔mesh fusion, difficult-surface mode.
 - AI assists: auto-masking (segmentation), smart culling, "alignment doctor".
 - Multispectral/thermal + NDVI; LiDAR fusion + co-registration; 4D time-series; panorama.
 - Cloud bursting, multi-user roles, collaborative browser viewer, plugin SDK, air-gapped tier.

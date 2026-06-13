@@ -17,6 +17,7 @@ from openreco.stages import mesh  # noqa: F401
 from openreco.stages import mvs  # noqa: F401
 from openreco.stages import refine  # noqa: F401
 from openreco.stages import sfm  # noqa: F401
+from openreco.stages import splat  # noqa: F401
 
 __all__ = ["contours", "coverage", "dsm", "dtm", "dummy", "export", "georef", "ingest", "mesh",
-           "mvs", "refine", "sfm"]
+           "mvs", "refine", "sfm", "splat"]
