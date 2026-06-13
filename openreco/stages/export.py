@@ -68,6 +68,9 @@ class Export(Stage):
         if "coverage" in ctx.inputs and "preview" in ctx.inputs["coverage"].artifacts:
             self._copy(ctx, "coverage", "preview", site / "coverage.png")
             included.append("coverage.png")
+        if "contours" in ctx.inputs:
+            self._copy(ctx, "contours", "contours", site / "contours.geojson")
+            included.append("contours.geojson")
 
         # viewer
         self._write_viewer(ctx, site, crs, unit,

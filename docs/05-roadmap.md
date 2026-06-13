@@ -24,6 +24,7 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - ✅ **glTF (.glb) export** (portable colored mesh; hand-written container, no dependency).
 - ✅ **Coverage / overlap map** (per-image ground footprints → overlap GeoTIFF + PNG; QA + report cards).
 - ✅ **GLOMAP global SfM** option (`mapper=global`) alongside incremental.
+- ✅ **Contour lines** from the DSM (marching squares → WGS84 GeoJSON; standard survey product).
 - Coded-target auto-detection + sub-pixel refine; USD/COPC/3D Tiles export; learned matching.
 - Learned matching (LightGlue/ALIKED); GLOMAP global SfM; hierarchical for large sets.
 - Texturing: UV atlas + multi-image blend + de-lighting → PBR. Mesh cleanup/decimation/hole-fill.
