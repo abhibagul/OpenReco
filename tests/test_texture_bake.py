@@ -80,8 +80,10 @@ def test_bake_face_blend_averages_two_images():
     verts3 = np.array([[0.0, 0, 0], [1, 0, 0], [0, 1, 0]])
     # identity-ish projection: P maps the 3 verts onto image pixels directly
     P = np.array([[40.0, 0, 0, 5], [0, 40.0, 0, 5], [0, 0, 0, 1]])
-    red = np.zeros((64, 64, 3), np.float32); red[..., 0] = 200
-    blue = np.zeros((64, 64, 3), np.float32); blue[..., 2] = 100
+    red = np.zeros((64, 64, 3), np.float32)
+    red[..., 0] = 200
+    blue = np.zeros((64, 64, 3), np.float32)
+    blue[..., 2] = 100
     samples = [
         {"P": P, "verts3": verts3, "image": red, "gain": np.ones(3, np.float32), "weight": 1.0},
         {"P": P, "verts3": verts3, "image": blue, "gain": np.ones(3, np.float32), "weight": 1.0},
