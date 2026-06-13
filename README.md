@@ -56,6 +56,12 @@ cd samples/sceaux/output && python serve.py   # then open http://localhost:8000/
 For a georeferenced UAV run, point a `project.toml` at a folder of GPS-tagged images (see
 [aerialdata/project.toml](aerialdata/project.toml)) and `openreco run <dir>`.
 
+**GPU dense reconstruction (NVIDIA):** PatchMatch stereo is CUDA-only and the PyPI pycolmap is
+CPU-only, so dense MVS is driven by a CUDA-enabled COLMAP binary. Point `OPENRECO_COLMAP` at a
+`colmap` executable (or drop the official `colmap-x64-windows-cuda` build under `tools/`); the
+`mvs` stage then runs real dense reconstruction automatically and falls back to the sparse cloud
+when no GPU is present.
+
 **CLI:** `run` · `resume` · `diff a.toml b.toml` (predict recompute) · `report` · `stages` ·
 `volume <dsm.tif> --base min|mean|<elev>` · `profile <dsm.tif> --from X,Y --to X,Y`.
 
@@ -74,8 +80,8 @@ openreco.measure_volume("aerialdata/output/dsm.tif", base="min")
 |---|---|
 | DAG engine, caching, CLI, Python API, project format, report | **Solid** |
 | SfM (incremental + GLOMAP), GPS/GCP georeferencing, DSM, contours, coverage, volumes, exports | **Solid**, validated on real data |
-| Mesh, orthophoto, DTM | **Approximate** — 2.5D/Poisson mesh, point-cloud (not image-resampled) ortho, morphological (DSM-based) DTM |
-| Dense MVS | **CPU falls back to the sparse cloud** — true dense needs a **CUDA GPU** (the main quality ceiling) |
+| **Dense MVS (GPU)** | **Solid with an NVIDIA GPU** — real COLMAP PatchMatch stereo + fusion (e.g. 265k points / a 1.4M-face Poisson mesh on the 11-image sample). **CPU falls back to the sparse cloud** (flagged). |
+| Orthophoto, DTM | **Approximate** — point-cloud (not image-resampled) ortho; morphological (DSM-based) DTM |
 | GUI · cloud/collaboration · neural (3DGS/NeRF) · learned matching · USD/COPC/3D-Tiles · texturing/PBR | **Not yet** — see roadmap |
 
 ## Repository layout

@@ -54,10 +54,13 @@ class Export(Stage):
             shutil.copyfile(mesh_src, site / "mesh.ply")
             included.append("mesh.ply")
             v, fcs, vc = read_mesh_ply(mesh_src)
-            write_obj(site / "mesh.obj", v, fcs, vc)
-            included.append("mesh.obj")
-            write_glb(site / "mesh.glb", v, fcs, vc)   # portable glTF for VFX/AEC/web pipelines
-            included.append("mesh.glb")
+            if len(fcs) > 0:                            # OBJ/glTF need real geometry
+                write_obj(site / "mesh.obj", v, fcs, vc)
+                included.append("mesh.obj")
+                write_glb(site / "mesh.glb", v, fcs, vc)  # portable glTF for VFX/AEC/web
+                included.append("mesh.glb")
+            else:
+                ctx.logger.warning("mesh has no faces — skipping OBJ/glTF export")
 
         # rasters
         for dep, name, fn in (("dsm", "dsm", "dsm.tif"), ("dtm", "dtm", "dtm.tif"),

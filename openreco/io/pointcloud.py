@@ -89,14 +89,15 @@ def write_obj(path: Path, vertices: np.ndarray, faces: np.ndarray,
     path.write_text("\n".join(lines), encoding="ascii")
 
 
-def read_ply_xyzrgb(path: Path) -> tuple[np.ndarray, np.ndarray | None]:
-    """Minimal reader for the binary-little-endian PLY this module writes."""
+def read_ply(path: Path) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
+    """Read a binary-little-endian point PLY. Returns (xyz, rgb|None, normals|None). Handles the
+    fields written here plus COLMAP fused.ply (x y z nx ny nz red green blue)."""
     with path.open("rb") as f:
         assert f.readline().strip() == b"ply"
         assert b"binary_little_endian" in f.readline()
         fields: list[tuple[str, str]] = []
         n = 0
-        typemap = {"float": "<f4", "uchar": "u1", "int": "<i4"}
+        typemap = {"float": "<f4", "uchar": "u1", "int": "<i4", "double": "<f8"}
         while True:
             line = f.readline().strip()
             if line.startswith(b"element vertex"):
@@ -107,10 +108,18 @@ def read_ply_xyzrgb(path: Path) -> tuple[np.ndarray, np.ndarray | None]:
             elif line == b"end_header":
                 break
         arr = np.frombuffer(f.read(n * np.dtype(fields).itemsize), dtype=fields, count=n)
+    names = arr.dtype.names
     xyz = np.column_stack([arr["x"], arr["y"], arr["z"]]).astype(np.float64)
-    rgb = None
-    if "red" in arr.dtype.names:
-        rgb = np.column_stack([arr["red"], arr["green"], arr["blue"]]).astype(np.uint8)
+    rgb = (np.column_stack([arr["red"], arr["green"], arr["blue"]]).astype(np.uint8)
+           if "red" in names else None)
+    normals = (np.column_stack([arr["nx"], arr["ny"], arr["nz"]]).astype(np.float64)
+               if "nx" in names else None)
+    return xyz, rgb, normals
+
+
+def read_ply_xyzrgb(path: Path) -> tuple[np.ndarray, np.ndarray | None]:
+    """Back-compat wrapper: (xyz, rgb) only."""
+    xyz, rgb, _ = read_ply(path)
     return xyz, rgb
 
 

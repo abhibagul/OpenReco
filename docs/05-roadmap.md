@@ -39,6 +39,9 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - Exports: USD/USDZ, COPC, 3D Tiles, FBX, DXF, KML. Desktop GUI (evaluate Tauri vs Qt at that point).
 
 ## Phase 3 — Parity wave 2 + differentiation · ≈6–12 months
+- ✅ **GPU dense MVS** — real COLMAP PatchMatch stereo + fusion via a CUDA-enabled COLMAP binary
+  (`openreco/compute.py` detection, `mvs` stage drives it; CPU sparse fallback). Validated on an
+  NVIDIA GTX 1650 Ti: 265k dense points + a 1.4M-face dense Poisson mesh on the 11-image sample.
 - **Rust + wgpu** hot-stage rewrites → GPU HAL → **native Apple Silicon / AMD** acceleration.
 - Out-of-core proven at scale; tiled models + streaming.
 - **3DGS/NeRF branch (gsplat)** on shared poses; splat↔mesh fusion; difficult-surface mode.

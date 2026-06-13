@@ -52,8 +52,10 @@ flowchart LR
   back to arbitrary scale + warn that products are non-metric.
 
 ## 5. Dense reconstruction (MVS)
-- **Default:** COLMAP **PatchMatch stereo** depth/normal maps → **stereo fusion** → dense cloud (BSD,
-  CUDA-accelerated where available, CPU fallback). *Chosen specifically to avoid AGPL OpenMVS.*
+- **✅ Default (implemented):** COLMAP **PatchMatch stereo** depth/normal maps → **stereo fusion** →
+  dense cloud (BSD, *avoids AGPL OpenMVS*). PatchMatch is CUDA-only; since the PyPI pycolmap is
+  CPU-only, dense is driven by a CUDA-enabled COLMAP **binary** (`openreco/compute.py`). MVS
+  normals carry into Poisson meshing. **CPU fallback:** the sparse SfM cloud (flagged).
 - **Quality knob:** image downscale factor + window radius + geometric-consistency on/off.
 - **Neural branch [DIFF]:** **3DGS via gsplat** from the *same* COLMAP poses → real-time/photoreal &
   view-dependent surfaces; kept registered to the metric solution.

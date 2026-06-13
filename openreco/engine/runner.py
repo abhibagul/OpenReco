@@ -99,8 +99,13 @@ class RunOutcome:
 
 
 def _detect_device() -> DeviceInfo:
-    # Phase 0: CPU only. CUDA/Metal probes land with openreco/compute in Phase 1+.
-    return DeviceInfo(has_cuda=False, has_metal=False, cpu_count=os.cpu_count() or 1)
+    try:
+        from openreco import compute
+
+        has_cuda = compute.has_nvidia_gpu()
+    except Exception:  # noqa: BLE001
+        has_cuda = False
+    return DeviceInfo(has_cuda=has_cuda, has_metal=False, cpu_count=os.cpu_count() or 1)
 
 
 def compute_keys(manifest: Manifest) -> dict[str, dict[str, Any]]:

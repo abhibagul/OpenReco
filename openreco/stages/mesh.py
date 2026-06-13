@@ -21,7 +21,7 @@ import numpy as np
 
 from openreco.engine.context import Issue, RunContext, Severity, StageResult
 from openreco.engine.stage import Stage, register_stage
-from openreco.io.pointcloud import read_mesh_ply, read_ply_xyzrgb, write_mesh_ply, write_ply
+from openreco.io.pointcloud import read_mesh_ply, read_ply, write_mesh_ply, write_ply
 
 
 @register_stage
@@ -34,16 +34,17 @@ class Mesh(Stage):
         return {
             "method": "delaunay_2_5d",   # delaunay_2_5d | poisson
             "max_edge_factor": 8.0,      # drop triangles whose longest edge > factor * median
-            "poisson_depth": 9,
+            "poisson_depth": 11,
+            "poisson_trim": 5.0,         # cull surface below this density (COLMAP default 10 = often too aggressive)
         }
 
     def run(self, ctx: RunContext) -> StageResult:
-        xyz, rgb = read_ply_xyzrgb(ctx.input_artifact("mvs", "points"))
+        xyz, rgb, normals = read_ply(ctx.input_artifact(ctx.input_with("points"), "points"))
         if rgb is None:
             rgb = np.full((len(xyz), 3), 200, dtype=np.uint8)
         method = ctx.params["method"]
         if method == "poisson":
-            verts, faces, vcols = self._poisson(ctx, xyz, rgb)
+            verts, faces, vcols = self._poisson(ctx, xyz, rgb, normals)
         else:
             verts, faces, vcols = self._delaunay_2_5d(ctx, xyz, rgb)
 
@@ -75,17 +76,22 @@ class Mesh(Stage):
         faces = faces[keep]
         return xyz, faces, rgb
 
-    def _poisson(self, ctx, xyz, rgb):
+    def _poisson(self, ctx, xyz, rgb, normals=None):
         import pycolmap
 
-        ctx.progress(0.2, "estimating normals")
-        normals = _estimate_normals(xyz)
+        if normals is not None and len(normals) == len(xyz):
+            ctx.progress(0.2, "using MVS normals")  # COLMAP fusion normals are view-consistent
+        else:
+            ctx.progress(0.2, "estimating normals")
+            normals = _estimate_normals(xyz)
         tmp = ctx.artifact_path("_oriented.ply")
         write_ply(tmp, xyz, rgb, normals)
         out = ctx.artifact_path("_poisson.ply")
         opts = pycolmap.PoissonMeshingOptions()
         if hasattr(opts, "depth"):
             opts.depth = int(ctx.params["poisson_depth"])
+        if hasattr(opts, "trim"):
+            opts.trim = float(ctx.params["poisson_trim"])
         ctx.progress(0.5, "poisson meshing")
         pycolmap.poisson_meshing(tmp, out, opts)
         verts, faces, vcols = read_mesh_ply(out)
