@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from openreco.classify_ground import GROUND, classify_ground
+from openreco.classify_ground import BUILDING, GROUND, VEGETATION, classify_points
 from openreco.engine.context import Issue, RunContext, Severity, StageResult
 from openreco.engine.stage import Stage, register_stage
 from openreco.io.pointcloud import read_ply, write_las
@@ -24,11 +24,12 @@ from openreco.io.raster import grid_topdown, write_geotiff
 @register_stage
 class Classify(Stage):
     type = "classify"
-    version = "1"
+    version = "2"  # v2: multi-class (ground/building/vegetation) via planarity
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
-        return {"cell_m": 5.0, "ground_threshold_m": 0.5, "dtm_resolution_m": 1.0}
+        return {"cell_m": 5.0, "ground_threshold_m": 0.5, "dtm_resolution_m": 1.0,
+                "knn": 12, "planarity_threshold": 0.04}
 
     def run(self, ctx: RunContext) -> StageResult:
         xyz, rgb, _ = read_ply(ctx.input_artifact(ctx.input_with("points"), "points"))
@@ -38,9 +39,13 @@ class Classify(Stage):
         if rgb is None:
             rgb = np.full((len(xyz), 3), 200, np.uint8)
 
-        ctx.progress(0.3, "classifying ground / non-ground")
-        cls = classify_ground(xyz, float(ctx.params["cell_m"]), float(ctx.params["ground_threshold_m"]))
-        n_ground = int((cls == GROUND).sum())
+        ctx.progress(0.3, "classifying ground / building / vegetation")
+        cls = classify_points(xyz, float(ctx.params["cell_m"]),
+                              float(ctx.params["ground_threshold_m"]),
+                              int(ctx.params["knn"]), float(ctx.params["planarity_threshold"]))
+        counts = {"ground": int((cls == GROUND).sum()), "building": int((cls == BUILDING).sum()),
+                  "vegetation": int((cls == VEGETATION).sum())}
+        n_ground = counts["ground"]
 
         # classified LAS (true CRS coords); LAS classification field
         try:
@@ -64,21 +69,24 @@ class Classify(Stage):
         if las_ok:
             artifacts["las"] = "classified.las"
 
+        total = int(len(xyz))
         ctx.write_json("classify.json", {
-            "total": int(len(xyz)), "ground": n_ground, "non_ground": int(len(xyz) - n_ground),
-            "ground_pct": round(100.0 * n_ground / max(1, len(xyz)), 1),
+            "total": total, "classes": counts, "non_ground": total - n_ground,
+            "ground_pct": round(100.0 * n_ground / max(1, total), 1),
             "cell_m": ctx.params["cell_m"], "ground_threshold_m": ctx.params["ground_threshold_m"],
+            "planarity_threshold": ctx.params["planarity_threshold"],
         })
         return StageResult(
             artifacts=artifacts,
-            metrics={"total": int(len(xyz)), "ground": n_ground,
-                     "ground_pct": round(100.0 * n_ground / max(1, len(xyz)), 1)},
+            metrics={"total": total, "ground": counts["ground"], "building": counts["building"],
+                     "vegetation": counts["vegetation"],
+                     "ground_pct": round(100.0 * n_ground / max(1, total), 1)},
         )
 
     def validate(self, result: StageResult, ctx: RunContext) -> list[Issue]:
-        pct = result.metrics["ground_pct"]
-        if pct == 0 or pct == 100:
-            return [Issue(Severity.WARNING, f"{pct}% classified as ground — check cell_m / threshold",
-                          hint="cell_m should exceed the largest building; threshold ~0.3-1.0 m")]
-        return [Issue(Severity.INFO, f"{result.metrics['ground']:,} ground / "
-                      f"{result.metrics['total'] - result.metrics['ground']:,} non-ground ({pct}% ground)")]
+        m = result.metrics
+        if m["ground_pct"] in (0, 100):
+            return [Issue(Severity.WARNING, f"{m['ground_pct']}% classified as ground — check "
+                          "cell_m / threshold", hint="cell_m should exceed the largest building")]
+        return [Issue(Severity.INFO, f"ground {m['ground']:,} · building {m['building']:,} · "
+                      f"vegetation {m['vegetation']:,} ({m['ground_pct']}% ground)")]

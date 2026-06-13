@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import numpy as np
 
+# ASPRS LAS classification codes
+NON_GROUND = 1     # unclassified
 GROUND = 2
-NON_GROUND = 1
+VEGETATION = 5     # high vegetation
+BUILDING = 6
 
 
 def _ground_grid(xyz: np.ndarray, cell_m: float):
@@ -37,6 +40,35 @@ def classify_ground(xyz: np.ndarray, cell_m: float = 5.0, ground_thresh: float =
     ground_z = grid[row, col]                        # local ground level under each point
     height = xyz[:, 2] - ground_z
     cls = np.where(height <= ground_thresh, GROUND, NON_GROUND).astype(np.uint8)
+    return cls
+
+
+def surface_variation(xyz: np.ndarray, indices: np.ndarray, k: int = 12) -> np.ndarray:
+    """Local surface variation λ_min / Σλ (PCA on k nearest neighbours) for `indices`. Low =>
+    locally planar (man-made / building); high => rough (vegetation)."""
+    from scipy.spatial import cKDTree
+
+    tree = cKDTree(xyz)
+    _, nbr = tree.query(xyz[indices], k=min(k, len(xyz)))
+    pts = xyz[nbr]                                       # (M, k, 3)
+    c = pts - pts.mean(axis=1, keepdims=True)
+    cov = np.einsum("mki,mkj->mij", c, c) / pts.shape[1]
+    ev = np.linalg.eigvalsh(cov)                         # ascending: λ0 <= λ1 <= λ2
+    return ev[:, 0] / (ev.sum(axis=1) + 1e-12)
+
+
+def classify_points(xyz: np.ndarray, cell_m: float = 5.0, ground_thresh: float = 0.5,
+                    knn: int = 12, planarity_thresh: float = 0.04) -> np.ndarray:
+    """Multi-class: ground (2) via grid-min + height; non-ground split into building (6, locally
+    planar) vs vegetation (5, rough) by surface variation. Returns ASPRS LAS class codes."""
+    cls = classify_ground(xyz, cell_m, ground_thresh)    # 2 = ground, 1 = non-ground
+    non_ground = np.where(cls == NON_GROUND)[0]
+    if len(non_ground) >= knn:
+        sv = surface_variation(xyz, non_ground, knn)
+        planar = non_ground[sv < planarity_thresh]
+        rough = non_ground[sv >= planarity_thresh]
+        cls[planar] = BUILDING
+        cls[rough] = VEGETATION
     return cls
 
 
