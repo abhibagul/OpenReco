@@ -51,6 +51,12 @@ def _summary_cards(stages: list[dict]) -> str:
         cards.append(("mesh faces", f"{faces:,}"))
     if (w := metric("dsm", "width")) is not None:
         cards.append(("DSM size", f"{w}×{metric('dsm', 'height')} px"))
+    if (mo := metric("coverage", "max_overlap")) is not None:
+        cards.append(("max image overlap", f"{mo}×"))
+        cov = by_id["coverage"]["metrics"]
+        pct_key = next((k for k in cov if k.startswith("pct_area_ge_")), None)
+        if pct_key:
+            cards.append((f"area with ≥{pct_key.rsplit('_', 1)[1]}× overlap", f"{cov[pct_key]}%"))
 
     if not cards:
         return ""
