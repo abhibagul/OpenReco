@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenReco viewer — __PROJECT__</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0e14; color: #cdd6f4;
+    font: 13px/1.5 system-ui, sans-serif; overflow: hidden; }
+  #c { position: fixed; inset: 0; display: block; }
+  #panel { position: fixed; top: 12px; left: 12px; background: #161b22cc; padding: 12px 14px;
+    border-radius: 8px; backdrop-filter: blur(4px); max-width: 280px; }
+  #panel h1 { font-size: 14px; margin: 0 0 6px; }
+  #panel label { display: block; margin: 6px 0; }
+  .muted { color: #7f8da3; }
+  #measure { color: #a6e3a1; font-weight: 600; min-height: 1.2em; }
+  button { background: #313a4e; color: #cdd6f4; border: 0; padding: 5px 9px; border-radius: 5px;
+    cursor: pointer; }
+  button.active { background: #89b4fa; color: #0b0e14; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <h1>OpenReco — __PROJECT__</h1>
+  <div class="muted" id="stats">loading…</div>
+  <label><input type="checkbox" id="showPoints" checked> point cloud</label>
+  <label><input type="checkbox" id="showMesh" checked> mesh</label>
+  <label>point size <input type="range" id="psize" min="0.2" max="5" step="0.1" value="1"></label>
+  <button id="measureBtn">measure distance</button>
+  <div id="measure"></div>
+  <div class="muted" style="margin-top:8px">CRS: __CRS__ · drag to orbit · scroll to zoom</div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+
+const POINTS = "__POINTS__";   // filename or "" if absent
+const MESH   = "__MESH__";
+const UNIT   = "__UNIT__";     // "m" when georeferenced, else "units"
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0e14);
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.01, 1e6);
+const controls = new OrbitControls(camera, renderer.domElement);
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(1,1,1); scene.add(dir);
+
+let pointsObj = null, meshObj = null;
+const loader = new PLYLoader();
+const stats = document.getElementById('stats');
+const loaded = [];
+
+function frameTo(obj) {
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3()).length();
+  const center = box.getCenter(new THREE.Vector3());
+  controls.target.copy(center);
+  camera.position.copy(center).add(new THREE.Vector3(size*0.6, size*0.5, size*0.6));
+  camera.near = size/1000; camera.far = size*10; camera.updateProjectionMatrix();
+}
+
+function loadPLY(file, asPoints) {
+  return new Promise((res) => loader.load(file, (geo) => {
+    geo.computeBoundingBox();
+    let obj;
+    if (asPoints) {
+      const mat = new THREE.PointsMaterial({ size: 1, sizeAttenuation: false,
+        vertexColors: !!geo.getAttribute('color') });
+      if (!geo.getAttribute('color')) mat.color.set(0x89b4fa);
+      obj = new THREE.Points(geo, mat);
+      pointsObj = obj;
+    } else {
+      if (!geo.getAttribute('normal')) geo.computeVertexNormals();
+      const mat = new THREE.MeshStandardMaterial({ vertexColors: !!geo.getAttribute('color'),
+        flatShading: true, side: THREE.DoubleSide, metalness: 0, roughness: 1 });
+      if (!geo.getAttribute('color')) mat.color.set(0x9399b2);
+      obj = new THREE.Mesh(geo, mat);
+      meshObj = obj;
+    }
+    scene.add(obj); loaded.push(obj);
+    res(geo.getAttribute('position').count);
+  }, undefined, () => res(0)));
+}
+
+(async () => {
+  let n = 0, m = 0;
+  if (POINTS) n = await loadPLY(POINTS, true);
+  if (MESH)   m = await loadPLY(MESH, false);
+  stats.textContent = `${n.toLocaleString()} points · ${m.toLocaleString()} mesh verts`;
+  if (loaded.length) frameTo(loaded[0]);
+})();
+
+// toggles
+showPoints.onchange = e => pointsObj && (pointsObj.visible = e.target.checked);
+showMesh.onchange   = e => meshObj && (meshObj.visible = e.target.checked);
+psize.oninput       = e => pointsObj && (pointsObj.material.size = +e.target.value);
+
+// distance measurement
+const ray = new THREE.Raycaster(); ray.params.Points.threshold = 0.5;
+let measuring = false; const picks = []; let line = null;
+const out = document.getElementById('measure');
+measureBtn.onclick = () => {
+  measuring = !measuring; measureBtn.classList.toggle('active', measuring);
+  picks.length = 0; out.textContent = measuring ? 'click two points' : '';
+  if (line) { scene.remove(line); line = null; }
+};
+renderer.domElement.addEventListener('pointerdown', (ev) => {
+  if (!measuring) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  const mouse = new THREE.Vector2(((ev.clientX-r.left)/r.width)*2-1, -((ev.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(mouse, camera);
+  const hits = ray.intersectObjects(loaded, true);
+  if (!hits.length) return;
+  picks.push(hits[0].point.clone());
+  if (picks.length === 2) {
+    const d = picks[0].distanceTo(picks[1]);
+    out.textContent = `distance: ${d.toFixed(3)} ${UNIT}`;
+    const g = new THREE.BufferGeometry().setFromPoints(picks);
+    line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xf38ba8 }));
+    scene.add(line); picks.length = 0;
+  } else {
+    out.textContent = 'click second point';
+  }
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+renderer.setSize(innerWidth, innerHeight);
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+</script>
+</body>
+</html>

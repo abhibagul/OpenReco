@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openreco"
+version = "0.0.1"
+description = "Clean-room, local-first photogrammetry & 3D reconstruction platform (Phase 0 engine)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "OpenReco" }]
+# Phase 0 engine has ZERO third-party runtime deps — stdlib only (tomllib, hashlib, argparse).
+# Heavy permissive deps (pycolmap, gdal, open3d, pdal, pyproj) arrive in Phase 1 as extras.
+dependencies = []
+
+[project.optional-dependencies]
+slice = [
+  # Phase 1 (the vertical slice). All BSD/MIT/Apache. NO AGPL (OpenMVS) / NC (SuperGlue).
+  "pycolmap",   # BSD — SfM + dense PatchMatch MVS + Poisson/Delaunay meshing
+  "pyproj",     # MIT — CRS/datum transforms
+  "rasterio",   # BSD — GeoTIFF / DSM / ortho
+  "scipy",      # BSD — normal estimation, 2.5D Delaunay, DSM gridding (replaces Open3D on py3.13)
+  "laspy",      # BSD — LAS/LAZ I/O
+  "numpy",
+  "pillow",     # PIL license (permissive) — EXIF
+]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+openreco = "openreco.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["openreco*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".openreco", "**/.openreco/**", "**/output/**", "openreco/viewer/template"]
+
+[tool.pytest.ini_options]
+markers = [
+  "slow: integration tests that need sample data / pycolmap (deselect with -m 'not slow')",
+]

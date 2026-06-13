@@ -1,0 +1,55 @@
+# Real end-to-end slice: 11-image Sceaux Castle set -> camera poses + sparse cloud.
+# Fetch the images first:  python scripts/fetch_sample.py
+# Run:                      openreco run samples/sceaux
+#
+# This set has no EXIF GPS, so it reconstructs in a local (arbitrary-scale) frame — the
+# georeference stage (added next) will need scale/GCPs here, which exercises that fallback.
+
+[project]
+name = "sceaux-castle"
+
+[[stage]]
+id = "ingest"
+type = "ingest"
+params = { image_dir = "images", blur_relative = 0.1 }
+
+[[stage]]
+id = "sfm"
+type = "sfm"
+inputs = ["ingest"]
+params = { matcher = "exhaustive", max_image_size = 1600 }
+
+[[stage]]
+id = "georef"
+type = "georef"
+inputs = ["sfm", "ingest"]
+# no EXIF GPS -> falls back to a local (non-metric) frame; exercises that path
+
+[[stage]]
+id = "mvs"
+type = "mvs"
+inputs = ["georef", "ingest"]
+# no CUDA here -> sparse fallback (flagged); true dense needs a GPU
+
+[[stage]]
+id = "mesh"
+type = "mesh"
+inputs = ["mvs"]
+params = { method = "poisson" }
+
+[[stage]]
+id = "dsm"
+type = "dsm"
+inputs = ["mvs"]
+params = { resolution_m = 0.05 }
+
+[[stage]]
+id = "ortho"
+type = "ortho"
+inputs = ["mvs"]
+params = { resolution_m = 0.03 }
+
+[[stage]]
+id = "export"
+type = "export"
+inputs = ["mvs", "mesh", "dsm", "ortho"]

@@ -1,0 +1,28 @@
+# Phase 0 proof-of-engine project: a 2-stage DAG (generate -> sum) plus a second
+# independent generator to exercise parallel branches and multi-input fan-in.
+#
+#   gen_a ─┐
+#          ├─▶ total   (sums both upstream generators)
+#   gen_b ─┘
+#
+# Run:    openreco run samples/dummy
+# Re-run: same command -> all stages report "cached" (deterministic no-op).
+# Change a param below and re-run -> only affected stages recompute.
+
+[project]
+name = "dummy-demo"
+
+[[stage]]
+id = "gen_a"
+type = "dummy_generate"
+params = { n = 5, start = 0 }
+
+[[stage]]
+id = "gen_b"
+type = "dummy_generate"
+params = { n = 3, start = 100 }
+
+[[stage]]
+id = "total"
+type = "dummy_sum"
+inputs = ["gen_a", "gen_b"]

@@ -1,0 +1,18 @@
+# OpenReco
+# per-project cache + run history (content-addressed, regenerable)
+.openreco/
+# sample imagery is fetched via scripts/fetch_sample.py, not committed
+samples/*/images/
+# generated shareable bundles
+samples/*/output/
+
+# Python
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+.venv/
+venv/
