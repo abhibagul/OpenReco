@@ -16,6 +16,7 @@ import argparse
 import json
 import logging
 import sys
+from pathlib import Path
 
 from openreco import __version__, stages  # noqa: F401 — import registers stages
 from openreco.engine.manifest import load_manifest
@@ -98,6 +99,28 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_batch(args: argparse.Namespace) -> int:
+    from openreco.batch import discover_projects, run_batch
+
+    projects = discover_projects(args.root)
+    if not projects:
+        print(f"no project.toml found under {args.root}", file=sys.stderr)
+        return 1
+    print(f"running {len(projects)} project(s) with jobs={args.jobs}\n")
+    results = run_batch(projects, jobs=args.jobs)
+    ok = 0
+    for r in results:
+        status = "OK   " if r["ok"] else "FAIL "
+        ok += r["ok"]
+        detail = r.get("error") or (f"{r['stages']} stages, {r['seconds']}s"
+                                    + (f", failed={r['failed']}" if r.get("failed") else ""))
+        print(f"  {status} {r['project']:24s} {detail}")
+    out = Path(args.root) / "batch_report.json"
+    out.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    print(f"\n{ok}/{len(results)} succeeded · report: {out}")
+    return 0 if ok == len(results) else 1
+
+
 def cmd_stages(_args: argparse.Namespace) -> int:
     for t in registered_types():
         print(t)
@@ -171,6 +194,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     pst = sub.add_parser("stages", help="list registered stage types")
     pst.set_defaults(func=cmd_stages)
+
+    pb = sub.add_parser("batch", help="run all projects under a directory")
+    pb.add_argument("root", help="directory containing project.toml manifests (recursively)")
+    pb.add_argument("--jobs", type=int, default=1, help="parallel processes (default 1)")
+    pb.set_defaults(func=cmd_batch)
 
     pv = sub.add_parser("volume", help="cut/fill volume of a DSM GeoTIFF")
     pv.add_argument("dsm", help="path to a DSM GeoTIFF (e.g. output/dsm.tif)")
