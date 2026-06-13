@@ -20,6 +20,7 @@ import numpy as np
 
 from openreco.engine.context import Issue, RunContext, Severity, StageResult
 from openreco.engine.stage import Stage, register_stage
+from openreco.io.gltf import write_glb_textured
 from openreco.io.pointcloud import read_mesh_ply, write_textured_obj
 from openreco.texture_bake import bake_face, project, select_best_image
 
@@ -27,7 +28,7 @@ from openreco.texture_bake import bake_face, project, select_best_image
 @register_stage
 class Texture(Stage):
     type = "texture"
-    version = "1"
+    version = "2"  # v2: also export a self-contained textured glTF (.glb)
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
@@ -54,6 +55,8 @@ class Texture(Stage):
         atlas, filled, used = self._bake(ctx, tverts, faces, uvs, cams, image_dir, res)
 
         self._save(ctx, tverts, faces, uvs, atlas)
+        png_bytes = ctx.artifact_path("texture.png").read_bytes()
+        write_glb_textured(ctx.artifact_path("textured.glb"), tverts, faces, uvs, png_bytes)
         cov = float(filled.mean())
         ctx.write_json("texture.json", {
             "vertices": int(len(tverts)), "faces": int(len(faces)),
@@ -61,7 +64,7 @@ class Texture(Stage):
         })
         return StageResult(
             artifacts={"obj": "textured.obj", "mtl": "textured.mtl", "texture": "texture.png",
-                       "meta": "texture.json"},
+                       "glb": "textured.glb", "meta": "texture.json"},
             metrics={"faces": int(len(faces)), "atlas_resolution": res,
                      "images_used": used, "atlas_coverage": round(cov, 3)},
         )

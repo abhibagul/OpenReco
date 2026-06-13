@@ -75,15 +75,20 @@ class Export(Stage):
         if "contours" in ctx.inputs:
             self._copy(ctx, "contours", "contours", site / "contours.geojson")
             included.append("contours.geojson")
-        if "texture" in ctx.inputs:  # textured model: obj + mtl + atlas png (kept together)
-            for art, fn in (("obj", "textured.obj"), ("mtl", "textured.mtl"), ("texture", "texture.png")):
-                self._copy(ctx, "texture", art, site / fn)
-                included.append(fn)
+        has_texture = "texture" in ctx.inputs
+        if has_texture:  # textured model: obj + mtl + atlas png (kept together) + self-contained glb
+            for art, fn in (("obj", "textured.obj"), ("mtl", "textured.mtl"),
+                            ("texture", "texture.png"), ("glb", "textured.glb")):
+                if art in ctx.inputs["texture"].artifacts:
+                    self._copy(ctx, "texture", art, site / fn)
+                    included.append(fn)
 
         # viewer
+        has_tex_glb = has_texture and "glb" in ctx.inputs["texture"].artifacts
         self._write_viewer(ctx, site, crs, unit,
                            points="points.ply" if "mvs" in ctx.inputs else "",
-                           mesh="mesh.ply" if has_mesh else "")
+                           mesh="mesh.ply" if has_mesh else "",
+                           textured="textured.glb" if has_tex_glb else "")
         included += ["index.html", "serve.py"]
 
         summary = self._summary(ctx, included, crs)
@@ -107,11 +112,12 @@ class Export(Stage):
     def _copy(self, ctx, dep, artifact, dst: Path) -> None:
         shutil.copyfile(ctx.input_artifact(dep, artifact), dst)
 
-    def _write_viewer(self, ctx, site: Path, crs: str, unit: str, points: str, mesh: str) -> None:
+    def _write_viewer(self, ctx, site: Path, crs: str, unit: str, points: str, mesh: str,
+                      textured: str = "") -> None:
         html = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
         for key, val in {
             "__PROJECT__": ctx.project_dir.name, "__CRS__": crs,
-            "__POINTS__": points, "__MESH__": mesh, "__UNIT__": unit,
+            "__POINTS__": points, "__MESH__": mesh, "__TEXTURED__": textured, "__UNIT__": unit,
         }.items():
             html = html.replace(key, val)
         (site / "index.html").write_text(html, encoding="utf-8")

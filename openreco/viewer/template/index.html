@@ -24,8 +24,9 @@
 <div id="panel">
   <h1>OpenReco — __PROJECT__</h1>
   <div class="muted" id="stats">loading…</div>
-  <label><input type="checkbox" id="showPoints" checked> point cloud</label>
-  <label><input type="checkbox" id="showMesh" checked> mesh</label>
+  <label><input type="checkbox" id="showTex" checked> textured model</label>
+  <label><input type="checkbox" id="showPoints"> point cloud</label>
+  <label><input type="checkbox" id="showMesh"> mesh</label>
   <label>point size <input type="range" id="psize" min="0.2" max="5" step="0.1" value="1"></label>
   <button id="measureBtn">measure distance</button>
   <div id="measure"></div>
@@ -43,10 +44,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-const POINTS = "__POINTS__";   // filename or "" if absent
-const MESH   = "__MESH__";
-const UNIT   = "__UNIT__";     // "m" when georeferenced, else "units"
+const POINTS   = "__POINTS__";   // filename or "" if absent
+const MESH     = "__MESH__";
+const TEXTURED = "__TEXTURED__"; // textured .glb (preferred display) or ""
+const UNIT     = "__UNIT__";     // "m" when georeferenced, else "units"
 
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
 renderer.setPixelRatio(devicePixelRatio);
@@ -57,10 +60,21 @@ const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(1,1,1); scene.add(dir);
 
-let pointsObj = null, meshObj = null;
+let pointsObj = null, meshObj = null, texObj = null;
 const loader = new PLYLoader();
 const stats = document.getElementById('stats');
 const loaded = [];
+
+function loadGLB(file) {
+  return new Promise((res) => new GLTFLoader().load(file, (gltf) => {
+    texObj = gltf.scene;
+    texObj.traverse((o) => { if (o.isMesh && o.material) o.material.side = THREE.DoubleSide; });
+    scene.add(texObj); loaded.push(texObj);
+    let verts = 0;
+    texObj.traverse((o) => { if (o.isMesh) verts += o.geometry.getAttribute('position').count; });
+    res(verts);
+  }, undefined, () => res(0)));
+}
 
 function frameTo(obj) {
   const box = new THREE.Box3().setFromObject(obj);
@@ -95,14 +109,23 @@ function loadPLY(file, asPoints) {
 }
 
 (async () => {
-  let n = 0, m = 0;
-  if (POINTS) n = await loadPLY(POINTS, true);
-  if (MESH)   m = await loadPLY(MESH, false);
-  stats.textContent = `${n.toLocaleString()} points · ${m.toLocaleString()} mesh verts`;
+  let n = 0, m = 0, t = 0;
+  if (TEXTURED) t = await loadGLB(TEXTURED);
+  if (POINTS)   n = await loadPLY(POINTS, true);
+  if (MESH)     m = await loadPLY(MESH, false);
+  // default view: textured model if present, else point cloud + mesh
+  if (texObj) { if (pointsObj) pointsObj.visible = false; if (meshObj) meshObj.visible = false; }
+  else { if (pointsObj) pointsObj.visible = true; if (meshObj) meshObj.visible = true; }
+  showPoints.checked = !!(pointsObj && pointsObj.visible);
+  showMesh.checked = !!(meshObj && meshObj.visible);
+  showTex.checked = !!texObj;
+  stats.textContent =
+    `${t.toLocaleString()} textured verts · ${n.toLocaleString()} points · ${m.toLocaleString()} mesh verts`;
   if (loaded.length) frameTo(loaded[0]);
 })();
 
 // toggles
+showTex.onchange    = e => texObj && (texObj.visible = e.target.checked);
 showPoints.onchange = e => pointsObj && (pointsObj.visible = e.target.checked);
 showMesh.onchange   = e => meshObj && (meshObj.visible = e.target.checked);
 psize.oninput       = e => pointsObj && (pointsObj.material.size = +e.target.value);

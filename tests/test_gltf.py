@@ -48,6 +48,31 @@ def test_glb_roundtrip_positions_and_indices(tmp_path):
     assert np.array_equal(idx.reshape(-1, 3), faces)
 
 
+def test_textured_glb_roundtrip(tmp_path):
+    import io as _io
+
+    from PIL import Image
+
+    from openreco.io.gltf import write_glb_textured
+
+    verts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float64)
+    faces = np.array([[0, 1, 2]], dtype=np.int64)
+    uvs = np.array([[0, 0], [1, 0], [0, 1]], dtype=np.float64)
+    buf = _io.BytesIO()
+    Image.new("RGB", (4, 4), (200, 100, 50)).save(buf, format="PNG")
+    png = buf.getvalue()
+
+    p = tmp_path / "t.glb"
+    write_glb_textured(p, verts, faces, uvs, png)
+    gltf, binblob = _parse_glb(p)
+    assert gltf["materials"][0]["pbrMetallicRoughness"]["baseColorTexture"]["index"] == 0
+    assert gltf["images"][0]["mimeType"] == "image/png"
+    assert gltf["meshes"][0]["primitives"][0]["attributes"]["TEXCOORD_0"] == 1
+    # the embedded PNG bytes are present in the binary chunk
+    assert png in binblob
+    assert p.stat().st_size % 4 == 0
+
+
 def test_glb_total_length_is_4byte_aligned(tmp_path):
     verts = np.random.default_rng(0).random((5, 3))
     faces = np.array([[0, 1, 2], [2, 3, 4]])
