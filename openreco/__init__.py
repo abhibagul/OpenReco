@@ -18,4 +18,8 @@ def __getattr__(name: str):
         from openreco import measure
 
         return getattr(measure, name)
+    if name in ("export_product", "list_formats"):
+        from openreco import exporters
+
+        return getattr(exporters, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

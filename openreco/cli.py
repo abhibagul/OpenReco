@@ -121,6 +121,21 @@ def cmd_batch(args: argparse.Namespace) -> int:
     return 0 if ok == len(results) else 1
 
 
+def cmd_export(args: argparse.Namespace) -> int:
+    from openreco.exporters import export_product, list_formats
+
+    avail = list_formats(args.src)
+    if not args.to:
+        print(f"{args.src}: available formats -> {', '.join(avail)}")
+        return 0
+    if args.to.lower() not in avail:
+        print(f"cannot export as {args.to!r}; choices: {', '.join(avail)}", file=sys.stderr)
+        return 1
+    out = export_product(args.src, args.to, args.out or f"{Path(args.src).stem}.{args.to}")
+    print(f"wrote {out}")
+    return 0
+
+
 def cmd_stages(_args: argparse.Namespace) -> int:
     for t in registered_types():
         print(t)
@@ -199,6 +214,12 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("root", help="directory containing project.toml manifests (recursively)")
     pb.add_argument("--jobs", type=int, default=1, help="parallel processes (default 1)")
     pb.set_defaults(func=cmd_batch)
+
+    pe = sub.add_parser("export", help="convert a product (mesh/cloud/raster/...) to another format")
+    pe.add_argument("src", help="source product file (e.g. output/mesh.ply, output/dsm.tif)")
+    pe.add_argument("--to", help="target format (omit to list available formats)")
+    pe.add_argument("--out", help="output path (default: <src stem>.<fmt>)")
+    pe.set_defaults(func=cmd_export)
 
     pv = sub.add_parser("volume", help="cut/fill volume of a DSM GeoTIFF")
     pv.add_argument("dsm", help="path to a DSM GeoTIFF (e.g. output/dsm.tif)")
