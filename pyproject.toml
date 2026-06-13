@@ -26,6 +26,7 @@ slice = [
   "pillow",     # PIL license (permissive) — EXIF
   "xatlas",     # MIT — UV unwrapping (texturing)
   "fast-simplification",  # MIT — mesh decimation (texturing)
+  "scikit-image",  # BSD — SIFT + matching for panorama stitching
 ]
 dev = ["pytest", "ruff"]
 

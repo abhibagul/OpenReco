@@ -18,10 +18,11 @@ from openreco.stages import indices  # noqa: F401
 from openreco.stages import ingest  # noqa: F401
 from openreco.stages import mesh  # noqa: F401
 from openreco.stages import mvs  # noqa: F401
+from openreco.stages import panorama  # noqa: F401
 from openreco.stages import refine  # noqa: F401
 from openreco.stages import sfm  # noqa: F401
 from openreco.stages import splat  # noqa: F401
 from openreco.stages import texture  # noqa: F401
 
 __all__ = ["classify", "contours", "coverage", "dsm", "dtm", "dummy", "export", "fuse", "georef",
-           "indices", "ingest", "mesh", "mvs", "refine", "sfm", "splat", "texture"]
+           "indices", "ingest", "mesh", "mvs", "panorama", "refine", "sfm", "splat", "texture"]
