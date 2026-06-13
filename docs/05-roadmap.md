@@ -28,6 +28,8 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - ✅ **Volume measurement** (cut/fill from the DSM; `openreco volume` + `openreco.measure_volume`).
 - ✅ **DTM** (morphological ground filter on the DSM, + nDSM object heights).
 - ✅ **Cross-section profiles** (`openreco profile` + `openreco.measure_profile`).
+- ✅ **Sparse-cloud filtering + camera re-optimization** (`refine` stage — "gradual selection":
+  drop high-error/short-track tie points, re-run BA; composable via role-based inputs).
 - Coded-target auto-detection + sub-pixel refine; USD/COPC/3D Tiles; learned matching;
   point-cloud ground classification (CSF/PMF) for a true DTM.
 - Learned matching (LightGlue/ALIKED); GLOMAP global SfM; hierarchical for large sets.

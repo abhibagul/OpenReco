@@ -45,7 +45,8 @@ class Georef(Stage):
     def run(self, ctx: RunContext) -> StageResult:
         import pycolmap
 
-        model_dir = ctx.input_artifact("sfm", "model")
+        model_dep = ctx.input_with("model")        # sfm, or a refine stage between sfm and georef
+        model_dir = ctx.input_artifact(model_dep, "model")
         rec = pycolmap.Reconstruction(str(model_dir))
 
         gps = self._gps_table(ctx)
@@ -86,7 +87,7 @@ class Georef(Stage):
         )
 
     def _gps_table(self, ctx: RunContext) -> dict[str, tuple[float, float, float]]:
-        data = ctx.read_input_json("ingest", "images")
+        data = ctx.read_input_json(ctx.input_with("images"), "images")
         out: dict[str, tuple[float, float, float]] = {}
         for im in data["images"]:
             if im["excluded"]:

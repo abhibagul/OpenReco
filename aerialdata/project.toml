@@ -19,9 +19,16 @@ inputs = ["ingest"]
 params = { matcher = "exhaustive", max_image_size = 1600 }
 
 [[stage]]
+id = "refine"
+type = "refine"
+inputs = ["sfm"]
+# gradual selection: drop high-error / short-track tie points, then re-run bundle adjustment
+params = { max_reproj_error = 1.0, min_track_length = 3 }
+
+[[stage]]
 id = "georef"
 type = "georef"
-inputs = ["sfm", "ingest"]
+inputs = ["refine", "ingest"]
 # method=auto -> GPS alignment; crs_epsg=0 -> auto-pick UTM zone from GPS
 params = { method = "auto" }
 

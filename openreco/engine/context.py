@@ -112,6 +112,16 @@ class RunContext:
         rel = result.artifacts[name]
         return self.input_dirs[stage_id] / rel
 
+    def input_with(self, artifact: str) -> str:
+        """Id of the (first) upstream input that produces `artifact`. Lets a stage consume e.g.
+        a "model" without hardcoding whether it came from `sfm` or a `refine` stage in between —
+        keeping the pipeline composable."""
+        for dep, result in self.inputs.items():
+            if artifact in result.artifacts:
+                return dep
+        raise KeyError(f"no input provides artifact {artifact!r} (have: "
+                       f"{[d for d in self.inputs]})")
+
     def write_json(self, name: str, data: Any) -> str:
         path = self.artifact_path(name)
         path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
