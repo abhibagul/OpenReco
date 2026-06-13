@@ -48,6 +48,9 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - ✅ **Contour lines** from the DSM (marching squares → WGS84 GeoJSON; standard survey product).
 - ✅ **Volume measurement** (cut/fill from the DSM; `openreco volume` + `openreco.measure_volume`).
 - ✅ **DTM** (morphological ground filter on the DSM, + nDSM object heights).
+- ✅ **Point-cloud ground classification** (`classify`: grid-min + height threshold → classified LAS
+  [ground/non-ground] + true bare-earth DTM from ground points). Validated: 64.7% ground on 1.68M
+  aerial points. Next: CSF/progressive densification, building/vegetation sub-classes.
 - ✅ **Cross-section profiles** (`openreco profile` + `openreco.measure_profile`).
 - ✅ **Sparse-cloud filtering + camera re-optimization** (`refine` stage — "gradual selection":
   drop high-error/short-track tie points, re-run BA; composable via role-based inputs).
