@@ -24,7 +24,7 @@ from openreco.viewer import TEMPLATE_DIR
 @register_stage
 class Export(Stage):
     type = "export"
-    version = "2"  # v2: adds portable glTF (.glb) mesh export
+    version = "3"  # v3: 3D Tiles tileset (Cesium streaming) when georeferenced
 
     def default_params(self) -> dict[str, Any]:
         return {"output_dir": "output", "copy_to_project": True}
@@ -35,6 +35,9 @@ class Export(Stage):
         included: list[str] = []
         crs = "local"
         unit = "units"
+        crs_epsg = None
+        origin = [0.0, 0.0, 0.0]
+        mesh_bbox = None
 
         # point cloud
         if "mvs" in ctx.inputs:
@@ -42,7 +45,9 @@ class Export(Stage):
             included.append("points.ply")
             meta = ctx.read_input_json("mvs", "meta")
             crs = meta.get("crs", "local")
-            unit = "m" if meta.get("crs_epsg") else "units"
+            crs_epsg = meta.get("crs_epsg")
+            origin = meta.get("origin", [0.0, 0.0, 0.0])
+            unit = "m" if crs_epsg else "units"
             if "las" in ctx.inputs["mvs"].artifacts:
                 self._copy(ctx, "mvs", "las", site / "points.las")
                 included.append("points.las")
@@ -54,6 +59,7 @@ class Export(Stage):
             shutil.copyfile(mesh_src, site / "mesh.ply")
             included.append("mesh.ply")
             v, fcs, vc = read_mesh_ply(mesh_src)
+            mesh_bbox = (v.min(axis=0), v.max(axis=0))
             if len(fcs) > 0:                            # OBJ/glTF need real geometry
                 write_obj(site / "mesh.obj", v, fcs, vc)
                 included.append("mesh.obj")
@@ -82,6 +88,21 @@ class Export(Stage):
                 if art in ctx.inputs["texture"].artifacts:
                     self._copy(ctx, "texture", art, site / fn)
                     included.append(fn)
+
+        # 3D Tiles (streamable in Cesium) — when georeferenced and a glb tile exists
+        tile_glb = ("textured.glb" if (site / "textured.glb").exists()
+                    else "mesh.glb" if (site / "mesh.glb").exists() else None)
+        if crs_epsg and tile_glb and mesh_bbox is not None:
+            import numpy as np
+
+            from openreco.io.tiles3d import write_tileset
+
+            pad = 0.05 * (mesh_bbox[1] - mesh_bbox[0])      # pad box (textured glb may differ slightly)
+            lat, lon = write_tileset(site / "tileset.json", tile_glb, int(crs_epsg),
+                                     np.asarray(origin), mesh_bbox[0] - pad, mesh_bbox[1] + pad)
+            included.append("tileset.json")
+            ctx.logger.info("3D Tiles: %s placed at lat=%.5f lon=%.5f (EPSG:%s)",
+                            tile_glb, lat, lon, crs_epsg)
 
         # viewer
         has_tex_glb = has_texture and "glb" in ctx.inputs["texture"].artifacts

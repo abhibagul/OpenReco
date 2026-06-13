@@ -22,17 +22,22 @@ from openreco.engine.context import Issue, RunContext, Severity, StageResult
 from openreco.engine.stage import Stage, register_stage
 from openreco.io.gltf import write_glb_textured
 from openreco.io.pointcloud import read_mesh_ply, write_textured_obj
-from openreco.texture_bake import bake_face, project, select_best_image
+from openreco.texture_bake import bake_face_blend, select_top_k
 
 
 @register_stage
 class Texture(Stage):
     type = "texture"
-    version = "2"  # v2: also export a self-contained textured glTF (.glb)
+    version = "3"  # v3: multi-image blending + exposure equalization (de-lighting v1)
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
-        return {"target_faces": 200000, "atlas_resolution": 2048}
+        return {
+            "target_faces": 200000,
+            "atlas_resolution": 2048,
+            "blend_images": 4,          # blend up to N most front-facing views per face (1 = single best)
+            "equalize_exposure": True,  # per-image gain to a common brightness (radiometric balance)
+        }
 
     def run(self, ctx: RunContext) -> StageResult:
         import pycolmap
@@ -93,37 +98,57 @@ class Texture(Stage):
         return cams
 
     def _bake(self, ctx, tverts, faces, uvs, cams, image_dir, res):
-        from PIL import Image
-
         tri = tverts[faces]                                        # (F,3,3)
         centroids = tri.mean(axis=1)
         normals = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
         normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
-        ctx.progress(0.45, "selecting best image per face")
-        best = select_best_image(centroids, normals, cams)
 
-        atlas = np.zeros((res, res, 3), np.uint8)
-        filled = np.zeros((res, res), bool)
+        k = max(1, int(ctx.params["blend_images"]))
+        ctx.progress(0.45, f"selecting top-{k} images per face")
+        idx, weights = select_top_k(centroids, normals, cams, k)
+
+        used_ids = sorted({int(c) for c in idx.ravel() if c >= 0})
+        images, gains = self._load_images(ctx, cams, used_ids, image_dir,
+                                          bool(ctx.params["equalize_exposure"]))
+
+        accum = np.zeros((res, res, 3), np.float64)
+        wsum = np.zeros((res, res), np.float64)
         auv = uvs * (res - 1)                                      # atlas pixel coords (u=col, v=row)
-        used = 0
-        order = np.argsort(best)                                   # group faces by image -> load once
-        cur = -2
-        image = None
-        for fi in order:
-            ci = int(best[fi])
-            if ci < 0:
-                continue
-            if ci != cur:
-                cur = ci
-                cam = cams[ci]
-                pil = Image.open(image_dir / cam["name"]).convert("RGB").resize(cam["wh"])
-                image = np.asarray(pil, np.float32)
-                used += 1
-                ctx.progress(0.5, f"baking from {cam['name']}")
-            f = faces[fi]
-            px, _z = project(cams[ci]["P"], tverts[f])
-            bake_face(atlas, filled, auv[f], px, image)
-        return atlas, filled, used
+        ctx.progress(0.55, "blending images into atlas")
+        for fi in range(len(faces)):
+            samples = []
+            for j in range(idx.shape[1]):
+                ci = int(idx[fi, j])
+                if ci < 0 or ci not in images:
+                    continue
+                samples.append({"P": cams[ci]["P"], "verts3": tverts[faces[fi]],
+                                "image": images[ci], "gain": gains[ci], "weight": float(weights[fi, j])})
+            if samples:
+                bake_face_blend(accum, wsum, auv[faces[fi]], samples)
+
+        filled = wsum > 0
+        atlas = np.zeros((res, res, 3), np.uint8)
+        atlas[filled] = np.clip(np.round(accum[filled] / wsum[filled, None]), 0, 255).astype(np.uint8)
+        return atlas, filled, len(used_ids)
+
+    def _load_images(self, ctx, cams, used_ids, image_dir, equalize):
+        """Load (and resize to camera resolution) each used image once; compute a per-image
+        exposure gain toward the common median brightness (basic radiometric balancing)."""
+        from PIL import Image
+
+        images, means = {}, {}
+        for ci in used_ids:
+            cam = cams[ci]
+            arr = np.asarray(Image.open(image_dir / cam["name"]).convert("RGB").resize(cam["wh"]),
+                             np.float32)
+            images[ci] = arr
+            means[ci] = arr.reshape(-1, 3).mean(axis=0)
+        gains = {ci: np.ones(3, np.float32) for ci in used_ids}
+        if equalize and len(means) > 1:
+            target = np.median(np.stack(list(means.values())), axis=0)   # per-channel target
+            for ci, m in means.items():
+                gains[ci] = np.clip(target / np.maximum(m, 1e-3), 0.6, 1.6).astype(np.float32)
+        return images, gains
 
     def _save(self, ctx, tverts, faces, uvs, atlas) -> None:
         from PIL import Image

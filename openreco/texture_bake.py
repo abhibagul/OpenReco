@@ -42,6 +42,72 @@ def select_best_image(centroids: np.ndarray, normals: np.ndarray, cams: list[dic
     return best_idx
 
 
+def select_top_k(centroids: np.ndarray, normals: np.ndarray, cams: list[dict],
+                 k: int) -> tuple[np.ndarray, np.ndarray]:
+    """For each face, the top-k cameras by frontality that see it in-bounds. Returns (idx[F,k]
+    with -1 padding, weight[F,k] with 0 for invalid)."""
+    f = len(centroids)
+    scores = np.full((f, len(cams)), -1.0)
+    for i, cam in enumerate(cams):
+        px, z = project(cam["P"], centroids)
+        view = cam["C"][None, :] - centroids
+        view /= np.linalg.norm(view, axis=1, keepdims=True) + 1e-12
+        frontal = np.abs((normals * view).sum(axis=1))
+        ok = (z > 0) & (px[:, 0] >= 0) & (px[:, 0] < cam["w"]) & (px[:, 1] >= 0) & (px[:, 1] < cam["h"])
+        scores[:, i] = np.where(ok, frontal, -1.0)
+    k = min(k, len(cams))
+    idx = np.argsort(-scores, axis=1)[:, :k]
+    w = np.take_along_axis(scores, idx, axis=1)
+    idx = idx.astype(np.int64)
+    idx[w <= 0] = -1
+    w[w <= 0] = 0.0
+    return idx, w
+
+
+def bake_face_blend(accum: np.ndarray, wsum: np.ndarray, atlas_tri: np.ndarray,
+                    samples: list[dict]) -> None:
+    """Blend multiple source images into one face's atlas triangle. `samples` is a list of
+    {P (3x4), verts3 (3,3), image (H,W,3), gain (3,), weight}. Accumulates weight*gain*color and
+    weight into float buffers (per-texel, only where the texel projects in-bounds for that image);
+    the caller divides accum/wsum at the end. Reduces seams vs. single-best-image."""
+    res = accum.shape[0]
+    a = atlas_tri
+    minx = max(0, int(np.floor(a[:, 0].min())))
+    maxx = min(res - 1, int(np.ceil(a[:, 0].max())))
+    miny = max(0, int(np.floor(a[:, 1].min())))
+    maxy = min(res - 1, int(np.ceil(a[:, 1].max())))
+    if minx > maxx or miny > maxy:
+        return
+    xs, ys = np.meshgrid(np.arange(minx, maxx + 1), np.arange(miny, maxy + 1))
+    pts = np.column_stack([xs.ravel() + 0.5, ys.ravel() + 0.5])
+    v0 = a[1] - a[0]
+    v1 = a[2] - a[0]
+    v2 = pts - a[0]
+    den = v0[0] * v1[1] - v1[0] * v0[1]
+    if abs(den) < 1e-9:
+        return
+    l1 = (v2[:, 0] * v1[1] - v1[0] * v2[:, 1]) / den
+    l2 = (v0[0] * v2[:, 1] - v2[:, 0] * v0[1]) / den
+    l0 = 1 - l1 - l2
+    inside = (l0 >= -1e-4) & (l1 >= -1e-4) & (l2 >= -1e-4)
+    if not inside.any():
+        return
+    bary = np.column_stack([l0, l1, l2])[inside]
+    tx = xs.ravel()[inside].astype(int)
+    ty = ys.ravel()[inside].astype(int)
+    for s in samples:
+        img_pts = (np.c_[s["verts3"], np.ones(3)] @ s["P"].T)        # (3,3)
+        img_pts = img_pts[:, :2] / img_pts[:, 2:3]
+        img_xy = bary @ img_pts                                      # (M,2)
+        h, w = s["image"].shape[:2]
+        valid = (img_xy[:, 0] >= 0) & (img_xy[:, 0] < w - 1) & (img_xy[:, 1] >= 0) & (img_xy[:, 1] < h - 1)
+        if not valid.any():
+            continue
+        col = _bilinear(s["image"], img_xy[valid]) * s["gain"]       # (Mv,3) exposure-corrected
+        accum[ty[valid], tx[valid]] += s["weight"] * col
+        wsum[ty[valid], tx[valid]] += s["weight"]
+
+
 def _bilinear(img: np.ndarray, xy: np.ndarray) -> np.ndarray:
     """Bilinear sample img (H,W,3) at pixel coords xy (N,2). Clamped."""
     h, w = img.shape[:2]

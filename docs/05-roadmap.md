@@ -2,6 +2,27 @@
 
 Sizing is for **one developer**, in ideal focused weeks (calendar will be longer). "≈" = rough order.
 
+## North star (product vision)
+
+Match **every** the reference photogrammetry suite capability and exceed it — each feature working *better*, on
+**any hardware** (NVIDIA/AMD/Apple-Silicon GPU **and** CPU-only, with graceful fallback), wrapped
+in a **layered desktop UI** that surpasses the reference tool's. Pillars, in priority order:
+
+1. **Hardware-agnostic compute** — today: CUDA dense (external COLMAP binary) + CPU fallback. Next:
+   AMD/Apple-Silicon GPU paths (Vulkan/Metal via wgpu, or HIP/Metal COLMAP builds), auto-selected.
+2. **Full processing parity** — alignment, dense, mesh, texture (now multi-image blended), tiled
+   models, DSM/DTM/ortho, classification, LiDAR fusion, multispectral/NDVI, panoramas, 4D — plus
+   our neural 3DGS branch. (See per-phase items below; most geometry/survey items are ✅.)
+3. **Desktop UI with layers** (the big remaining piece) — a cross-platform app (evaluated:
+   **Tauri + web frontend** for the WebGPU 3D viewport we already have, vs Qt) presenting the
+   project as a **layer tree** (chunks, cameras, tie/dense points, mesh, texture, DSM/DTM, ortho,
+   contours, splats), a 3D/ortho/photo workspace, parameter panels driven by each stage's
+   `params_schema`, a job queue over the DAG engine, and live progress — but *better* than
+   the reference tool via our reproducible pipeline-as-code (every UI action edits the manifest; undo =
+   diff; re-run = cache-aware). Effort ≈ a phase of its own (≈2–4 months).
+4. **Reproducibility & openness as the moat** — already ahead: pipeline-as-code, content-addressed
+   caching, run diffing, headless CLI + Python API, permissive/MIT.
+
 ## Phase 0 — Foundations (the engine) · ≈2–3 wks
 Goal: the DAG engine exists and a no-op pipeline runs with caching, before any real algorithm.
 - DAG scheduler, content-addressed cache, checkpoint/resume, manifest (TOML) loader.
