@@ -353,7 +353,43 @@ function openLayer(L) {
   if (L.type === 'ingest') { showCameras(L); return; }         // cameras -> 3D positions
   selectDock('console'); log(`${L.id}: nothing to display yet (run it first)`);
 }
-function showCameras(_L) { log('camera positions view: coming next'); }   // implemented with /api/cameras
+// show/hide camera positions (frustums) in the 3D view, like the reference tool "Show Cameras"
+async function showCameras(_L) {
+  const key = 'cameras:' + ACTIVE_CHUNK;
+  if (objects.has(key)) {                       // toggle off if already shown
+    scene.remove(objects.get(key)); objects.delete(key); visible.delete(key); return;
+  }
+  const data = await (await fetch('/api/cameras?chunk=' + encodeURIComponent(ACTIVE_CHUNK))).json();
+  if (!data.cameras.length) { selectDock('console');
+    log('no camera positions yet — run Align Photos, or add photos with GPS'); return; }
+  const grp = buildCameras(data.cameras);
+  objects.set(key, grp); scene.add(grp); visible.add(key);
+  selectVtab('model'); frameAll();
+  log(`showing ${data.cameras.length} camera(s) — ${data.frame === 'gps' ? 'EXIF GPS (pre-alignment)' : 'solved poses'}`);
+}
+function buildCameras(cams) {
+  const grp = new THREE.Group();
+  const pts = cams.map(c => new THREE.Vector3(c.c[0], c.c[1], c.c[2]));
+  grp.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x89dceb })));
+  const diag = new THREE.Box3().setFromPoints(pts).getSize(new THREE.Vector3()).length() || 1;
+  const s = Math.max(diag * 0.02, 1e-4);
+  const mat = new THREE.LineBasicMaterial({ color: 0x89dceb });
+  const segs = [];
+  cams.forEach(c => {
+    if (!c.fwd || !c.up) return;                // no orientation -> just the position point
+    const C = new THREE.Vector3(...c.c);
+    const f = new THREE.Vector3(...c.fwd).normalize();
+    const up = new THREE.Vector3(...c.up).normalize();
+    const r = new THREE.Vector3().crossVectors(f, up).normalize();
+    const ctr = C.clone().add(f.clone().multiplyScalar(s * 2));
+    const corner = (sx, sy) => ctr.clone().add(r.clone().multiplyScalar(sx * s)).add(up.clone().multiplyScalar(sy * s * 0.75));
+    const a = corner(1, 1), b = corner(-1, 1), d = corner(-1, -1), e = corner(1, -1);
+    segs.push(C, a, C, b, C, d, C, e, a, b, b, d, d, e, e, a);
+  });
+  if (segs.length) grp.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(segs), mat));
+  return grp;
+}
 
 // ---- properties / params --------------------------------------------------
 function renderParams(L) {
@@ -481,6 +517,7 @@ async function loadWorkflows() {
   // Model menu = view helpers
   $('m-model').innerHTML = '';
   menuEntry('m-model', 'Frame all', frameAll);
+  menuEntry('m-model', '📷 Show / hide cameras', () => showCameras(), 'camera positions of the active chunk');
   menuEntry('m-model', 'Hide all layers', () => { visible.forEach(id => { const o = objects.get(id); if (o) o.visible = false; });
     visible.clear(); renderWorkspace(); });
   // Tools menu

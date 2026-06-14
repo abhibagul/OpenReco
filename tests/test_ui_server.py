@@ -152,6 +152,7 @@ def test_frontend_has_workspace_chunks(server):
     assert b"/api/layer" in appjs and b"showCtx" in appjs       # context menu + layer ops
     assert b"set_enabled" in appjs and b"openLayer" in appjs and b"ondragstart" in appjs
     assert b"/api/new_project" in appjs and b"/api/save_project" in appjs
+    assert b"/api/cameras" in appjs and b"buildCameras" in appjs
 
 
 def test_chunk_rename_and_remove(tmp_path):
@@ -415,6 +416,52 @@ def test_add_photos_multi_folder_stages_copies(tmp_path):
         from pathlib import Path
         staged = Path(body["image_dir"])
         assert (staged / "a.JPG").exists() and (staged / "b.JPG").exists()
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_cameras_gps_fallback(tmp_path):
+    proj = Project.create(tmp_path, name="cam").add_stage("ing", "ingest",
+                                                          params={"image_dir": "images"})
+    imgs = tmp_path / "images.json"
+    imgs.write_text(json.dumps({"image_dir": str(tmp_path / "images"), "images": [
+        {"name": "a.JPG", "lat": 40.000, "lon": -105.000, "alt": 1500.0, "excluded": False},
+        {"name": "b.JPG", "lat": 40.001, "lon": -105.001, "alt": 1510.0, "excluded": False}]}), "utf-8")
+    proj.manifest.runs_dir.mkdir(parents=True, exist_ok=True)
+    (proj.manifest.runs_dir / "latest.json").write_text(json.dumps(
+        {"stages": [{"id": "ing", "status": "executed", "artifacts": {"images": str(imgs)}}]}), "utf-8")
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        data = json.loads(_get(base + "/api/cameras?chunk=Chunk%201")[1])
+        assert data["frame"] == "gps" and len(data["cameras"]) == 2
+        # ENU metres, centred on the set: ~111 m north, ~85 m west between the two
+        cs = {c["name"]: c["c"] for c in data["cameras"]}
+        assert abs(cs["b.JPG"][1] - cs["a.JPG"][1] - 110.54) < 1.0     # 0.001 deg lat ~ 111 m
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_cameras_from_solved_poses(tmp_path):
+    proj = Project.create(tmp_path, name="cam2").add_stage("align", "sfm")
+    poses = tmp_path / "poses.json"
+    poses.write_text(json.dumps({"images": [
+        {"name": "a.JPG", "center": [1.0, 2.0, 3.0]},
+        {"name": "b.JPG", "center": [4.0, 5.0, 6.0]}]}), "utf-8")
+    proj.manifest.runs_dir.mkdir(parents=True, exist_ok=True)
+    (proj.manifest.runs_dir / "latest.json").write_text(json.dumps(
+        {"stages": [{"id": "align", "status": "executed",
+                     "artifacts": {"poses": str(poses)}}]}), "utf-8")
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        data = json.loads(_get(base + "/api/cameras?chunk=Chunk%201")[1])
+        assert data["frame"] == "model" and data["source"] == "align"
+        assert data["cameras"][0]["c"] == [1.0, 2.0, 3.0]
     finally:
         httpd.shutdown()
         httpd.server_close()

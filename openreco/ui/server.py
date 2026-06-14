@@ -15,6 +15,7 @@ Endpoints (JSON unless noted):
   GET  /api/images?chunk=...   -> source images of a chunk (for the Photos pane + GCP picking)
   GET  /api/browse?path=...    -> list sub-folders + image files of a dir (Add-Photos file picker)
   GET  /api/thumb?path=...     -> serve an image file from anywhere (picker previews; image-only)
+  GET  /api/cameras?chunk=...  -> camera positions (solved poses, else EXIF-GPS) for the 3D view
   POST /api/add_photos         -> create an ingest layer from chosen image paths {paths,chunk,id}
   POST /api/remove_photo       -> drop one image from an ingest layer {layer,name} (select list)
   POST /api/chunk              -> chunk ops {action: add|rename|remove, name, to}
@@ -46,6 +47,22 @@ _CT = {".html": "text/html", ".js": "text/javascript", ".css": "text/css",
        ".json": "application/json", ".ply": "application/octet-stream",
        ".glb": "model/gltf-binary", ".tif": "image/tiff", ".png": "image/png",
        ".jpg": "image/jpeg", ".geojson": "application/json", ".las": "application/octet-stream"}
+
+
+def _cameras_from_gps(imgs: list[dict]) -> list[dict]:
+    """Project EXIF GPS to a local ENU frame (metres) centred on the set — a pre-alignment preview."""
+    import math
+    lat0 = sum(i["lat"] for i in imgs) / len(imgs)
+    lon0 = sum(i["lon"] for i in imgs) / len(imgs)
+    alts = [i.get("alt") or 0.0 for i in imgs]
+    alt0 = sum(alts) / len(alts)
+    k = math.cos(math.radians(lat0))
+    out = []
+    for i in imgs:
+        x = (i["lon"] - lon0) * k * 111320.0
+        y = (i["lat"] - lat0) * 110540.0
+        out.append({"name": i["name"], "c": [x, y, (i.get("alt") or 0.0) - alt0]})
+    return out
 
 
 def _unique_id(base: str, taken: set[str]) -> str:
@@ -216,6 +233,48 @@ class AppState:
         self.project.save()
         return {"ok": True, "id": layer_id, "remaining": len(current)}
 
+    def cameras_for_chunk(self, chunk: str | None) -> dict:
+        """Camera positions for the 3D view (the reference tool 'show cameras'). Prefers solved poses from
+        an sfm/georef reconstruction (centers + orientation); falls back to EXIF GPS as a local
+        ENU preview before alignment."""
+        last = self._last_run()
+        for s in self.project.manifest.stages:
+            if s.type in ("sfm", "georef") and (not chunk or s.chunk == chunk):
+                art = last.get(s.id, {}).get("artifacts", {})
+                poses = art.get("poses")
+                if poses and Path(poses).is_file():
+                    data = json.loads(Path(poses).read_text(encoding="utf-8"))
+                    cams = [{"name": im["name"], "c": im["center"]} for im in data.get("images", [])]
+                    orient = self._orient_from_model(art.get("model"))
+                    for cm in cams:
+                        if cm["name"] in orient:
+                            cm.update(orient[cm["name"]])
+                    if cams:
+                        return {"frame": "model", "source": s.id, "cameras": cams}
+        gps = [im for im in self.images_for_chunk(chunk)["images"] if im.get("lat") is not None]
+        if gps:
+            return {"frame": "gps", "cameras": _cameras_from_gps(gps)}
+        return {"frame": "none", "cameras": []}
+
+    @staticmethod
+    def _orient_from_model(model_dir) -> dict:
+        """Best-effort camera orientation (forward/up) from a COLMAP reconstruction."""
+        if not model_dir or not Path(model_dir).is_dir():
+            return {}
+        try:
+            import numpy as np
+            import pycolmap
+            rec = pycolmap.Reconstruction(str(model_dir))
+            out = {}
+            for i in rec.reg_image_ids():
+                img = rec.image(i)
+                r = np.asarray(img.cam_from_world().matrix())[:, :3]   # world->cam rotation
+                out[img.name] = {"fwd": (r.T @ np.array([0, 0, 1.0])).tolist(),
+                                 "up": (r.T @ np.array([0, -1.0, 0])).tolist()}
+            return out
+        except Exception:  # noqa: BLE001 — orientation is optional eye-candy
+            return {}
+
     def allowed_roots(self) -> list[Path]:
         """Dirs the viewer may read from: the project dir + each chunk's ingest image folder
         (source photos commonly live outside the project)."""
@@ -330,6 +389,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, self.state.browse(parse_qs(u.query).get("path", [None])[0]))
         if route == "/api/thumb":
             return self._thumb(parse_qs(u.query).get("path", [""])[0])
+        if route == "/api/cameras":
+            return self._send(200, self.state.cameras_for_chunk(
+                parse_qs(u.query).get("chunk", [None])[0]))
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):

@@ -21,7 +21,10 @@ in a **layered desktop UI** that surpasses the reference tool's. Pillars, in pri
    **visibility (👁) toggles**, and **right-click context menus** — chunks: set-active / add photos /
    rename / remove; layers: show-hide / rename / move-to-chunk / remove (/api/chunk, /api/layer).
    Categories: Cameras / Tie Points / Dense Cloud / Point Cloud / 3D Model / DEM / Orthomosaic /
-   Shapes. **Model/Photo** viewport
+   Shapes. Layers/chunks have **enable/disable checkboxes** (disabled branches skipped on Run),
+   **drag-and-drop** between chunks, and **double-click opens** in the right view. **File** menu does
+   **New / Save project**. **Cameras in 3D** (/api/cameras): camera frustums from solved poses, or an
+   EXIF-GPS ENU preview before alignment. **Model/Photo** viewport
    tabs, a **Properties** pane, and a **Console / Photos / Jobs** bottom dock. Features: active-chunk
    selector + "＋ Chunk"; **Workflow menu** (Align Photos / Build Dense Cloud / … Build dialogs →
    engine) incl. **Merge Chunks** (ICP align+merge); schema-driven parameter panels; Run with live
