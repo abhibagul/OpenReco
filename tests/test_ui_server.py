@@ -148,6 +148,58 @@ def test_frontend_has_workspace_chunks(server):
     assert b"renderWorkspace" in appjs and b"ACTIVE_CHUNK" in appjs and b"/api/chunk" in appjs
 
 
+def test_set_project_crs(server):
+    base, _ = server
+    status, body = _post(base + "/api/project", {"crs": "EPSG:32613"})
+    assert status == 200 and body["crs"] == "EPSG:32613"
+    proj = json.loads(_get(base + "/api/project")[1])
+    assert proj["crs"] == "EPSG:32613"
+
+
+def test_markers_roundtrip_writes_gcp_csv(server):
+    base, root = server
+    markers = [{"name": "GCP1", "world": [500000.0, 4000000.0, 1500.0],
+                "observations": [{"image": "a.jpg", "u": 100.0, "v": 200.0},
+                                 {"image": "b.jpg", "u": 110.0, "v": 210.0}]}]
+    status, body = _post(base + "/api/markers", {"markers": markers})
+    assert status == 200 and body["count"] == 1
+    assert json.loads(_get(base + "/api/markers")[1])["markers"][0]["name"] == "GCP1"
+    from pathlib import Path
+    csv = Path(body["gcp_csv"]).read_text()
+    assert "GCP1,500000.0,4000000.0,1500.0,a.jpg,100.0,200.0" in csv
+    assert csv.count("GCP1,") == 2          # one row per observation
+
+
+def test_images_endpoint_lists_chunk_photos(tmp_path):
+    proj = Project.create(tmp_path, name="img-test").add_stage(
+        "ing", "ingest", params={"image_dir": "images"})
+    # fake ingest output + a last-run record pointing at it (no real run needed)
+    imgs = tmp_path / "images.json"
+    imgs.write_text(json.dumps({"image_dir": str(tmp_path / "images"),
+                                "images": [{"name": "DJI_1.JPG", "lat": 40.1, "lon": -105.2,
+                                            "excluded": False}]}), "utf-8")
+    proj.manifest.runs_dir.mkdir(parents=True, exist_ok=True)
+    (proj.manifest.runs_dir / "latest.json").write_text(json.dumps(
+        {"stages": [{"id": "ing", "status": "executed", "artifacts": {"images": str(imgs)}}]}), "utf-8")
+    httpd = serve(proj, port=0)
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        data = json.loads(_get(base + "/api/images?chunk=Chunk 1".replace(" ", "%20"))[1])
+        assert [im["name"] for im in data["images"]] == ["DJI_1.JPG"]
+        assert data["images"][0]["path"].endswith("DJI_1.JPG")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_frontend_has_crs_and_marker_ui(server):
+    base, _ = server
+    _, appjs = _get(base + "/app.js")
+    assert b"/api/markers" in appjs and b"openCrsPicker" in appjs
+
+
 def test_desktop_mode_resolution(monkeypatch):
     from openreco.ui import desktop
     monkeypatch.setattr(desktop, "_have_webview", lambda: True)

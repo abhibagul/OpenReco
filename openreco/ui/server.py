@@ -5,10 +5,14 @@ Endpoints (JSON unless noted):
   GET  /app.js, /viewer.js    -> static frontend assets
   GET  /api/stages            -> stage_info() (palette + parameter-panel schemas)
   GET  /api/project           -> {name, crs, stages[], layers[]} (layer tree + last-run status/artifacts)
+  POST /api/project           -> set project metadata {crs}; re-saves project.toml (CRS picker)
   POST /api/stage             -> add/update a stage {id,type,inputs,params}; re-saves project.toml
   POST /api/run               -> start a run in a background thread (force? in body); 202
   GET  /api/events            -> Server-Sent Events: live run events (stage_start/progress/.../run_done)
   GET  /api/file?path=...      -> serve an artifact file (sandboxed to the project dir) for the viewer
+  GET  /api/images?chunk=...   -> source images of a chunk (for the Photos pane + GCP picking)
+  GET  /api/markers            -> saved GCP/markers (markers.json)
+  POST /api/markers            -> save GCP/markers; also writes gcps.csv consumable by the georef stage
 
 Zero third-party deps; ThreadingHTTPServer + a per-run event queue for SSE.
 """
@@ -57,6 +61,46 @@ class AppState:
             })
         return {"name": m.name, "crs": m.crs, "project_dir": str(m.project_dir),
                 "chunks": m.chunk_names(), "layers": layers}
+
+    def images_for_chunk(self, chunk: str | None) -> dict:
+        """Source images of a chunk's ingest layer(s) — for the Photos pane + GCP picking."""
+        last = self._last_run()
+        out: list[dict] = []
+        image_dir = ""
+        for s in self.project.manifest.stages:
+            if s.type != "ingest" or (chunk and s.chunk != chunk):
+                continue
+            art = last.get(s.id, {}).get("artifacts", {}).get("images")
+            if not art or not Path(art).is_file():
+                continue
+            data = json.loads(Path(art).read_text(encoding="utf-8"))
+            image_dir = data.get("image_dir", "")
+            for im in data.get("images", []):
+                out.append({"name": im["name"], "path": str(Path(image_dir) / im["name"]),
+                            "lat": im.get("lat"), "lon": im.get("lon"),
+                            "excluded": im.get("excluded", False), "layer": s.id})
+        return {"image_dir": image_dir, "images": out}
+
+    def markers_path(self) -> Path:
+        return self.project.manifest.project_dir / "markers.json"
+
+    def load_markers(self) -> dict:
+        p = self.markers_path()
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8"))
+        return {"markers": []}
+
+    def save_markers(self, markers: list[dict]) -> Path:
+        """Persist markers.json + a georef-ready gcps.csv (name,X,Y,Z,image,u,v per observation)."""
+        self.markers_path().write_text(json.dumps({"markers": markers}, indent=2), encoding="utf-8")
+        rows = ["# name,X,Y,Z,image,u,v  (one row per image observation; written by the UI marker tool)"]
+        for mk in markers:
+            w = mk.get("world") or [0.0, 0.0, 0.0]
+            for ob in mk.get("observations", []):
+                rows.append(f"{mk['name']},{w[0]},{w[1]},{w[2]},{ob['image']},{ob['u']},{ob['v']}")
+        csv = self.project.manifest.project_dir / "gcps.csv"
+        csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        return csv
 
     def _last_run(self) -> dict:
         latest = self.project.manifest.runs_dir / "latest.json"
@@ -125,6 +169,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._formats(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/crs":
             return self._crs(parse_qs(u.query))
+        if route == "/api/images":
+            return self._send(200, self.state.images_for_chunk(
+                parse_qs(u.query).get("chunk", [None])[0]))
+        if route == "/api/markers":
+            return self._send(200, self.state.load_markers())
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -134,8 +183,12 @@ class _Handler(BaseHTTPRequestHandler):
         if u.path == "/api/run":
             started = self.state.start_run(force=body.get("force"))
             return self._send(202 if started else 409, {"started": started})
+        if u.path == "/api/project":
+            return self._set_project(body)
         if u.path == "/api/stage":
             return self._add_stage(body)
+        if u.path == "/api/markers":
+            return self._set_markers(body)
         if u.path == "/api/operation":
             return self._operation(body)
         if u.path == "/api/chunk":
@@ -158,6 +211,24 @@ class _Handler(BaseHTTPRequestHandler):
         self.state.project.add_chunk(name)
         self.state.project.save()
         return self._send(200, {"ok": True})
+
+    def _set_project(self, body):
+        """Set project-level metadata from the UI (CRS picker)."""
+        m = self.state.project.manifest
+        if "crs" in body:
+            m.crs = (body["crs"] or "").strip() or None
+        self.state.project.save()
+        return self._send(200, {"ok": True, "crs": m.crs})
+
+    def _set_markers(self, body):
+        markers = body.get("markers", [])
+        if not isinstance(markers, list):
+            return self._send(400, {"error": "markers must be a list"})
+        try:
+            csv = self.state.save_markers(markers)
+            return self._send(200, {"ok": True, "count": len(markers), "gcp_csv": str(csv)})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
 
     def _add_stage(self, body):
         try:

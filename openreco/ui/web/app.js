@@ -1,16 +1,31 @@
-// OpenReco UI — layer tree, schema-driven parameter panels, run+SSE, three.js viewport.
+// OpenReco UI — industry-standard layout: menu bar, Workspace/Reference tree, Model/Photo viewport,
+// Console/Photos/Jobs dock, Property pane. Plus CRS picker, layer visibility, measurement, GCP picking.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 let STAGES = {};      // type -> {default_params, params_schema, ...}
-let PROJECT = null;   // {name, chunks:[...], layers:[...]}
+let PROJECT = null;   // {name, crs, chunks:[...], layers:[...]}
+let WORKFLOWS = [];
 let selected = null;
 let ACTIVE_CHUNK = "Chunk 1";
+const visible = new Set();          // layer ids currently shown in the 3D view
+const objects = new Map();          // layer id -> THREE object (cached once loaded)
+
+// industry-standard tree categories: stage type -> tree group label.
+const CATEGORY = {
+  ingest: "Cameras", sfm: "Tie Points", refine: "Tie Points", markers: "Markers",
+  mvs: "Dense Cloud", fuse: "Dense Cloud", merge_chunks: "Dense Cloud", classify: "Point Cloud",
+  mesh: "3D Model", texture: "3D Model", splat: "3D Model", tiles: "Tiled Model",
+  dsm: "DEM", ortho: "Orthomosaic", contours: "Shapes", indices: "Orthomosaic",
+  volume: "Shapes", profile: "Shapes", panorama: "Orthomosaic",
+};
+const CAT_ORDER = ["Cameras", "Tie Points", "Markers", "Dense Cloud", "Point Cloud",
+                   "3D Model", "Tiled Model", "DEM", "Orthomosaic", "Shapes", "Other"];
 
 const $ = (id) => document.getElementById(id);
-const log = (m, cls) => { const l = $('log'); l.innerHTML += `\n${m}`; l.scrollTop = l.scrollHeight; };
+const log = (m) => { const l = $('log'); l.textContent += `\n${m}`; l.scrollTop = l.scrollHeight; };
 
 // ---- 3D viewport ----------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
@@ -20,43 +35,127 @@ const camera = new THREE.PerspectiveCamera(55, 1, 0.01, 1e7);
 const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(1, 1, 1); scene.add(dl);
-let current = null;
+const measureGroup = new THREE.Group(); scene.add(measureGroup);
 function resize() { const w = $('center').clientWidth, h = $('center').clientHeight;
   renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize);
 (function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
 
-function frame(obj) {
-  const box = new THREE.Box3().setFromObject(obj), size = box.getSize(new THREE.Vector3()).length();
-  const c = box.getCenter(new THREE.Vector3());
+function frameAll() {
+  const box = new THREE.Box3();
+  objects.forEach((o, id) => { if (visible.has(id)) box.expandByObject(o); });
+  if (box.isEmpty()) return;
+  const size = box.getSize(new THREE.Vector3()).length(), c = box.getCenter(new THREE.Vector3());
   controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(size*.6, size*.5, size*.6));
   camera.near = size/1000; camera.far = size*10; camera.updateProjectionMatrix();
 }
-function clearView() { if (current) { scene.remove(current); current = null; } }
-function viewFile(url, kind) {
-  clearView();
-  if (kind === 'glb') new GLTFLoader().load(url, g => { current = g.scene; scene.add(current); frame(current); });
-  else new PLYLoader().load(url, geo => {
-    geo.computeBoundingBox();
-    let o;
-    if (geo.index) { if (!geo.getAttribute('normal')) geo.computeVertexNormals();
-      o = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: !!geo.getAttribute('color'),
-        flatShading:true, side:THREE.DoubleSide })); }
-    else o = new THREE.Points(geo, new THREE.PointsMaterial({ size:1, sizeAttenuation:false,
-        vertexColors: !!geo.getAttribute('color') }));
-    if (!geo.getAttribute('color')) o.material.color.set(0x89b4fa);
-    current = o; scene.add(o); frame(o);
+
+// load an artifact into a THREE object (mesh / point cloud / gaussian splat as points)
+function loadObject(layer) {
+  return new Promise((resolve) => {
+    const v = viewable(layer);
+    if (!v) return resolve(null);
+    const url = `/api/file?path=${encodeURIComponent(v.path)}`;
+    if (v.kind === 'glb') {
+      new GLTFLoader().load(url, g => resolve(g.scene), undefined, () => resolve(null));
+      return;
+    }
+    new PLYLoader().load(url, geo => {
+      geo.computeBoundingBox();
+      let o;
+      if (geo.index) {
+        if (!geo.getAttribute('normal')) geo.computeVertexNormals();
+        o = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+          vertexColors: !!geo.getAttribute('color'), flatShading: true, side: THREE.DoubleSide }));
+      } else {
+        // points / gaussian splats (splat .ply has no faces) -> render as colored points
+        o = new THREE.Points(geo, new THREE.PointsMaterial({
+          size: v.splat ? 2 : 1, sizeAttenuation: false, vertexColors: !!geo.getAttribute('color') }));
+      }
+      if (!geo.getAttribute('color')) o.material.color.set(0x89b4fa);
+      resolve(o);
+    }, undefined, () => resolve(null));
   });
 }
-// pick a viewable artifact from a layer (textured glb > mesh ply > points ply)
+// pick a viewable artifact (textured glb > mesh ply > splat > points)
 function viewable(layer) {
   const a = layer.artifacts || {};
-  for (const [k, kind] of [['glb','glb'],['mesh','ply'],['points','ply'],['sparse_ply','ply']])
+  if (a.splat) return { path: a.splat, kind: 'ply', splat: true };
+  for (const [k, kind] of [['glb','glb'],['mesh','ply'],['points','ply'],['merged','ply'],['sparse_ply','ply']])
     if (a[k]) return { path: a[k], kind };
   return null;
 }
+async function setVisible(layer, on) {
+  if (on) {
+    if (!objects.has(layer.id)) {
+      const o = await loadObject(layer);
+      if (!o) { log(`(no viewable geometry for ${layer.id})`); return; }
+      objects.set(layer.id, o); scene.add(o);
+    }
+    objects.get(layer.id).visible = true; visible.add(layer.id); frameAll();
+  } else {
+    visible.delete(layer.id);
+    if (objects.has(layer.id)) objects.get(layer.id).visible = false;
+  }
+  renderWorkspace();
+}
 
-// ---- data + rendering -----------------------------------------------------
+// ---- measurement (distance / area) ----------------------------------------
+let measureMode = null;           // null | 'dist' | 'area'
+let measurePts = [];
+const raycaster = new THREE.Raycaster(); raycaster.params.Points.threshold = 0.5;
+function setMeasure(mode) {
+  measureMode = (measureMode === mode) ? null : mode;
+  measurePts = []; measureGroup.clear();
+  $('distBtn').classList.toggle('on', measureMode === 'dist');
+  $('areaBtn').classList.toggle('on', measureMode === 'area');
+  $('measure').classList.toggle('show', !!measureMode);
+  $('measure').textContent = measureMode ? `Click points on the model (${measureMode})` : '';
+}
+$('distBtn').onclick = () => setMeasure('dist');
+$('areaBtn').onclick = () => setMeasure('area');
+$('clearMeasBtn').onclick = () => { measurePts = []; measureGroup.clear(); $('measure').textContent = ''; };
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!measureMode || e.button !== 0) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  raycaster.setFromCamera(ndc, camera);
+  const targets = [...objects.entries()].filter(([id]) => visible.has(id)).map(([, o]) => o);
+  const hit = raycaster.intersectObjects(targets, true)[0];
+  if (!hit) return;
+  measurePts.push(hit.point.clone());
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0), new THREE.MeshBasicMaterial());
+  measureGroup.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints([hit.point]),
+    new THREE.PointsMaterial({ size: 8, sizeAttenuation: false, color: 0xf9e2af })));
+  redrawMeasure();
+});
+function redrawMeasure() {
+  // keep only the marker points; rebuild the connecting line + readout
+  [...measureGroup.children].filter(c => c.isLine).forEach(c => measureGroup.remove(c));
+  if (measurePts.length >= 2) {
+    const pts = measureMode === 'area' ? [...measurePts, measurePts[0]] : measurePts;
+    measureGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0xf9e2af })));
+  }
+  let txt = '';
+  if (measureMode === 'dist') {
+    let d = 0; for (let i = 1; i < measurePts.length; i++) d += measurePts[i].distanceTo(measurePts[i-1]);
+    txt = `distance: ${d.toFixed(3)} m  (${measurePts.length} pts)`;
+  } else if (measureMode === 'area' && measurePts.length >= 3) {
+    txt = `area: ${polygonArea(measurePts).toFixed(3)} m²  ·  perimeter: ${perimeter(measurePts).toFixed(3)} m`;
+  } else {
+    txt = `picked ${measurePts.length} point(s)`;
+  }
+  $('measure').textContent = txt;
+}
+function perimeter(p) { let s = 0; for (let i = 0; i < p.length; i++) s += p[i].distanceTo(p[(i+1)%p.length]); return s; }
+function polygonArea(p) {            // 3D polygon area via the cross-product (Newell) method
+  const n = new THREE.Vector3();
+  for (let i = 0; i < p.length; i++) n.add(new THREE.Vector3().crossVectors(p[i], p[(i+1)%p.length]));
+  return Math.abs(n.length()) / 2;
+}
+
+// ---- data + workspace tree ------------------------------------------------
 async function loadStages() {
   STAGES = {}; for (const s of await (await fetch('/api/stages')).json()) STAGES[s.type] = s;
   const sel = $('newType'); sel.innerHTML = '';
@@ -65,7 +164,8 @@ async function loadStages() {
 }
 async function loadProject() {
   PROJECT = await (await fetch('/api/project')).json();
-  $('pname').textContent = `${PROJECT.name} · ${PROJECT.crs || 'local'}`;
+  $('crsLabel').textContent = PROJECT.crs || 'CRS';
+  $('refCrs').textContent = PROJECT.crs ? `Project CRS: ${PROJECT.crs}` : 'No CRS set (local frame).';
   if (!PROJECT.chunks.includes(ACTIVE_CHUNK)) ACTIVE_CHUNK = PROJECT.chunks[0] || "Chunk 1";
   renderWorkspace();
 }
@@ -79,11 +179,19 @@ function renderWorkspace() {
     h.innerHTML = `<span>▸ ${chunk}</span><span class="cnt">${byChunk[chunk].length}</span>`;
     h.onclick = () => { ACTIVE_CHUNK = chunk; renderWorkspace(); };
     el.appendChild(h);
-    byChunk[chunk].forEach(L => {
-      const d = document.createElement('div'); d.className = 'layer' + (selected === L.id ? ' sel' : '');
-      d.innerHTML = `<span class="dot ${L.status||''}"></span><span class="id">${L.id}</span>`
-                  + `<span class="t">${L.type}</span>`;
-      d.onclick = () => selectLayer(L.id); el.appendChild(d);
+    // group this chunk's layers into industry-standard categories
+    const cats = {}; byChunk[chunk].forEach(L => {
+      const c = CATEGORY[L.type] || "Other"; (cats[c] = cats[c] || []).push(L); });
+    CAT_ORDER.filter(c => cats[c]).forEach(cat => {
+      const ch = document.createElement('div'); ch.className = 'cat'; ch.textContent = cat; el.appendChild(ch);
+      cats[cat].forEach(L => {
+        const d = document.createElement('div'); d.className = 'layer' + (selected === L.id ? ' sel' : '');
+        const canView = !!viewable(L);
+        d.innerHTML = `<span class="eye ${visible.has(L.id) ? 'on' : ''}">${canView ? '👁' : '·'}</span>`
+          + `<span class="dot ${L.status||''}"></span><span class="id">${L.id}</span><span class="t">${L.type}</span>`;
+        d.querySelector('.eye').onclick = (e) => { e.stopPropagation(); if (canView) setVisible(L, !visible.has(L.id)); };
+        d.onclick = () => selectLayer(L.id); el.appendChild(d);
+      });
     });
   });
 }
@@ -95,16 +203,14 @@ $('newChunk').onclick = async () => {
 };
 function selectLayer(id) {
   selected = id; renderWorkspace();
-  const L = PROJECT.layers.find(x => x.id === id);
-  renderParams(L);
-  const v = viewable(L);
-  if (v) viewFile(`/api/file?path=${encodeURIComponent(v.path)}`, v.kind); else clearView();
+  renderParams(PROJECT.layers.find(x => x.id === id));
 }
+
+// ---- properties / params --------------------------------------------------
 function renderParams(L) {
   const info = STAGES[L.type] || { default_params: {} };
-  const defaults = info.default_params || {};
-  const cur = { ...defaults, ...L.params };
-  const box = $('params'); box.innerHTML = `<div class="muted">${L.id} — ${L.type}</div>`;
+  const cur = { ...(info.default_params || {}), ...L.params };
+  const box = $('params'); box.innerHTML = `<div class="muted">${L.id} — ${L.type} · ${L.chunk}</div>`;
   for (const [k, v] of Object.entries(cur)) {
     const lab = document.createElement('label'); lab.textContent = k; box.appendChild(lab);
     const inp = document.createElement('input'); inp.dataset.k = k;
@@ -113,9 +219,12 @@ function renderParams(L) {
     else { inp.type = 'text'; inp.value = Array.isArray(v) ? v.join(',') : v; }
     box.appendChild(inp);
   }
-  const btn = document.createElement('button'); btn.textContent = 'Update layer'; btn.style.marginTop='10px';
-  btn.onclick = () => updateStage(L);
-  box.appendChild(btn);
+  const btn = document.createElement('button'); btn.textContent = 'Update layer'; btn.style.marginTop = '10px';
+  btn.onclick = () => updateStage(L); box.appendChild(btn);
+  if (viewable(L)) {
+    const vb = document.createElement('button'); vb.textContent = visible.has(L.id) ? 'Hide in view' : 'Show in view';
+    vb.style.margin = '10px 0 0 6px'; vb.onclick = () => setVisible(L, !visible.has(L.id)); box.appendChild(vb);
+  }
   buildExport(box, L);
   if (Object.keys(L.metrics || {}).length) {
     const m = document.createElement('div'); m.className = 'muted'; m.style.marginTop = '8px';
@@ -145,7 +254,6 @@ function buildExport(box, L) {
   };
   box.appendChild(eb);
 }
-
 function collectParams(L) {
   const defaults = (STAGES[L.type] || {}).default_params || {};
   const out = {};
@@ -173,11 +281,11 @@ $('addBtn').onclick = async () => {
 $('runBtn').onclick = async () => {
   const r = await fetch('/api/run', { method:'POST', body: '{}' });
   if (r.status === 409) { log('already running'); return; }
-  log('--- run started ---'); $('status').textContent = 'running…';
+  log('--- run started ---'); $('status').textContent = 'running…'; selectDock('console');
   const es = new EventSource('/api/events');
   es.onmessage = (e) => {
     const ev = JSON.parse(e.data);
-    if (ev.event === 'stage_start') setDot(ev.id, 'running'), log(`▶ ${ev.id} (${ev.type})`);
+    if (ev.event === 'stage_start') { setDot(ev.id, 'running'); log(`▶ ${ev.id} (${ev.type})`); }
     else if (ev.event === 'progress') $('status').textContent = `${ev.id}: ${Math.round(ev.frac*100)}% ${ev.message||''}`;
     else if (ev.event === 'stage_done') { setDot(ev.id, ev.status); log(`✓ ${ev.id} [${ev.status}]`); }
     else if (ev.event === 'stage_skipped') { setDot(ev.id, 'failed'); log(`⨯ ${ev.id} skipped`); }
@@ -185,44 +293,213 @@ $('runBtn').onclick = async () => {
     else if (ev.event === 'run_error') log(`error: ${ev.error}`);
   };
   es.addEventListener('eof', async () => { es.close(); $('status').textContent = 'done';
-    await loadProject(); if (selected) selectLayer(selected); });
+    for (const id of [...visible]) objects.delete(id);   // force reload of refreshed artifacts
+    objects.forEach(o => scene.remove(o)); objects.clear();
+    const reshow = [...visible]; visible.clear();
+    await loadProject(); await loadPhotos();
+    for (const id of reshow) { const L = PROJECT.layers.find(x => x.id === id); if (L) await setVisible(L, true); }
+    if (selected) selectLayer(selected); });
 };
-function setDot(id, cls) {
-  const L = PROJECT.layers.find(x => x.id === id); if (L) L.status = cls; renderWorkspace();
-}
+function setDot(id, cls) { const L = PROJECT.layers.find(x => x.id === id); if (L) L.status = cls; renderWorkspace(); }
 
-// ---- workflow menu + build dialog -----------------------------------------
-let WORKFLOWS = [];
+// ---- menus ----------------------------------------------------------------
+function closeMenus() { document.querySelectorAll('.mMenu').forEach(m => m.classList.add('hidden')); }
+document.querySelectorAll('.mItem').forEach(it => {
+  it.onclick = (e) => { e.stopPropagation();
+    const m = it.querySelector('.mMenu'); const wasOpen = !m.classList.contains('hidden');
+    closeMenus(); if (!wasOpen) m.classList.remove('hidden'); };
+});
+document.addEventListener('click', () => { closeMenus(); });
+function menuEntry(menu, label, fn, desc) {
+  const d = document.createElement('div');
+  d.innerHTML = desc ? `${label}<div class="t">${desc}</div>` : label;
+  d.onclick = (e) => { e.stopPropagation(); closeMenus(); fn(); };
+  $(menu).appendChild(d);
+}
+function menuSep(menu) { $(menu).appendChild(document.createElement('hr')); }
 async function loadWorkflows() {
   WORKFLOWS = await (await fetch('/api/workflows')).json();
-  const drop = $('wfDrop'); drop.innerHTML = '';
-  WORKFLOWS.forEach(op => {
-    const d = document.createElement('div');
-    d.innerHTML = `${op.op}<div class="t">${op.desc}</div>`;
-    d.onclick = () => { drop.classList.add('hidden'); openOp(op); };
-    drop.appendChild(d);
+  // File menu
+  $('m-file').innerHTML = '';
+  menuEntry('m-file', '＋ New chunk', () => $('newChunk').click());
+  menuEntry('m-file', '🌐 Set coordinate system…', openCrsPicker);
+  // Workflow menu = the familiar operations
+  $('m-workflow').innerHTML = '';
+  WORKFLOWS.forEach(op => menuEntry('m-workflow', op.op, () => openOp(op), op.desc));
+  // Model menu = view helpers
+  $('m-model').innerHTML = '';
+  menuEntry('m-model', 'Frame all', frameAll);
+  menuEntry('m-model', 'Hide all layers', () => { visible.forEach(id => { const o = objects.get(id); if (o) o.visible = false; });
+    visible.clear(); renderWorkspace(); });
+  // Tools menu
+  $('m-tools').innerHTML = '';
+  menuEntry('m-tools', '📏 Measure distance', () => setMeasure('dist'));
+  menuEntry('m-tools', '▱ Measure area', () => setMeasure('area'));
+  menuSep('m-tools');
+  menuEntry('m-tools', '📍 Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); });
+  // Help
+  $('m-help').innerHTML = '';
+  menuEntry('m-help', 'About OpenReco', () => log('OpenReco — open, reproducible photogrammetry. Clean-room; permissive OSS.'));
+}
+
+// ---- tabs (left pane / dock / viewport) -----------------------------------
+function selectLeft(name) {
+  document.querySelectorAll('[data-ltab]').forEach(b => b.classList.toggle('on', b.dataset.ltab === name));
+  $('lt-workspace').classList.toggle('hidden', name !== 'workspace');
+  $('lt-reference').classList.toggle('hidden', name !== 'reference');
+}
+document.querySelectorAll('[data-ltab]').forEach(b => b.onclick = () => selectLeft(b.dataset.ltab));
+function selectDock(name) {
+  document.querySelectorAll('[data-dtab]').forEach(b => b.classList.toggle('on', b.dataset.dtab === name));
+  ['console','photos','jobs'].forEach(n => $('dt-' + n).classList.toggle('hidden', n !== name));
+  if (name === 'photos') loadPhotos();
+}
+document.querySelectorAll('[data-dtab]').forEach(b => b.onclick = () => selectDock(b.dataset.dtab));
+function selectVtab(name) {
+  document.querySelectorAll('[data-vtab]').forEach(b => b.classList.toggle('on', b.dataset.vtab === name));
+  $('imgview').classList.toggle('show', name === 'photo');
+  $('c').style.display = name === 'model' ? 'block' : 'none';
+}
+document.querySelectorAll('[data-vtab]').forEach(b => b.onclick = () => selectVtab(b.dataset.vtab));
+
+// ---- photos pane + GCP picking --------------------------------------------
+let PHOTOS = { images: [] };
+async function loadPhotos() {
+  PHOTOS = await (await fetch('/api/images?chunk=' + encodeURIComponent(ACTIVE_CHUNK))).json();
+  const el = $('photos'); el.innerHTML = '';
+  if (!PHOTOS.images.length) { el.textContent = 'Run ingest in this chunk to list source photos.'; return; }
+  PHOTOS.images.forEach(im => {
+    const t = document.createElement('div'); t.className = 'th' + (im.excluded ? ' exc' : '');
+    const url = `/api/file?path=${encodeURIComponent(im.path)}`;
+    t.innerHTML = `<img loading="lazy" src="${url}"><div>${im.name}</div>`;
+    t.onclick = () => openPhoto(im);
+    el.appendChild(t);
   });
 }
-$('wfBtn').onclick = () => $('wfDrop').classList.toggle('hidden');
-document.addEventListener('click', e => {
-  if (!e.target.closest('.menu')) $('wfDrop').classList.add('hidden');
-});
+let curPhoto = null;
+function openPhoto(im) {
+  curPhoto = im; selectVtab('photo');
+  const wrap = $('imgwrap'); wrap.innerHTML = '';
+  const img = document.createElement('img'); img.src = `/api/file?path=${encodeURIComponent(im.path)}`;
+  img.onload = () => { drawPins(); };
+  wrap.appendChild(img);
+  wrap.onclick = (e) => {
+    if (e.target.classList.contains('pin')) return;
+    if (activeMarker == null) { log('select a marker in Reference > Markers first'); return; }
+    const r = img.getBoundingClientRect();
+    const u = Math.round((e.clientX - r.left) * (im.width || img.naturalWidth) / r.width || (e.clientX - r.left));
+    const v = Math.round((e.clientY - r.top) * (im.height || img.naturalHeight) / r.height || (e.clientY - r.top));
+    // store in natural image pixels
+    const uu = Math.round((e.clientX - r.left) / r.width * img.naturalWidth);
+    const vv = Math.round((e.clientY - r.top) / r.height * img.naturalHeight);
+    MARKERS[activeMarker].observations = MARKERS[activeMarker].observations.filter(o => o.image !== im.name);
+    MARKERS[activeMarker].observations.push({ image: im.name, u: uu, v: vv });
+    log(`marker ${MARKERS[activeMarker].name}: observed in ${im.name} @ (${uu},${vv})`);
+    renderMarkers(); drawPins();
+  };
+}
+function drawPins() {
+  const wrap = $('imgwrap'); const img = wrap.querySelector('img'); if (!img) return;
+  [...wrap.querySelectorAll('.pin')].forEach(p => p.remove());
+  const r = img.getBoundingClientRect(), wrapR = wrap.getBoundingClientRect();
+  MARKERS.forEach(mk => mk.observations.forEach(o => {
+    if (!curPhoto || o.image !== curPhoto.name) return;
+    const pin = document.createElement('div'); pin.className = 'pin';
+    pin.style.left = (o.u / img.naturalWidth * img.clientWidth) + 'px';
+    pin.style.top = (o.v / img.naturalHeight * img.clientHeight) + 'px';
+    pin.innerHTML = `<span>${mk.name}</span>`;
+    wrap.appendChild(pin);
+  }));
+}
 
+// ---- markers / GCP reference table ----------------------------------------
+let MARKERS = [];           // [{name, world:[x,y,z]|null, observations:[{image,u,v}]}]
+let activeMarker = null;
+async function loadMarkers() {
+  const j = await (await fetch('/api/markers')).json();
+  MARKERS = (j.markers || []).map(m => ({ name: m.name, world: m.world || null,
+    observations: m.observations || [] }));
+  if (MARKERS.length && activeMarker == null) activeMarker = 0;
+  renderMarkers();
+}
+function renderMarkers() {
+  const box = $('markerTable');
+  if (!MARKERS.length) { box.innerHTML = '<div class="muted">No markers. Add one, then pick it in photos.</div>'; return; }
+  const t = document.createElement('table');
+  t.innerHTML = '<tr><th>name</th><th>X</th><th>Y</th><th>Z</th><th>obs</th></tr>';
+  MARKERS.forEach((m, i) => {
+    const tr = document.createElement('tr'); tr.className = (i === activeMarker ? 'sel' : '');
+    const w = m.world || ['','',''];
+    tr.innerHTML = `<td>${m.name}</td>`
+      + [0,1,2].map(k => `<td><input data-mi="${i}" data-wk="${k}" value="${w[k]}" style="width:64px"></td>`).join('')
+      + `<td>${m.observations.length}</td>`;
+    tr.onclick = (e) => { if (e.target.tagName !== 'INPUT') { activeMarker = i; renderMarkers(); } };
+    t.appendChild(tr);
+  });
+  box.innerHTML = ''; box.appendChild(t);
+  box.querySelectorAll('input[data-mi]').forEach(inp => inp.onchange = () => {
+    const m = MARKERS[+inp.dataset.mi]; m.world = m.world || [0,0,0];
+    m.world[+inp.dataset.wk] = parseFloat(inp.value) || 0;
+  });
+}
+$('addMarker').onclick = () => {
+  const name = prompt('Marker name:', `GCP${MARKERS.length + 1}`); if (!name) return;
+  MARKERS.push({ name, world: null, observations: [] }); activeMarker = MARKERS.length - 1; renderMarkers();
+};
+$('saveMarkers').onclick = async () => {
+  const j = await (await fetch('/api/markers', { method:'POST', body: JSON.stringify({ markers: MARKERS }) })).json();
+  log(j.ok ? `saved ${j.count} marker(s) -> ${j.gcp_csv}` : `marker save error: ${j.error}`);
+};
+$('refCrsBtn').onclick = openCrsPicker;
+
+// ---- CRS picker -----------------------------------------------------------
+let crsChoice = null;
+function openCrsPicker() {
+  crsChoice = null; $('crsOk').disabled = true; $('crsResults').innerHTML = '';
+  $('crsInfo').textContent = ''; $('crsSearch').value = ''; $('crsModal').classList.remove('hidden');
+  $('crsSearch').focus();
+}
+$('crsCancel').onclick = () => $('crsModal').classList.add('hidden');
+let crsTimer = null;
+$('crsSearch').oninput = () => {
+  clearTimeout(crsTimer);
+  crsTimer = setTimeout(async () => {
+    const q = $('crsSearch').value.trim(); if (q.length < 2) return;
+    const j = await (await fetch('/api/crs?search=' + encodeURIComponent(q))).json();
+    const box = $('crsResults'); box.innerHTML = '';
+    (j.results || []).slice(0, 40).forEach(r => {
+      // search_crs returns code already prefixed, e.g. "EPSG:32613"
+      const code = String(r.code || r.id || '').replace(/^EPSG:/i, '');
+      const name = r.name || r.title || '';
+      const d = document.createElement('div'); d.className = 'crsrow';
+      d.textContent = `EPSG:${code} — ${name}`;
+      d.onclick = () => { crsChoice = `EPSG:${code}`; $('crsOk').disabled = false;
+        [...box.children].forEach(c => c.style.background = ''); d.style.background = '#1d2738';
+        $('crsInfo').textContent = `selected ${crsChoice}`; };
+      box.appendChild(d);
+    });
+    if (!box.children.length) box.innerHTML = '<div class="muted">no matches</div>';
+  }, 250);
+};
+$('crsOk').onclick = async () => {
+  if (!crsChoice) return;
+  const j = await (await fetch('/api/project', { method:'POST', body: JSON.stringify({ crs: crsChoice }) })).json();
+  $('crsModal').classList.add('hidden'); log(`project CRS set to ${j.crs}`); await loadProject();
+};
+$('crsBtn').onclick = openCrsPicker;
+
+// ---- build dialog (workflow op) -------------------------------------------
 function openOp(op) {
   $('mTitle').textContent = op.op; $('mDesc').textContent = op.desc;
-  // default id: <stagetype><n>
-  const base = op.stage; let n = 1;
-  const ids = new Set(PROJECT.layers.map(l => l.id));
+  const base = op.stage; let n = 1; const ids = new Set(PROJECT.layers.map(l => l.id));
   while (ids.has(base + n)) n++;
   $('mId').value = base + n;
-  // inputs: checkboxes of existing layers
   const inb = $('mInputs'); inb.innerHTML = PROJECT.layers.length ? '' : '<span class="muted">none yet</span>';
   PROJECT.layers.forEach(l => {
     const w = document.createElement('label'); w.className = 'chk';
     w.innerHTML = `<input type="checkbox" value="${l.id}"> ${l.id} <span class="muted">(${l.type})</span>`;
     inb.appendChild(w);
   });
-  // fields
   const fb = $('mFields'); fb.innerHTML = '';
   op.fields.forEach(f => {
     const lab = document.createElement('label'); lab.textContent = f.label; fb.appendChild(lab);
@@ -231,16 +508,14 @@ function openOp(op) {
       inp = document.createElement('select');
       Object.keys(f.options).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = k; inp.appendChild(o); });
       inp.value = f.default;
-    } else if (f.type === 'bool') {
-      inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!f.default;
-    } else { inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any'; inp.value = f.default; }
+    } else if (f.type === 'bool') { inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!f.default; }
+    else { inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any'; inp.value = f.default; }
     inp.dataset.label = f.label; inp.dataset.type = f.type; fb.appendChild(inp);
   });
   $('mOk').onclick = () => submitOp(op);
   $('modal').classList.remove('hidden');
 }
 $('mCancel').onclick = () => $('modal').classList.add('hidden');
-
 async function submitOp(op) {
   const id = $('mId').value.trim(); if (!id) return;
   const inputs = [...$('mInputs').querySelectorAll('input:checked')].map(c => c.value);
@@ -252,10 +527,10 @@ async function submitOp(op) {
   const r = await fetch('/api/operation', { method:'POST',
     body: JSON.stringify({ op: op.op, id, inputs, values, chunk: ACTIVE_CHUNK }) });
   const j = await r.json();
-  if (r.ok) { $('modal').classList.add('hidden'); log(`built ${id} (${op.op})`);
-    await loadProject(); selectLayer(id); }
+  if (r.ok) { $('modal').classList.add('hidden'); log(`built ${id} (${op.op})`); await loadProject(); selectLayer(id); }
   else log(`build error: ${j.error}`);
 }
 
 // ---- boot ----
-(async () => { resize(); await loadStages(); await loadWorkflows(); await loadProject(); })();
+(async () => { resize(); await loadStages(); await loadWorkflows(); await loadProject();
+  await loadMarkers(); })();

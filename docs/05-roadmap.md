@@ -14,12 +14,18 @@ in a **layered desktop UI** that surpasses the reference tool's. Pillars, in pri
    models, DSM/DTM/ortho, classification, LiDAR fusion, multispectral/NDVI, panoramas, 4D — plus
    our neural 3DGS branch. (See per-phase items below; most geometry/survey items are ✅.)
 3. ◑ **Desktop UI with layers** — **shipped & growing**: `openreco ui` (native window via pywebview,
-   else browser) with a **Workspace tree (Project → chunks → layers)** + active-chunk selector +
-   "＋ Chunk"; a **Workflow menu** (Align Photos / Build Dense Cloud / Build Model / … Build dialogs
-   with familiar fields → engine); schema-driven parameter panels; Run with live SSE progress; a
-   three.js viewport; per-layer **Export as…**; CRS introspection (/api/crs). UI edits save the
-   manifest (undo-via-diff). Remaining: CRS picker widget, GCP/marker picking, viewport layer
-   visibility/measurement/splats, chunk align/merge, drag-to-reorder. Original plan: a
+   else browser) with a **industry-standard layout** — menu bar (File / Workflow / Model / Tools /
+   Help), toolbar, **Workspace/Reference** left tabs, a **Workspace tree** grouping each chunk's
+   layers into familiar categories (Cameras / Tie Points / Dense Cloud / Point Cloud / 3D Model /
+   DEM / Orthomosaic / Shapes) with per-layer **visibility (👁) toggles**, **Model/Photo** viewport
+   tabs, a **Properties** pane, and a **Console / Photos / Jobs** bottom dock. Features: active-chunk
+   selector + "＋ Chunk"; **Workflow menu** (Align Photos / Build Dense Cloud / … Build dialogs →
+   engine) incl. **Merge Chunks** (ICP align+merge); schema-driven parameter panels; Run with live
+   SSE progress; three.js viewport with **multi-layer visibility, distance & area measurement, and
+   Gaussian-splat rendering**; per-layer **Export as…**; a **CRS picker widget** (search /api/crs →
+   set project CRS); **Photos thumbnail pane** + **GCP/marker picking** (click photos to place
+   observations → writes a georef-ready `gcps.csv`). UI edits save the manifest (undo-via-diff).
+   Remaining: drag-to-reorder, ortho 2D canvas, depth-map viewer. Original plan: a
    cross-platform app (evaluated:
    **Tauri + web frontend** for the WebGPU 3D viewport we already have, vs Qt) presenting the
    project as a **layer tree** (chunks, cameras, tie/dense points, mesh, texture, DSM/DTM, ortho,
