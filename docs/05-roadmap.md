@@ -74,6 +74,9 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
 - ✅ **Python API mirroring CLI 1:1** (`openreco.Project`: open/create/add_stage/run/resume/diff/save).
 - ✅ **Richer processing report** (summary cards, QA by severity, GPS/GCP residuals, repro block).
 - ✅ **GCP-based georeferencing** (file → triangulation → Umeyama; validated on real aerial data).
+  Now survey-grade: **control vs check points** (check points held out of the fit to validate),
+  **per-GCP residuals** (dx/dy/dz/total) + separate control/check RMSE in georef.json, surfaced in
+  the UI Reference pane (accuracy table), and the marker tool tags each GCP control|check.
 - ✅ **glTF (.glb) export** (portable colored mesh; hand-written container, no dependency).
 - ✅ **Coverage / overlap map** (per-image ground footprints → overlap GeoTIFF + PNG; QA + report cards).
 - ✅ **GLOMAP global SfM** option (`mapper=global`) alongside incremental.

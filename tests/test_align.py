@@ -72,15 +72,15 @@ def test_gcp_file_parsing(tmp_path):
 
     p = tmp_path / "gcps.csv"
     p.write_text(
-        "# name,X,Y,Z,image,u,v\n"
+        "# name,X,Y,Z,image,u,v,type\n"
         "name,X,Y,Z,image,u,v\n"          # header row -> skipped (non-numeric X)
-        "g1,246700.0,4310000.0,1900.0,DJI_0001.JPG,1234.5,678.9\n"
-        "g1,246700.0,4310000.0,1900.0,DJI_0002.JPG,1100.0,700.0\n"
-        "g2,246750.0,4310050.0,1905.0,DJI_0003.JPG,500.0,400.0\n",
+        "g1,246700.0,4310000.0,1900.0,DJI_0001.JPG,1234.5,678.9,control\n"
+        "g1,246700.0,4310000.0,1900.0,DJI_0002.JPG,1100.0,700.0,control\n"
+        "g2,246750.0,4310050.0,1905.0,DJI_0003.JPG,500.0,400.0,check\n",
         encoding="utf-8",
     )
     gcps = _read_gcp_file(p)
     assert set(gcps) == {"g1", "g2"}
-    world, obs = gcps["g1"]
-    assert np.allclose(world, [246700.0, 4310000.0, 1900.0])
-    assert len(obs) == 2 and obs[0][0] == "DJI_0001.JPG"
+    assert np.allclose(gcps["g1"]["world"], [246700.0, 4310000.0, 1900.0])
+    assert len(gcps["g1"]["obs"]) == 2 and gcps["g1"]["obs"][0][0] == "DJI_0001.JPG"
+    assert gcps["g1"]["type"] == "control" and gcps["g2"]["type"] == "check"

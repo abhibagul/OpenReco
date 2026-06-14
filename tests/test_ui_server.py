@@ -513,6 +513,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"/api/use_gcps" in appjs and b"/api/raster_png" in appjs
     assert b"/api/add_photos" in appjs and b"openBrowse" in appjs and b"/api/browse" in appjs
     assert b"/api/remove_photo" in appjs and b"brAlign" in appjs
+    assert b"showGcpAccuracy" in appjs and b"control_rms" in appjs       # GCP control/check accuracy
 
 
 def test_desktop_mode_resolution(monkeypatch):

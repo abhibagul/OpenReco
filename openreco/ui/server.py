@@ -387,11 +387,12 @@ class AppState:
     def save_markers(self, markers: list[dict]) -> Path:
         """Persist markers.json + a georef-ready gcps.csv (name,X,Y,Z,image,u,v per observation)."""
         self.markers_path().write_text(json.dumps({"markers": markers}, indent=2), encoding="utf-8")
-        rows = ["# name,X,Y,Z,image,u,v  (one row per image observation; written by the UI marker tool)"]
+        rows = ["# name,X,Y,Z,image,u,v,type  (type=control|check; written by the UI marker tool)"]
         for mk in markers:
             w = mk.get("world") or [0.0, 0.0, 0.0]
+            kind = "check" if mk.get("type") == "check" else "control"
             for ob in mk.get("observations", []):
-                rows.append(f"{mk['name']},{w[0]},{w[1]},{w[2]},{ob['image']},{ob['u']},{ob['v']}")
+                rows.append(f"{mk['name']},{w[0]},{w[1]},{w[2]},{ob['image']},{ob['u']},{ob['v']},{kind}")
         csv = self.project.manifest.project_dir / "gcps.csv"
         csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
         return csv

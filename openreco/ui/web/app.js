@@ -674,7 +674,8 @@ async function runPipeline(body = {}) {
     for (const ch of camChunks) {                 // re-show camera overlays (not layers) after a run
       const prev = ACTIVE_CHUNK; ACTIVE_CHUNK = ch; await showCameras(); ACTIVE_CHUNK = prev;
     }
-    if (selected) selectLayer(selected); });
+    if (selected) selectLayer(selected);
+    showGcpAccuracy(); });
 }
 function setDot(id, cls) { const L = PROJECT.layers.find(x => x.id === id); if (L) L.status = cls; renderWorkspace(); }
 
@@ -748,6 +749,7 @@ function selectLeft(name) {
   document.querySelectorAll('[data-ltab]').forEach(b => b.classList.toggle('on', b.dataset.ltab === name));
   $('lt-workspace').classList.toggle('hidden', name !== 'workspace');
   $('lt-reference').classList.toggle('hidden', name !== 'reference');
+  if (name === 'reference') { loadMarkers(); showGcpAccuracy(); }
 }
 document.querySelectorAll('[data-ltab]').forEach(b => b.onclick = () => selectLeft(b.dataset.ltab));
 function selectDock(name) {
@@ -897,7 +899,7 @@ let activeMarker = null;
 async function loadMarkers() {
   const j = await (await fetch('/api/markers')).json();
   MARKERS = (j.markers || []).map(m => ({ name: m.name, world: m.world || null,
-    observations: m.observations || [] }));
+    observations: m.observations || [], type: m.type === 'check' ? 'check' : 'control' }));
   if (MARKERS.length && activeMarker == null) activeMarker = 0;
   renderMarkers();
 }
@@ -905,14 +907,16 @@ function renderMarkers() {
   const box = $('markerTable');
   if (!MARKERS.length) { box.innerHTML = '<div class="muted">No markers. Add one, then pick it in photos.</div>'; return; }
   const t = document.createElement('table');
-  t.innerHTML = '<tr><th>name</th><th>X</th><th>Y</th><th>Z</th><th>obs</th></tr>';
+  t.innerHTML = '<tr><th>name</th><th>X</th><th>Y</th><th>Z</th><th>obs</th><th>type</th></tr>';
   MARKERS.forEach((m, i) => {
     const tr = document.createElement('tr'); tr.className = (i === activeMarker ? 'sel' : '');
     const w = m.world || ['','',''];
     tr.innerHTML = `<td>${m.name}</td>`
-      + [0,1,2].map(k => `<td><input data-mi="${i}" data-wk="${k}" value="${w[k]}" style="width:64px"></td>`).join('')
-      + `<td>${m.observations.length}</td>`;
-    tr.onclick = (e) => { if (e.target.tagName !== 'INPUT') { activeMarker = i; renderMarkers(); } };
+      + [0,1,2].map(k => `<td><input data-mi="${i}" data-wk="${k}" value="${w[k]}" style="width:56px"></td>`).join('')
+      + `<td>${m.observations.length}</td>`
+      + `<td><select data-ti="${i}" style="width:74px"><option value="control"${m.type!=='check'?' selected':''}>control</option>`
+      + `<option value="check"${m.type==='check'?' selected':''}>check</option></select></td>`;
+    tr.onclick = (e) => { if (!['INPUT', 'SELECT'].includes(e.target.tagName)) { activeMarker = i; renderMarkers(); } };
     t.appendChild(tr);
   });
   box.innerHTML = ''; box.appendChild(t);
@@ -920,10 +924,14 @@ function renderMarkers() {
     const m = MARKERS[+inp.dataset.mi]; m.world = m.world || [0,0,0];
     m.world[+inp.dataset.wk] = parseFloat(inp.value) || 0;
   });
+  box.querySelectorAll('select[data-ti]').forEach(sel => sel.onchange = () => {
+    MARKERS[+sel.dataset.ti].type = sel.value;
+  });
 }
 $('addMarker').onclick = () => {
   const name = prompt('Marker name:', `GCP${MARKERS.length + 1}`); if (!name) return;
-  MARKERS.push({ name, world: null, observations: [] }); activeMarker = MARKERS.length - 1; renderMarkers();
+  MARKERS.push({ name, world: null, observations: [], type: 'control' });
+  activeMarker = MARKERS.length - 1; renderMarkers();
 };
 $('saveMarkers').onclick = async () => {
   const j = await (await fetch('/api/markers', { method:'POST', body: JSON.stringify({ markers: MARKERS }) })).json();
@@ -943,6 +951,30 @@ $('useGcps').onclick = async () => {
   else log(`use GCPs error: ${j.error} — add a Georeference step to this chunk first`);
 };
 $('refCrsBtn').onclick = openCrsPicker;
+
+// GCP accuracy: read the chunk's georef.json (per-GCP residuals + control/check RMSE)
+async function showGcpAccuracy() {
+  const box = $('gcpAccuracy');
+  const gl = PROJECT && PROJECT.layers.find(L => L.type === 'georef' && L.chunk === ACTIVE_CHUNK
+    && (L.artifacts || {}).georef);
+  if (!gl) { box.innerHTML = '<span class="muted">Run Georeference with GCPs to see residuals.</span>'; return; }
+  let info;
+  try { info = await (await fetch(`/api/file?path=${encodeURIComponent(gl.artifacts.georef)}`)).json(); }
+  catch (_e) { box.innerHTML = '<span class="muted">no georef report yet</span>'; return; }
+  if (info.method !== 'gcp' || !info.gcps) {
+    box.innerHTML = `<span class="muted">georef method: ${info.method} (RMS ${info.rms_residual_m ?? '—'} m). Use GCPs for control/check accuracy.</span>`;
+    return;
+  }
+  let html = `<div>control RMSE: <b>${info.control_rms_m ?? '—'} m</b> (${info.num_control} pts)`
+    + (info.check_rms_m != null ? ` · check RMSE: <b>${info.check_rms_m} m</b> (${info.num_check})` : '') + '</div>';
+  html += '<table style="margin-top:4px"><tr><th>GCP</th><th>type</th><th>err(m)</th><th>dx</th><th>dy</th><th>dz</th></tr>';
+  for (const g of info.gcps) {
+    const hi = g.error_m > 0.5 ? ' style="color:var(--warn)"' : '';
+    html += `<tr${hi}><td>${g.name}</td><td>${g.type}</td><td>${g.error_m}</td><td>${g.dx}</td><td>${g.dy}</td><td>${g.dz}</td></tr>`;
+  }
+  box.innerHTML = html + '</table>';
+}
+$('refreshAcc').onclick = showGcpAccuracy;
 
 // ---- CRS picker -----------------------------------------------------------
 let crsChoice = null;

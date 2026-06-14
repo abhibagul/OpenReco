@@ -29,7 +29,7 @@ from openreco.geo.crs import geodetic_to_crs, utm_epsg_for
 @register_stage
 class Georef(Stage):
     type = "georef"
-    version = "2"  # v2: adds GCP-based georeferencing
+    version = "3"  # v3: GCP control/check split + per-GCP residual report
     deterministic = False  # RANSAC alignment
 
     def default_params(self) -> dict[str, Any]:
@@ -163,32 +163,42 @@ class Georef(Stage):
             m = np.asarray(img.cam_from_world().matrix())  # 3x4 [R|t]
             proj[img.name] = k @ m
 
-        local_pts, world_pts, used = [], [], []
-        for name, (world, obs) in gcps.items():
-            ps = [proj[im] for im, _ in obs if im in proj]
-            uvs = [uv for im, uv in obs if im in proj]
+        pts = []   # [(name, local_xyz, world_xyz, type, n_obs)]
+        for name, g in gcps.items():
+            ps = [proj[im] for im, _ in g["obs"] if im in proj]
+            uvs = [uv for im, uv in g["obs"] if im in proj]
             if len(ps) < 2:
                 ctx.logger.warning("GCP %s has <2 observations in registered images; skipped", name)
                 continue
-            local_pts.append(triangulate_dlt(ps, uvs))
-            world_pts.append(world)
-            used.append(name)
+            pts.append((name, triangulate_dlt(ps, uvs), g["world"], g["type"], len(ps)))
 
-        if len(local_pts) < ctx.params["min_common_images"]:
-            raise RuntimeError(f"only {len(local_pts)} GCPs triangulated; cannot georeference")
+        control = [p for p in pts if p[3] != "check"]
+        check = [p for p in pts if p[3] == "check"]
+        if len(control) < ctx.params["min_common_images"]:
+            raise RuntimeError(f"only {len(control)} control GCPs triangulated; need "
+                               f">= {ctx.params['min_common_images']} (mark fewer as check)")
 
-        world = np.asarray(world_pts)
+        # fit the similarity on CONTROL points only (check points validate it independently)
+        world = np.asarray([p[2] for p in control])
         origin = world.mean(axis=0)
-        target = world - origin
-        scale, rot, trans = umeyama_similarity(np.asarray(local_pts), target)
-
+        local = np.asarray([p[1] for p in control])
+        scale, rot, trans = umeyama_similarity(local, world - origin)
         sim3d = pycolmap.Sim3d(float(scale), pycolmap.Rotation3d(rotmat_to_quat_xyzw(rot)), trans)
         rec.transform(sim3d)
 
-        # residuals: transform local GCP points, compare to target (meters)
-        resid = [float(np.linalg.norm((scale * (rot @ lp) + trans) - tg))
-                 for lp, tg in zip(local_pts, target)]
-        rms = float(np.sqrt(np.mean(np.square(resid)))) if resid else None
+        # per-GCP residuals (metres) for both control and check points
+        def _resid(p):
+            est = scale * (rot @ p[1]) + trans + origin     # back to world CRS
+            d = est - p[2]
+            return {"name": p[0], "type": p[3], "observations": p[4],
+                    "error_m": round(float(np.linalg.norm(d)), 4),
+                    "dx": round(float(d[0]), 4), "dy": round(float(d[1]), 4), "dz": round(float(d[2]), 4)}
+        gcp_report = [_resid(p) for p in (control + check)]
+
+        def _rms(group):
+            e = [r["error_m"] for r in gcp_report if r["type"] == group]
+            return round(float(np.sqrt(np.mean(np.square(e)))), 4) if e else None
+        ctrl_rms = _rms("control")
         from openreco.geo.crs import crs_info
         return {
             "method": "gcp",
@@ -196,8 +206,12 @@ class Georef(Stage):
             "crs_epsg": epsg,
             "crs_info": crs_info(epsg),
             "origin": [float(origin[0]), float(origin[1]), float(origin[2])],
-            "num_control": len(used),
-            "rms_residual_m": round(rms, 4) if rms is not None else None,
+            "num_control": len(control),
+            "num_check": len(check),
+            "rms_residual_m": ctrl_rms,
+            "control_rms_m": ctrl_rms,
+            "check_rms_m": _rms("check"),
+            "gcps": gcp_report,
             "scale": float(scale),
         }
 
@@ -216,12 +230,13 @@ class Georef(Stage):
         return issues
 
 
-def _read_gcp_file(path) -> dict[str, tuple[np.ndarray, list[tuple[str, tuple[float, float]]]]]:
-    """Parse a GCP CSV: rows of `name,X,Y,Z,image,u,v` (one per image observation; '#' comments,
-    optional header). Returns name -> (world_xyz, [(image, (u, v)), ...])."""
+def _read_gcp_file(path) -> dict[str, dict]:
+    """Parse a GCP CSV: rows of `name,X,Y,Z,image,u,v[,type]` (one per image observation; '#'
+    comments, optional header). `type` is control|check (default control) — check points are held
+    out of the fit to validate accuracy. Returns name -> {world, obs:[(image,(u,v))], type}."""
     if not path.exists():
         raise FileNotFoundError(f"gcp_file not found: {path}")
-    gcps: dict[str, tuple[np.ndarray, list[tuple[str, tuple[float, float]]]]] = {}
+    gcps: dict[str, dict] = {}
     with path.open(newline="", encoding="utf-8") as fh:
         for row in csv.reader(fh):
             if not row or row[0].lstrip().startswith("#"):
@@ -230,8 +245,12 @@ def _read_gcp_file(path) -> dict[str, tuple[np.ndarray, list[tuple[str, tuple[fl
             if len(cells) < 7 or not _is_number(cells[1]):
                 continue  # skip header / malformed
             name, x, y, z, image, u, v = cells[:7]
-            world = np.array([float(x), float(y), float(z)])
-            gcps.setdefault(name, (world, []))[1].append((image, (float(u), float(v))))
+            kind = cells[7].lower() if len(cells) > 7 and cells[7] else "control"
+            g = gcps.setdefault(name, {"world": np.array([float(x), float(y), float(z)]),
+                                       "obs": [], "type": "control"})
+            g["obs"].append((image, (float(u), float(v))))
+            if kind == "check":
+                g["type"] = "check"
     return gcps
 
 

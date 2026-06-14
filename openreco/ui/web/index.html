@@ -203,7 +203,9 @@
         <button id="addMarker">+ Marker</button><span class="sp"></span>
         <button class="run" id="saveMarkers">Save GCPs</button></div>
       <button id="useGcps" style="margin-top:6px; width:100%">Use these GCPs for georeferencing</button>
-      <div class="muted" style="margin-top:6px">Pick: select a marker, open a photo in the Photo tab, click to add an observation. Then Save, and "Use these GCPs" to point this chunk's Georeference step at them.</div>
+      <div class="muted" style="margin-top:6px">Pick: select a marker, open a photo in the Photo tab, click to add an observation. Mark some as <b>check</b> to validate accuracy (held out of the fit). Then Save and "Use these GCPs".</div>
+      <h3>GCP accuracy <button id="refreshAcc" style="float:right; padding:2px 7px">↻</button></h3>
+      <div id="gcpAccuracy" class="muted">Run Georeference with GCPs to see residuals.</div>
     </div>
   </div>
   <!-- center viewport -->
