@@ -46,10 +46,12 @@ grid.rotation.x = Math.PI / 2;          // GridHelper is XZ by default; rotate i
 scene.add(grid);
 const axes = new THREE.AxesHelper(1); scene.add(axes);
 let helpers = true;
-function resize() { const w = $('center').clientWidth, h = $('center').clientHeight;
+function resize() {
+  const w = $('center').clientWidth, h = $('center').clientHeight;
   if (!w || !h) return;
-  renderer.setSize(w, h, false);              // false: don't force inline CSS size; let CSS fill #center
-  camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  renderer.setSize(w, h);                      // sets the canvas buffer + inline px style to match #center
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
 addEventListener('resize', resize);
 // track the actual size of the viewport pane — fires on pane-splitter drags, dock resize, window, etc.
 new ResizeObserver(() => resize()).observe($('center'));
