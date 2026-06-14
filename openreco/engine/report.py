@@ -27,12 +27,15 @@ def _e(x: Any) -> str:
 
 
 def _summary_cards(stages: list[dict]) -> str:
-    """Pull a few headline metrics from known stages into highlight cards."""
-    by_id = {s["id"]: s for s in stages}
+    """Pull a few headline metrics from known stage *types* into highlight cards (works regardless
+    of how layers are named in the UI)."""
+    by_type: dict[str, dict] = {}
+    for s in stages:                              # first stage of each type wins
+        by_type.setdefault(s["type"], s)
     cards: list[tuple[str, str]] = []
 
-    def metric(stage_id: str, key: str):
-        return by_id.get(stage_id, {}).get("metrics", {}).get(key)
+    def metric(stype: str, key: str):
+        return by_type.get(stype, {}).get("metrics", {}).get(key)
 
     if (reg := metric("sfm", "reg_images")) is not None:
         cards.append(("images registered", f"{reg} / {metric('sfm', 'input_images')}"))
@@ -43,20 +46,25 @@ def _summary_cards(stages: list[dict]) -> str:
     if (crs := metric("georef", "crs")) is not None:
         cards.append(("coordinate system", str(crs)))
     if (rms := metric("georef", "rms_residual_m")) is not None:
-        cards.append(("GPS alignment RMS", f"{rms} m"))
+        label = "GCP control RMS" if metric("georef", "method") == "gcp" else "GPS alignment RMS"
+        cards.append((label, f"{rms} m"))
+    if (chk := metric("georef", "check_rms_m")) is not None:
+        cards.append(("GCP check RMS", f"{chk} m ({metric('georef', 'num_check')} pts)"))
     if (np_ := metric("mvs", "num_points")) is not None:
         mode = metric("mvs", "mode") or ""
         cards.append(("dense points", f"{np_:,}" + (f" ({mode})" if mode else "")))
     if (faces := metric("mesh", "faces")) is not None:
         cards.append(("mesh faces", f"{faces:,}"))
+    if (cov := metric("texture", "atlas_coverage")) is not None:
+        cards.append(("texture coverage", f"{int(cov * 100)}%"))
     if (w := metric("dsm", "width")) is not None:
         cards.append(("DSM size", f"{w}×{metric('dsm', 'height')} px"))
+    if metric("classify", "ground_pct") is not None:
+        cards.append(("ground / building / veg",
+                      f"{metric('classify', 'ground')} / {metric('classify', 'building')} / "
+                      f"{metric('classify', 'vegetation')}"))
     if (mo := metric("coverage", "max_overlap")) is not None:
         cards.append(("max image overlap", f"{mo}×"))
-        cov = by_id["coverage"]["metrics"]
-        pct_key = next((k for k in cov if k.startswith("pct_area_ge_")), None)
-        if pct_key:
-            cards.append((f"area with ≥{pct_key.rsplit('_', 1)[1]}× overlap", f"{cov[pct_key]}%"))
 
     if not cards:
         return ""

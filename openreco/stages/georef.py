@@ -83,6 +83,8 @@ class Georef(Stage):
                 "crs": info["crs"],
                 "num_control": info["num_control"],
                 "rms_residual_m": info["rms_residual_m"],
+                **({"num_check": info["num_check"], "check_rms_m": info["check_rms_m"]}
+                   if info.get("method") == "gcp" else {}),
             },
         )
 

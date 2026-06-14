@@ -493,6 +493,8 @@ class _Handler(BaseHTTPRequestHandler):
         if route == "/api/cameras":
             return self._send(200, self.state.cameras_for_chunk(
                 parse_qs(u.query).get("chunk", [None])[0]))
+        if route == "/api/report":
+            return self._report()
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -691,6 +693,16 @@ class _Handler(BaseHTTPRequestHandler):
         if not p.is_file():
             return self._send(404, {"error": "not found"})
         self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "application/octet-stream"))
+
+    def _report(self):
+        """Serve the most recent run's processing report (self-contained HTML)."""
+        runs = self.project.manifest.runs_dir
+        reports = sorted(runs.glob("*/report.html"), key=lambda p: p.stat().st_mtime) if runs.exists() else []
+        if not reports:
+            return self._send(200, "<!doctype html><body style='font:15px system-ui;margin:3rem'>"
+                              "<h2>No processing report yet</h2><p>Run the pipeline first "
+                              "(▶ Run), then open the report again.</p>", "text/html")
+        self._send(200, reports[-1].read_bytes(), "text/html")
 
     def _thumb(self, path):
         """Serve an image file from anywhere (image suffixes only) for the Add-Photos picker."""

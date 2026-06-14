@@ -703,6 +703,8 @@ async function loadWorkflows() {
   menuSep('m-file');
   menuEntry('m-file', '＋ New chunk', addChunk);
   menuEntry('m-file', '🌐 Set coordinate system…', openCrsPicker);
+  menuSep('m-file');
+  menuEntry('m-file', '📊 Processing report', () => window.open('/api/report', '_blank'));
   // Workflow menu = the familiar operations
   $('m-workflow').innerHTML = '';
   WORKFLOWS.forEach(op => menuEntry('m-workflow', op.op, () => openOp(op), op.desc));
