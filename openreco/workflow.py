@@ -148,6 +148,7 @@ STAGE_PROVIDES: dict[str, list[str]] = {
     "classify": ["points", "meta"],
     "clean": ["points", "meta", "mesh"],
     "import_cloud": ["points", "meta"],
+    "import_mesh": ["mesh"],
     "mesh": ["mesh"],
     "texture": ["mesh", "glb"],
     "dsm": ["dsm", "meta"],

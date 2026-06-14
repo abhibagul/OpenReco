@@ -18,7 +18,7 @@ const CATEGORY = {
   ingest: "Cameras", sfm: "Tie Points", refine: "Tie Points", markers: "Markers",
   mvs: "Dense Cloud", fuse: "Dense Cloud", merge_chunks: "Dense Cloud", classify: "Point Cloud",
   clean: "Dense Cloud", import_cloud: "Dense Cloud",
-  mesh: "3D Model", texture: "3D Model", splat: "3D Model", tiles: "Tiled Model",
+  mesh: "3D Model", texture: "3D Model", splat: "3D Model", import_mesh: "3D Model", tiles: "Tiled Model",
   dsm: "DEM", ortho: "Orthomosaic", contours: "Shapes", indices: "Orthomosaic",
   volume: "Shapes", profile: "Shapes", panorama: "Orthomosaic",
 };
@@ -95,6 +95,7 @@ function resize() {
   if (!w || !h) return;
   // canvas is position:absolute filling #center via CSS, so only update the draw buffer (no inline px)
   renderer.setSize(w, h, false);
+  const eo = $('editoverlay'); if (eo) { eo.width = w; eo.height = h; }   // selection overlay (CSS px)
   camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
@@ -281,107 +282,223 @@ async function setVisible(layer, on) {
   renderWorkspace();
 }
 
-// ---- 3D point-cloud editing: box-select + delete (non-destructive) ---------
-let selMode = false, selLayer = null, selObj = null, selOrig = null;
-let selRemoved = [], selSet = new Set(), selHi = null, selDrag = null;
-function setSelMode(on) {
-  selMode = on; $('selBtn').classList.toggle('on', on);
-  controls.enabled = !on; $('center').classList.toggle('selecting', on);
-  if (on) beginEdit();
+// ---- 3D editing: box/lasso select + delete for point clouds AND meshes -----
+let selMode = null;          // 'box' | 'lasso' | null
+let depthAware = false;      // visible-only (occlusion) for point clouds
+let selLayer = null, selObj = null, selKind = null;   // 'points' | 'mesh'
+let selOrig = null;          // current index -> original file index (point or face)
+let selRemoved = [], selSet = new Set(), selHi = null, selDrag = null, pickRT = null;
+
+function faceCount(geo) { return geo.index ? geo.index.count / 3 : geo.getAttribute('position').count / 3; }
+function faceVerts(geo, f) {
+  const ix = geo.index;
+  return ix ? [ix.getX(3*f), ix.getX(3*f+1), ix.getX(3*f+2)] : [3*f, 3*f+1, 3*f+2];
 }
+function setMode(mode) {
+  selMode = (selMode === mode) ? null : mode;
+  $('selBtn').classList.toggle('on', selMode === 'box');
+  $('lassoBtn').classList.toggle('on', selMode === 'lasso');
+  controls.enabled = !selMode;
+  $('center').classList.toggle('selecting', !!selMode);
+  if (selMode) beginEdit(); else overlayClear();
+}
+function toggleDepth() { depthAware = !depthAware; $('depthBtn').classList.toggle('on', depthAware);
+  log(`visible-only selection ${depthAware ? 'on' : 'off'}`); }
 function beginEdit() {
   let L = PROJECT.layers.find(x => x.id === selected);
   let obj = L && objects.get(L.id);
-  if (!(obj && obj.isPoints)) {                 // else any visible point cloud
-    for (const [id, o] of objects) if (visible.has(id) && o.isPoints) {
+  const editable = (o) => o && (o.isPoints || o.isMesh);
+  if (!editable(obj)) {
+    for (const [id, o] of objects) if (visible.has(id) && editable(o)) {
       obj = o; L = PROJECT.layers.find(x => x.id === id) || { id, chunk: ACTIVE_CHUNK }; break; }
   }
-  if (!(obj && obj.isPoints)) { log('show a point-cloud layer first, then enable Select', 'warn'); setSelMode(false); return; }
-  if (!selLayer || selLayer.id !== L.id) {       // fresh edit session for this layer
-    selLayer = L; selRemoved = [];
-    const n = obj.geometry.getAttribute('position').count;
+  if (!editable(obj)) { log('show a point-cloud or mesh layer first, then enable select', 'warn'); setMode(null); return; }
+  const kind = obj.isPoints ? 'points' : 'mesh';
+  if (!selLayer || selLayer.id !== L.id) {
+    selLayer = L; selKind = kind; selRemoved = [];
+    const n = kind === 'points' ? obj.geometry.getAttribute('position').count : faceCount(obj.geometry);
     selOrig = new Int32Array(n); for (let i = 0; i < n; i++) selOrig[i] = i;
   }
-  selObj = obj;
-  log(`editing ${selLayer.id}: drag a box to select points (shift to add)`);
+  selObj = obj; selKind = kind;
+  log(`editing ${selLayer.id} (${kind}): ${selMode === 'lasso' ? 'draw a lasso' : 'drag a box'} to select`);
 }
 function clearSel() { selSet.clear(); updateSelHi(); }
+
+// selection geometry overlay (box rect / lasso path), drawn in CSS px
+function overlayClear() { const c = $('editoverlay'); c.getContext('2d').clearRect(0, 0, c.width, c.height); }
+function overlayDraw(pts, closed) {
+  const c = $('editoverlay'), g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
+  if (pts.length < 2) return;
+  g.strokeStyle = '#5694ff'; g.lineWidth = 1.5; g.fillStyle = 'rgba(86,148,255,0.15)';
+  g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+  if (closed) g.closePath();
+  g.fill(); g.stroke();
+}
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function projectIndexPoints(poly) {                 // point indices whose screen pos is inside poly
+  const pos = selObj.geometry.getAttribute('position'); selObj.updateMatrixWorld();
+  const m = selObj.matrixWorld, w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  const v = new THREE.Vector3(), hits = [];
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(m).project(camera);
+    if (v.z > 1) continue;
+    const sx = (v.x * 0.5 + 0.5) * w, sy = (-v.y * 0.5 + 0.5) * h;
+    if (pointInPoly(sx, sy, poly)) hits.push(i);
+  }
+  return hits;
+}
+function frontMostFilter(cands) {                   // keep only points that are the visible (front) one
+  const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  const dpr = renderer.getPixelRatio(), W = Math.round(w * dpr), H = Math.round(h * dpr);
+  const pos = selObj.geometry.getAttribute('position');
+  const cols = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) { const id = i + 1;
+    cols[i*3] = (id & 255) / 255; cols[i*3+1] = ((id >> 8) & 255) / 255; cols[i*3+2] = ((id >> 16) & 255) / 255; }
+  const pg = new THREE.BufferGeometry();           // own position buffer (don't share/free selObj's)
+  pg.setAttribute('position', new THREE.BufferAttribute(pos.array, 3));
+  pg.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  const pm = new THREE.PointsMaterial({ size: selObj.material.size || 2, sizeAttenuation: false, vertexColors: true });
+  const po = new THREE.Points(pg, pm); po.applyMatrix4(selObj.matrixWorld);
+  const ps = new THREE.Scene(); ps.add(po);
+  if (!pickRT || pickRT.width !== W || pickRT.height !== H) { if (pickRT) pickRT.dispose(); pickRT = new THREE.WebGLRenderTarget(W, H); }
+  const oldCol = renderer.getClearColor(new THREE.Color()), oldA = renderer.getClearAlpha();
+  renderer.setRenderTarget(pickRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+  renderer.render(ps, camera); renderer.setRenderTarget(null);
+  renderer.setClearColor(oldCol, oldA);
+  const buf = new Uint8Array(W * H * 4);
+  renderer.readRenderTargetPixels(pickRT, 0, 0, W, H, buf);
+  pg.dispose(); pm.dispose();
+  const m = selObj.matrixWorld, v = new THREE.Vector3(), out = [];
+  for (const i of cands) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(m).project(camera);
+    const cx = Math.round((v.x * 0.5 + 0.5) * W), cyTop = (-v.y * 0.5 + 0.5) * H;
+    let vis = false;
+    for (let dy = -1; dy <= 1 && !vis; dy++) for (let dx = -1; dx <= 1 && !vis; dx++) {
+      const px = cx + dx, py = Math.round(H - 1 - (cyTop + dy));   // flip Y for GL buffer
+      if (px < 0 || px >= W || py < 0 || py >= H) continue;
+      const o = (py * W + px) * 4, id = buf[o] | (buf[o+1] << 8) | (buf[o+2] << 16);
+      if (id - 1 === i) vis = true;
+    }
+    if (vis) out.push(i);
+  }
+  return out;
+}
+function projectIndexFaces(poly) {                  // face indices whose centroid is inside poly
+  const geo = selObj.geometry, pos = geo.getAttribute('position'); selObj.updateMatrixWorld();
+  const m = selObj.matrixWorld, w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), hits = [];
+  const nf = faceCount(geo);
+  for (let f = 0; f < nf; f++) {
+    const [i0, i1, i2] = faceVerts(geo, f);
+    a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1); c.fromBufferAttribute(pos, i2);
+    const ctr = a.add(b).add(c).multiplyScalar(1/3).applyMatrix4(m).project(camera);
+    if (ctr.z > 1) continue;
+    const sx = (ctr.x * 0.5 + 0.5) * w, sy = (-ctr.y * 0.5 + 0.5) * h;
+    if (pointInPoly(sx, sy, poly)) hits.push(f);
+  }
+  return hits;
+}
+function selectInPoly(poly, add) {
+  if (!add) selSet.clear();
+  let hits;
+  if (selKind === 'points') { hits = projectIndexPoints(poly); if (depthAware) hits = frontMostFilter(hits); }
+  else hits = projectIndexFaces(poly);
+  hits.forEach(i => selSet.add(i));
+  updateSelHi(); log(`${selSet.size.toLocaleString()} ${selKind === 'points' ? 'point' : 'face'}(s) selected`);
+}
 function updateSelHi() {
   if (selHi) { scene.remove(selHi); selHi.geometry.dispose(); selHi = null; }
   if (!selSet.size || !selObj) return;
   const pos = selObj.geometry.getAttribute('position');
-  const arr = new Float32Array(selSet.size * 3); let k = 0;
-  selSet.forEach(i => { arr[k++] = pos.getX(i); arr[k++] = pos.getY(i); arr[k++] = pos.getZ(i); });
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-  selHi = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xff3b30, size: 4, sizeAttenuation: false, depthTest: false }));
-  selHi.applyMatrix4(selObj.matrixWorld); scene.add(selHi);
-}
-function selectInRect(x0, y0, x1, y1, add) {
-  if (!add) selSet.clear();
-  const pos = selObj.geometry.getAttribute('position'); selObj.updateMatrixWorld();
-  const m = selObj.matrixWorld, w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
-  const v = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i).applyMatrix4(m).project(camera);
-    if (v.z > 1) continue;                       // behind camera / clipped
-    const sx = (v.x * 0.5 + 0.5) * w, sy = (-v.y * 0.5 + 0.5) * h;
-    if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) selSet.add(i);
+  if (selKind === 'points') {
+    const arr = new Float32Array(selSet.size * 3); let k = 0;
+    selSet.forEach(i => { arr[k++] = pos.getX(i); arr[k++] = pos.getY(i); arr[k++] = pos.getZ(i); });
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    selHi = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xff3b30, size: 4, sizeAttenuation: false, depthTest: false }));
+  } else {
+    const arr = new Float32Array(selSet.size * 9); let k = 0;
+    selSet.forEach(f => faceVerts(selObj.geometry, f).forEach(vi => {
+      arr[k++] = pos.getX(vi); arr[k++] = pos.getY(vi); arr[k++] = pos.getZ(vi); }));
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    selHi = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xff3b30, opacity: 0.6, transparent: true,
+      depthTest: false, side: THREE.DoubleSide }));
   }
-  updateSelHi(); log(`${selSet.size.toLocaleString()} point(s) selected`);
+  selHi.applyMatrix4(selObj.matrixWorld); selHi.renderOrder = 3; scene.add(selHi);
 }
 function deleteSelected() {
   if (!selObj || !selSet.size) { log('nothing selected', 'warn'); return; }
-  const geo = selObj.geometry, pos = geo.getAttribute('position');
-  const col = geo.getAttribute('color'), nor = geo.getAttribute('normal');
-  selSet.forEach(i => selRemoved.push(selOrig[i]));
-  const keep = []; for (let i = 0; i < pos.count; i++) if (!selSet.has(i)) keep.push(i);
-  const np = new Float32Array(keep.length * 3), nc = col ? new Float32Array(keep.length * 3) : null;
-  const nn = nor ? new Float32Array(keep.length * 3) : null, no = new Int32Array(keep.length);
-  keep.forEach((i, j) => {
-    np[j*3] = pos.getX(i); np[j*3+1] = pos.getY(i); np[j*3+2] = pos.getZ(i);
-    if (nc) { nc[j*3] = col.getX(i); nc[j*3+1] = col.getY(i); nc[j*3+2] = col.getZ(i); }
-    if (nn) { nn[j*3] = nor.getX(i); nn[j*3+1] = nor.getY(i); nn[j*3+2] = nor.getZ(i); }
-    no[j] = selOrig[i];
-  });
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(np, 3));
-  if (nc) g.setAttribute('color', new THREE.BufferAttribute(nc, 3));
-  if (nn) g.setAttribute('normal', new THREE.BufferAttribute(nn, 3));
-  const removedNow = pos.count - keep.length;
-  geo.dispose(); selObj.geometry = g; selOrig = no; selSet.clear(); updateSelHi();
-  log(`deleted ${removedNow.toLocaleString()} point(s) — ${selRemoved.length.toLocaleString()} total; Save to persist`);
+  const geo = selObj.geometry;
+  if (selKind === 'points') {
+    const pos = geo.getAttribute('position'), col = geo.getAttribute('color'), nor = geo.getAttribute('normal');
+    selSet.forEach(i => selRemoved.push(selOrig[i]));
+    const keep = []; for (let i = 0; i < pos.count; i++) if (!selSet.has(i)) keep.push(i);
+    const np = new Float32Array(keep.length * 3), nc = col ? new Float32Array(keep.length * 3) : null;
+    const nn = nor ? new Float32Array(keep.length * 3) : null, no = new Int32Array(keep.length);
+    keep.forEach((i, j) => {
+      np[j*3] = pos.getX(i); np[j*3+1] = pos.getY(i); np[j*3+2] = pos.getZ(i);
+      if (nc) { nc[j*3] = col.getX(i); nc[j*3+1] = col.getY(i); nc[j*3+2] = col.getZ(i); }
+      if (nn) { nn[j*3] = nor.getX(i); nn[j*3+1] = nor.getY(i); nn[j*3+2] = nor.getZ(i); }
+      no[j] = selOrig[i];
+    });
+    const removedNow = pos.count - keep.length;
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(np, 3));
+    if (nc) g.setAttribute('color', new THREE.BufferAttribute(nc, 3));
+    if (nn) g.setAttribute('normal', new THREE.BufferAttribute(nn, 3));
+    geo.dispose(); selObj.geometry = g; selOrig = no;
+    log(`deleted ${removedNow.toLocaleString()} point(s) — ${selRemoved.length.toLocaleString()} total; Save to persist`);
+  } else {
+    const nf = faceCount(geo);
+    selSet.forEach(f => selRemoved.push(selOrig[f]));
+    const idx = []; const no = new Int32Array(nf - selSet.size); let j = 0;
+    for (let f = 0; f < nf; f++) if (!selSet.has(f)) { const [a, b, c] = faceVerts(geo, f); idx.push(a, b, c); no[j++] = selOrig[f]; }
+    geo.setIndex(idx); selOrig = no;
+    log(`deleted ${selSet.size.toLocaleString()} face(s) — ${selRemoved.length.toLocaleString()} total; Save to persist`);
+  }
+  selSet.clear(); updateSelHi();
 }
 async function saveEdits() {
   if (!selLayer || !selRemoved.length) { log('no edits to save', 'warn'); return; }
-  const j = await (await fetch('/api/edit_cloud', { method:'POST',
+  const ep = selKind === 'points' ? '/api/edit_cloud' : '/api/edit_mesh';
+  const j = await (await fetch(ep, { method:'POST',
     body: JSON.stringify({ layer: selLayer.id, removed: selRemoved, chunk: selLayer.chunk }) })).json();
   if (!j.ok) { log('edit save error: ' + (j.error || 'failed'), 'err'); return; }
-  log(`saved edited cloud as ${j.id} (kept ${j.kept.toLocaleString()}, removed ${j.removed.toLocaleString()})`, 'ok');
-  selRemoved = []; selSet.clear(); updateSelHi(); selLayer = null; selObj = null; selOrig = null; setSelMode(false);
+  log(`saved edited ${selKind} as ${j.id}`, 'ok');
+  selRemoved = []; selSet.clear(); updateSelHi(); selLayer = null; selObj = null; selOrig = null; setMode(null);
   await loadProject(); await runPipeline({ targets: [j.id] });
 }
-$('selBtn').onclick = () => setSelMode(!selMode);
+$('selBtn').onclick = () => setMode('box');
+$('lassoBtn').onclick = () => setMode('lasso');
+$('depthBtn').onclick = toggleDepth;
 $('delSelBtn').onclick = deleteSelected;
 $('clearSelBtn').onclick = clearSel;
 $('saveEditBtn').onclick = saveEdits;
 renderer.domElement.addEventListener('pointerdown', (e) => {
-  if (!selMode || e.button !== 0) return;
-  selDrag = { x0: e.clientX, y0: e.clientY, r: renderer.domElement.getBoundingClientRect(), shift: e.shiftKey };
-  $('selrect').style.display = 'block';
+  if (!selMode || e.button !== 0 || !selObj) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  selDrag = { r, shift: e.shiftKey, pts: [[e.clientX - r.left, e.clientY - r.top]] };
 });
 addEventListener('pointermove', (e) => {
-  if (!selDrag) return; const r = selDrag.r, el = $('selrect');
-  el.style.left = (Math.min(e.clientX, selDrag.x0) - r.left) + 'px';
-  el.style.top = (Math.min(e.clientY, selDrag.y0) - r.top) + 'px';
-  el.style.width = Math.abs(e.clientX - selDrag.x0) + 'px';
-  el.style.height = Math.abs(e.clientY - selDrag.y0) + 'px';
+  if (!selDrag) return; const r = selDrag.r, p = [e.clientX - r.left, e.clientY - r.top];
+  if (selMode === 'lasso') { selDrag.pts.push(p); overlayDraw(selDrag.pts, true); }
+  else { const [x0, y0] = selDrag.pts[0];                       // box -> rectangle path
+    overlayDraw([[x0, y0], [p[0], y0], [p[0], p[1]], [x0, p[1]]], true); }
 });
 addEventListener('pointerup', (e) => {
-  if (!selDrag) return; const d = selDrag; selDrag = null; $('selrect').style.display = 'none';
-  if (!selObj) return; const r = d.r;
-  const x0 = Math.min(d.x0, e.clientX) - r.left, x1 = Math.max(d.x0, e.clientX) - r.left;
-  const y0 = Math.min(d.y0, e.clientY) - r.top, y1 = Math.max(d.y0, e.clientY) - r.top;
-  if (x1 - x0 < 3 && y1 - y0 < 3) return;
-  selectInRect(x0, y0, x1, y1, d.shift);
+  if (!selDrag) return; const d = selDrag; selDrag = null; overlayClear();
+  if (!selObj) return; const r = d.r, [x0, y0] = d.pts[0], x1 = e.clientX - r.left, y1 = e.clientY - r.top;
+  let poly;
+  if (selMode === 'lasso') { if (d.pts.length < 3) return; poly = d.pts; }
+  else { if (Math.abs(x1 - x0) < 3 && Math.abs(y1 - y0) < 3) return;
+    poly = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
+  selectInPoly(poly, d.shift);
 });
 
 // ---- measurement (distance / area) ----------------------------------------

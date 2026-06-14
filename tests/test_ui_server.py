@@ -204,7 +204,8 @@ def test_frontend_has_workspace_chunks(server):
     assert b"/api/new_project" in appjs and b"/api/save_project" in appjs
     assert b"/api/cameras" in appjs and b"buildCameras" in appjs
     assert b"/api/geo_overlay" in appjs and b"showOnMap" in appjs        # web map overlay
-    assert b"/api/edit_cloud" in appjs and b"setSelMode" in appjs and b"selectInRect" in appjs  # 3D edit
+    assert b"/api/edit_cloud" in appjs and b"selectInPoly" in appjs       # 3D edit (box)
+    assert b"/api/edit_mesh" in appjs and b"lassoBtn" in appjs and b"frontMostFilter" in appjs  # lasso/mesh/depth
     assert b"setupSplitters" in appjs and b"snapView" in appjs and b"gridline" in appjs  # infinite grid shader
     assert b"runPipeline" in appjs and b"camera.up.set(0, 0, 1)" in appjs   # Z-up world
     assert b"rotateGizmo" in appjs and b"contourView" in appjs               # navcube nav + contour overlay
@@ -352,6 +353,30 @@ def test_edit_cloud_creates_import_layer(tmp_path):
         # the edited cloud materializes to the kept count
         out = proj.run(targets=[body["id"]])
         assert next(s for s in out.stages if s.id == body["id"]).metrics["num_points"] == 400
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_edit_mesh_creates_import_mesh(tmp_path):
+    import numpy as np
+    from openreco.io.pointcloud import write_mesh_ply
+    v = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [5, 5, 5], [6, 5, 5], [5, 6, 5]], float)
+    f = np.array([[0, 1, 2], [0, 2, 3], [4, 5, 6]])         # 2 quad faces + 1 stray triangle
+    mp = tmp_path / "m.ply"
+    write_mesh_ply(mp, v, f)
+    proj = Project.create(tmp_path / "proj", name="em").add_stage("ms", "import_mesh",
+                                                                  params={"path": str(mp)})
+    proj.run()
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        status, body = _post(base + "/api/edit_mesh", {"layer": "ms", "removed": [2], "chunk": "Chunk 1"})
+        assert status == 200 and body["ok"] and body["kept_faces"] == 2 and body["removed_faces"] == 1
+        out = proj.run(targets=[body["id"]])
+        m = next(s for s in out.stages if s.id == body["id"]).metrics
+        assert m["faces"] == 2 and m["vertices"] == 4      # stray face + its verts dropped
     finally:
         httpd.shutdown()
         httpd.server_close()

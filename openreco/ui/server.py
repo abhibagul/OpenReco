@@ -419,6 +419,36 @@ class AppState:
         self.project.save()
         return {"ok": True, "id": new_id, "kept": int(mask.sum()), "removed": int((~mask).sum())}
 
+    def edit_mesh(self, layer_id: str, removed: list[int], chunk: str) -> dict:
+        """Write a copy of a mesh layer with `removed` face indices deleted (unused verts dropped),
+        added as an import_mesh layer. Non-destructive."""
+        import numpy as np
+
+        from openreco.io.pointcloud import read_mesh_ply, write_mesh_ply
+        art = self._last_run().get(layer_id, {}).get("artifacts", {})
+        mesh = art.get("mesh")
+        if not mesh or not Path(mesh).is_file():
+            raise ValueError(f"layer {layer_id!r} has no mesh (run it first)")
+        verts, faces, vcols = read_mesh_ply(Path(mesh))
+        mask = np.ones(len(faces), bool)
+        rem = np.asarray([i for i in removed if 0 <= i < len(faces)], dtype=np.int64)
+        mask[rem] = False
+        faces = faces[mask]
+        used = np.unique(faces)
+        remap = np.full(len(verts), -1, np.int64)
+        remap[used] = np.arange(len(used))
+        verts2, faces2 = verts[used], remap[faces]
+        vcols2 = vcols[used] if vcols is not None else None
+
+        edits = self.project.manifest.project_dir / "edits"
+        edits.mkdir(parents=True, exist_ok=True)
+        new_id = _unique_id(f"{layer_id}_edit", {s.id for s in self.project.manifest.stages})
+        out = edits / f"{new_id}.ply"
+        write_mesh_ply(out, verts2, faces2, vcols2)
+        self.project.add_stage(new_id, "import_mesh", chunk=chunk, params={"path": str(out)})
+        self.project.save()
+        return {"ok": True, "id": new_id, "kept_faces": int(len(faces2)), "removed_faces": int(rem.size)}
+
     def detect_markers(self, chunk: str | None, dictionary: str) -> dict:
         """Auto-detect coded targets across a chunk's photos -> GCP markers (id -> observations)."""
         import numpy as np
@@ -611,6 +641,12 @@ class _Handler(BaseHTTPRequestHandler):
         if u.path == "/api/edit_cloud":
             try:
                 return self._send(200, self.state.edit_cloud(body.get("layer", ""),
+                                  body.get("removed", []), body.get("chunk", "Chunk 1")))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": repr(exc)})
+        if u.path == "/api/edit_mesh":
+            try:
+                return self._send(200, self.state.edit_mesh(body.get("layer", ""),
                                   body.get("removed", []), body.get("chunk", "Chunk 1")))
             except Exception as exc:  # noqa: BLE001
                 return self._send(400, {"error": repr(exc)})

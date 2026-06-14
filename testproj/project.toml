@@ -29,3 +29,22 @@ type = "dsm"
 chunk = "abhishek"
 inputs = ["mvs1"]
 params = { resolution_m = 0.2 }
+
+[[stage]]
+id = "clean1"
+type = "clean"
+chunk = "abhishek"
+inputs = ["mvs1"]
+params = { mode = "points", knn = 16, std_ratio = 2, min_component_ratio = 0.02 }
+
+[[stage]]
+id = "mvs1_edit1"
+type = "import_cloud"
+chunk = "abhishek"
+params = { path = "D:\\openreco\\testproj\\edits\\mvs1_edit1.ply", crs_epsg = 0, origin = [0.0, 0.0, 0.0] }
+
+[[stage]]
+id = "mvs1_edit1_edit1"
+type = "import_cloud"
+chunk = "abhishek"
+params = { path = "D:\\openreco\\testproj\\edits\\mvs1_edit1_edit1.ply", crs_epsg = 0, origin = [0.0, 0.0, 0.0] }
