@@ -6,3 +6,15 @@ crs = "EPSG:32613"
 id = "ingest1"
 type = "ingest"
 params = { image_dir = "C:\\Users\\abbyb\\Downloads\\example_building\\images" }
+
+[[stage]]
+id = "sfm1"
+type = "sfm"
+inputs = ["ingest1"]
+params = { max_image_size = 1000, matcher = "spatial", max_num_features = 4000, camera_mode = "auto", mapper = "incremental" }
+
+[[stage]]
+id = "mvs1"
+type = "mvs"
+inputs = ["ingest1", "sfm1"]
+params = { quality = "medium", geometric_consistency = true, dense_backend = "auto" }

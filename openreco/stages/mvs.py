@@ -198,10 +198,12 @@ class Mvs(Stage):
         return xyz, rgb, normals
 
     def _colmap(self, ctx, colmap: str, args: list[str]) -> None:
-        proc = subprocess.run([colmap, *args], capture_output=True, text=True)
+        # inherit stdio so COLMAP's glog (undistort / patch-match / fusion progress) streams live to
+        # the UI Console + progress popup — capturing it made dense look frozen with no output.
+        ctx.logger.info("colmap %s …", args[0])
+        proc = subprocess.run([colmap, *args])
         if proc.returncode != 0:
-            tail = (proc.stderr or proc.stdout or "")[-800:]
-            raise RuntimeError(f"colmap {args[0]} failed (rc={proc.returncode}):\n{tail}")
+            raise RuntimeError(f"colmap {args[0]} failed (rc={proc.returncode}); see console log")
 
     def _try_las(self, ctx, xyz, rgb, crs_epsg, origin) -> bool:
         try:
