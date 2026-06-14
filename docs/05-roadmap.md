@@ -87,9 +87,12 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
   into building [planar] / vegetation [rough] by PCA surface variation → ASPRS LAS codes 2/6/5) +
   bare-earth DTM from ground points. Validated on 1.68M aerial pts. Next: CSF, roughness tuning.
 - ✅ **General export system** (`exporters.py` + `openreco export` + `export_product` API): format
-  registry per product kind — mesh ply/obj/glb/STL/DXF · cloud ply/las/CSV · raster tif/png/ASC/KMZ ·
-  vector geojson/KML · splat ply/.splat. (USD/3D-PDF/FBX/COPC flagged unsupported.) Backs the UI's
-  "Export layer as…".
+  registry per product kind — mesh ply/obj/glb/STL/DXF · cloud ply/las/CSV/**LAZ** (when a lazrs/laszip
+  backend is installed) · raster tif/png/ASC/KMZ · vector geojson/KML/**DXF** · splat ply/.splat.
+  (USD/3D-PDF/FBX/COPC flagged unsupported.) Backs the UI's "Export layer as…".
+- ✅ **Cesium 3D-Tiles web viewer**: double-click a Tiled Model layer to stream it (tileset.json +
+  glb served over /tiles3d/) into a self-contained CesiumJS page (Apache-2 via CDN) on an OSM
+  basemap — interoperable, shareable result viewing.
 - ✅ **Cross-section profiles** (`openreco profile` + `openreco.measure_profile`).
 - ✅ **Sparse-cloud filtering + camera re-optimization** (`refine` stage — "gradual selection":
   drop high-error/short-track tie points, re-run BA; composable via role-based inputs).

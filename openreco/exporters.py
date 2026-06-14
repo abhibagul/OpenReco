@@ -149,6 +149,21 @@ def _cloud_las(c, out):
     write_las(Path(out), c["xyz"], c["rgb"], None, c["xyz"].mean(0))
 
 
+def _laz_available() -> bool:
+    """True if laspy has a LAZ backend (lazrs or laszip) installed."""
+    for mod in ("lazrs", "laszip"):
+        try:
+            __import__(mod)
+            return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
+def _cloud_laz(c, out):
+    write_las(Path(out), c["xyz"], c["rgb"], None, c["xyz"].mean(0))   # laspy writes LAZ from .laz ext
+
+
 # ---- raster writers ---------------------------------------------------------------------
 
 def _raster_png(r, out):
@@ -235,6 +250,35 @@ def _iter_linestrings(geom):
         yield from geom["coordinates"]
 
 
+def _vector_dxf(g, out):
+    """GeoJSON lines/polygons -> DXF LWPOLYLINE entities (opens in CAD / QGIS)."""
+    lines = ["0", "SECTION", "2", "ENTITIES"]
+
+    def poly(coords, closed):
+        lines.extend(["0", "LWPOLYLINE", "8", "0", "90", str(len(coords)), "70", "1" if closed else "0"])
+        for c in coords:
+            lines.extend(["10", f"{c[0]:.6f}", "20", f"{c[1]:.6f}"])
+            if len(c) > 2:
+                lines.extend(["38", f"{c[2]:.6f}"])       # elevation
+    for feat in g.get("features", []):
+        geom = feat.get("geometry", {})
+        t = geom.get("type")
+        if t == "LineString":
+            poly(geom["coordinates"], False)
+        elif t == "MultiLineString":
+            for ls in geom["coordinates"]:
+                poly(ls, False)
+        elif t == "Polygon":
+            for ring in geom["coordinates"]:
+                poly(ring, True)
+        elif t == "MultiPolygon":
+            for pgn in geom["coordinates"]:
+                for ring in pgn:
+                    poly(ring, True)
+    lines += ["0", "ENDSEC", "0", "EOF"]
+    Path(out).write_text("\n".join(lines), encoding="ascii")
+
+
 # ---- splat writer -----------------------------------------------------------------------
 
 def _splat_splat(s, out):
@@ -287,9 +331,13 @@ REGISTRY = {
     "pointcloud": {"ply": lambda c, o: write_ply(Path(o), c["xyz"], c["rgb"]),
                    "las": _cloud_las, "csv": _cloud_csv},
     "raster": {"tif": None, "png": _raster_png, "asc": _raster_asc, "kmz": _raster_kmz},
-    "vector": {"geojson": None, "kml": _vector_kml, "csv": None},
+    "vector": {"geojson": None, "kml": _vector_kml, "dxf": _vector_dxf, "csv": None},
     "splat": {"ply": None, "splat": _splat_splat},
 }
+if _laz_available():                                     # compressed LAS (CloudCompare/QGIS/PDAL)
+    REGISTRY["pointcloud"]["laz"] = _cloud_laz
+else:
+    UNSUPPORTED["laz"] = "install a LAZ backend: pip install lazrs (or laszip)"
 _LOADERS = {"mesh": _load_mesh, "pointcloud": _load_cloud, "raster": _load_raster,
             "vector": _load_vector, "splat": _load_splat}
 

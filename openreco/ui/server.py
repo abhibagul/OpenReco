@@ -49,6 +49,33 @@ _CT = {".html": "text/html", ".js": "text/javascript", ".css": "text/css",
        ".glb": "model/gltf-binary", ".tif": "image/tiff", ".png": "image/png",
        ".jpg": "image/jpeg", ".geojson": "application/json", ".las": "application/octet-stream"}
 
+_CESIUM = "https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium"
+_CESIUM_HTML = ("""<!doctype html><html><head><meta charset="utf-8"><title>OpenReco — Cesium</title>
+<script src="%s/Cesium.js"></script>
+<link href="%s/Widgets/widgets.css" rel="stylesheet">
+<style>html,body,#c{margin:0;height:100%%;width:100%%;background:#0b0d12}
+#err{color:#fff;font:15px system-ui;padding:2rem}</style></head>
+<body><div id="c"></div><script>
+Cesium.Ion.defaultAccessToken = '';
+const viewer = new Cesium.Viewer('c', { baseLayer:false, baseLayerPicker:false, geocoder:false,
+  timeline:false, animation:false, homeButton:false, sceneModePicker:false,
+  navigationHelpButton:false, infoBox:false, selectionIndicator:false, fullscreenButton:false });
+(async () => {
+  try {
+    const osm = await Cesium.ImageryLayer.fromProviderAsync(
+      Cesium.OpenStreetMapImageryProvider.fromUrl('https://tile.openstreetmap.org/'));
+    viewer.imageryLayers.add(osm);
+  } catch (e) { /* basemap optional */ }
+  try {
+    const ts = await Cesium.Cesium3DTileset.fromUrl('/tiles3d/__LAYER__/tileset.json');
+    viewer.scene.primitives.add(ts); await viewer.zoomTo(ts);
+  } catch (e) {
+    document.body.innerHTML = '<div id="err">Could not load 3D Tiles: ' + e +
+      '<br>The Tiled Model must be georeferenced (add a Georeference step, rebuild tiles).</div>';
+  }
+})();
+</script></body></html>""" % (_CESIUM, _CESIUM))
+
 
 def _cameras_from_gps(imgs: list[dict]) -> list[dict]:
     """Project EXIF GPS to a local ENU frame (metres) centred on the set — a pre-alignment preview."""
@@ -606,6 +633,10 @@ class _Handler(BaseHTTPRequestHandler):
                 parse_qs(u.query).get("chunk", [None])[0]))
         if route == "/api/report":
             return self._report()
+        if route == "/api/cesium":
+            return self._cesium(parse_qs(u.query).get("layer", [""])[0])
+        if route.startswith("/tiles3d/"):
+            return self._tiles3d(route[len("/tiles3d/"):])
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -862,6 +893,26 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(pdf)))
         self.end_headers()
         self.wfile.write(pdf)
+
+    def _tiles3d(self, rest):
+        """Serve a 3D-Tiles file (tileset.json / tile_*.glb) of a tiles layer for Cesium streaming."""
+        lid, _, fname = rest.partition("/")
+        tdir = self.state._last_run().get(lid, {}).get("artifacts", {}).get("tiles")
+        if not tdir:
+            return self._send(404, {"error": "no tiles for that layer"})
+        base = Path(tdir).resolve()
+        p = (base / fname).resolve()
+        if base != p and base not in p.parents:
+            return self._send(403, {"error": "outside tiles dir"})
+        if not p.is_file():
+            return self._send(404, {"error": "not found"})
+        self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "application/octet-stream"))
+
+    def _cesium(self, lid):
+        """A self-contained CesiumJS page that streams a tiles layer over /tiles3d/<id>/."""
+        if "tiles" not in self.state._last_run().get(lid, {}).get("artifacts", {}):
+            return self._send(404, {"error": "run a Build Tiled Model layer first"})
+        self._send(200, _CESIUM_HTML.replace("__LAYER__", lid), "text/html")
 
     def _thumb(self, path):
         """Serve an image file from anywhere (image suffixes only) for the Add-Photos picker."""

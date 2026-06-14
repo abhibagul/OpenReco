@@ -1,57 +1,20 @@
 [project]
 name = "Aerial demo"
 crs = "EPSG:32613"
-chunks = ["abhishek"]
 
 [[stage]]
 id = "ingest1"
 type = "ingest"
-chunk = "abhishek"
 params = { image_dir = "C:\\Users\\abbyb\\Downloads\\example_building\\images", blur_relative = 0.15 }
 
 [[stage]]
 id = "sfm1"
 type = "sfm"
-chunk = "abhishek"
 inputs = ["ingest1"]
-params = { max_image_size = 1200, matcher = "sequential", max_num_features = 4096, camera_mode = "auto", mapper = "incremental" }
+params = { max_image_size = 700, max_num_features = 3000, matcher = "spatial", camera_mode = "auto", mapper = "incremental" }
 
 [[stage]]
 id = "mvs1"
 type = "mvs"
-chunk = "abhishek"
 inputs = ["ingest1", "sfm1"]
-params = { quality = "low", geometric_consistency = false, dense_backend = "auto", planesweep_max_dim = 600 }
-
-[[stage]]
-id = "dsm1"
-type = "dsm"
-chunk = "abhishek"
-inputs = ["mvs1"]
-params = { resolution_m = 1.0 }
-
-[[stage]]
-id = "clean1"
-type = "clean"
-chunk = "abhishek"
-inputs = ["mvs1"]
-params = { mode = "points", knn = 16, std_ratio = 2, min_component_ratio = 0.02 }
-
-[[stage]]
-id = "mvs1_edit1"
-type = "import_cloud"
-chunk = "abhishek"
-params = { path = "D:\\openreco\\testproj\\edits\\mvs1_edit1.ply", crs_epsg = 0, origin = [0.0, 0.0, 0.0] }
-
-[[stage]]
-id = "mvs1_edit1_edit1"
-type = "import_cloud"
-chunk = "abhishek"
-params = { path = "D:\\openreco\\testproj\\edits\\mvs1_edit1_edit1.ply", crs_epsg = 0, origin = [0.0, 0.0, 0.0] }
-
-[[stage]]
-id = "ortho1"
-type = "ortho"
-chunk = "abhishek"
-inputs = ["mvs1_edit1_edit1"]
-params = { resolution_m = 0.5 }
+params = { quality = "low", geometric_consistency = true, planesweep_max_dim = 600, dense_backend = "auto" }

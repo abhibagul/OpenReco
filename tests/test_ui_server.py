@@ -206,6 +206,7 @@ def test_frontend_has_workspace_chunks(server):
     assert b"/api/geo_overlay" in appjs and b"showOnMap" in appjs        # web map overlay
     assert b"/api/edit_cloud" in appjs and b"selectInPoly" in appjs       # 3D edit (box)
     assert b"/api/edit_mesh" in appjs and b"lassoBtn" in appjs and b"frontMostFilter" in appjs  # lasso/mesh/depth
+    assert b"/api/cesium" in appjs                                        # Cesium 3D-Tiles viewer
     assert b"setupSplitters" in appjs and b"snapView" in appjs and b"gridline" in appjs  # infinite grid shader
     assert b"runPipeline" in appjs and b"camera.up.set(0, 0, 1)" in appjs   # Z-up world
     assert b"rotateGizmo" in appjs and b"contourView" in appjs               # navcube nav + contour overlay
@@ -411,6 +412,45 @@ def test_use_gcps_needs_georef_stage(server):
         raise AssertionError("expected 400")
     except urllib.error.HTTPError as e:
         assert e.code == 400
+
+
+def test_export_dxf_vector(tmp_path):
+    from openreco.exporters import export_product, list_formats
+    gj = {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "geometry": {"type": "MultiLineString", "coordinates": [[[0, 0], [1, 1], [2, 0]]]}}]}
+    src = tmp_path / "contours.geojson"
+    src.write_text(json.dumps(gj), "utf-8")
+    assert "dxf" in list_formats(src)
+    out = export_product(src, "dxf", tmp_path / "c.dxf")
+    assert "LWPOLYLINE" in out.read_text()
+
+
+def test_cesium_and_tiles3d(tmp_path):
+    tdir = tmp_path / "tiles"
+    tdir.mkdir()
+    (tdir / "tileset.json").write_text('{"asset":{"version":"1.1"}}', "utf-8")
+    (tdir / "tile_0_0.glb").write_bytes(b"glTF\x02\x00\x00\x00")
+    proj = Project.create(tmp_path / "proj", name="t3d").add_stage("tm", "tiles")
+    proj.manifest.runs_dir.mkdir(parents=True, exist_ok=True)
+    (proj.manifest.runs_dir / "latest.json").write_text(json.dumps(
+        {"stages": [{"id": "tm", "status": "executed", "artifacts": {"tiles": str(tdir)}}]}), "utf-8")
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        _, html = _get(base + "/api/cesium?layer=tm")
+        assert b"Cesium" in html and b"/tiles3d/tm/tileset.json" in html
+        status, body = _get(base + "/tiles3d/tm/tileset.json")
+        assert status == 200 and b'"asset"' in body
+        # sandbox: escaping the tiles dir is refused
+        try:
+            _get(base + "/tiles3d/tm/" + urllib.request.quote("../../secret"))
+            raise AssertionError("expected non-200")
+        except urllib.error.HTTPError as e:
+            assert e.code in (403, 404)
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
 
 
 def test_report_pdf_builds():

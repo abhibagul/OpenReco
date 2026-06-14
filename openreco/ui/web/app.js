@@ -761,6 +761,8 @@ function selectLayer(id) {
 // double-click: open a layer in whichever view fits it best
 function openLayer(L) {
   selected = L.id; renderParams(L);
+  if (L.type === 'tiles') { window.open('/api/cesium?layer=' + encodeURIComponent(L.id), '_blank');
+    log(`opening ${L.id} in Cesium…`); return; }              // streamable 3D Tiles
   if (L.type === 'contours') { contourView(L); return; }       // contour lines over the DSM
   if (rasterArtifact(L)) { rasterView(L); return; }            // ortho / DEM / index -> 2D
   if (viewable(L)) { setVisible(L, true); selectVtab('model'); frameAll(); return; }  // mesh/cloud -> 3D
