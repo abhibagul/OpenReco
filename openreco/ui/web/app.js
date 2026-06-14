@@ -25,7 +25,10 @@ const CAT_ORDER = ["Cameras", "Tie Points", "Markers", "Dense Cloud", "Point Clo
                    "3D Model", "Tiled Model", "DEM", "Orthomosaic", "Shapes", "Other"];
 
 const $ = (id) => document.getElementById(id);
-const log = (m) => { const l = $('log'); l.textContent += `\n${m}`; l.scrollTop = l.scrollHeight; };
+const log = (m) => { const l = $('log');
+  let lines = (l.textContent + `\n${m}`).split('\n');
+  if (lines.length > 800) lines = lines.slice(-800);   // cap: native run logs can be thousands of lines
+  l.textContent = lines.join('\n'); l.scrollTop = l.scrollHeight; };
 
 // ---- 3D viewport ----------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });

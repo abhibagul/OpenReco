@@ -80,6 +80,62 @@ class _QueueLogHandler(logging.Handler):
             pass
 
 
+class _StderrCapture:
+    """Tee the OS-level stderr (fd 2) into the SSE queue during a run.
+
+    COLMAP/glog (and other native libs) write straight to file descriptor 2, bypassing Python's
+    logging, so the only way to surface their per-image output in the UI Console is to redirect the
+    fd through a pipe. Lines are still echoed to the real terminal. Best-effort: if the platform
+    refuses the redirect, the run proceeds without native-log capture."""
+
+    def __init__(self, q: queue.Queue):
+        self.q = q
+        self.ok = False
+
+    def __enter__(self):
+        try:
+            self._r, self._w = os.pipe()
+            self._saved = os.dup(2)
+            os.dup2(self._w, 2)
+            os.close(self._w)
+            self._thread = threading.Thread(target=self._pump, daemon=True)
+            self._thread.start()
+            self.ok = True
+        except Exception:  # noqa: BLE001 — never let log capture break a run
+            self.ok = False
+        return self
+
+    def _pump(self):
+        buf = b""
+        while True:
+            try:
+                chunk = os.read(self._r, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            try:
+                os.write(self._saved, chunk)        # keep echoing to the real terminal
+            except OSError:
+                pass
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                text = line.decode("utf-8", "replace").rstrip("\r")
+                if text:
+                    self.q.put({"event": "log", "level": "INFO", "msg": text})
+
+    def __exit__(self, *_exc):
+        if not self.ok:
+            return
+        try:
+            os.dup2(self._saved, 2)                  # restore -> pipe write side fully closed -> EOF
+            os.close(self._saved)
+            os.close(self._r)
+        except OSError:
+            pass
+
+
 def _unique_id(base: str, taken: set[str]) -> str:
     n = 1
     while f"{base}{n}" in taken:
@@ -352,8 +408,9 @@ class AppState:
             log.setLevel(logging.INFO)
             log.addHandler(handler)
             try:
-                self.project.run(force=force, on_event=self.events.put,
-                                 cancel=lambda: self.cancel_requested)
+                with _StderrCapture(self.events):       # surface COLMAP/glog native output too
+                    self.project.run(force=force, on_event=self.events.put,
+                                     cancel=lambda: self.cancel_requested)
             except Exception as exc:  # noqa: BLE001
                 self.events.put({"event": "run_error", "error": repr(exc)})
             finally:
