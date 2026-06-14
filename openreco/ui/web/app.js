@@ -36,10 +36,59 @@ const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(1, 1, 1); scene.add(dl);
 const measureGroup = new THREE.Group(); scene.add(measureGroup);
+// ground grid + axis triad (orientation aids)
+const grid = new THREE.GridHelper(1, 20, 0x3b4660, 0x222b38); scene.add(grid);
+const axes = new THREE.AxesHelper(1); scene.add(axes);
+let helpers = true;
 function resize() { const w = $('center').clientWidth, h = $('center').clientHeight;
   renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize);
-(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+// ---- navigation cube (CAD-style navigation cube) -----------------------------
+const gizmoR = new THREE.WebGLRenderer({ canvas: $('gizmo'), antialias: true, alpha: true });
+gizmoR.setPixelRatio(devicePixelRatio); gizmoR.setSize(96, 96);
+const gizmoScene = new THREE.Scene();
+const gizmoCam = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 100);
+gizmoCam.position.set(0, 0, 5);
+gizmoScene.add(new THREE.AmbientLight(0xffffff, 0.9));
+const gizmoLight = new THREE.DirectionalLight(0xffffff, 0.6); gizmoLight.position.set(2, 3, 4); gizmoScene.add(gizmoLight);
+function faceTex(label, bg) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d'); x.fillStyle = bg; x.fillRect(0, 0, 128, 128);
+  x.strokeStyle = '#0b0e14'; x.lineWidth = 6; x.strokeRect(3, 3, 122, 122);
+  x.fillStyle = '#0b0e14'; x.font = 'bold 26px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(label, 64, 68);
+  const t = new THREE.CanvasTexture(c); return t;
+}
+// BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z
+const gizmoFaces = [['RIGHT', '#89b4fa'], ['LEFT', '#89b4fa'], ['TOP', '#a6e3a1'],
+                    ['BOTTOM', '#a6e3a1'], ['FRONT', '#f9e2af'], ['BACK', '#f9e2af']];
+const gizmoCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2),
+  gizmoFaces.map(([l, b]) => new THREE.MeshBasicMaterial({ map: faceTex(l, b) })));
+gizmoScene.add(gizmoCube);
+gizmoScene.add(new THREE.LineSegments(new THREE.EdgesGeometry(gizmoCube.geometry),
+  new THREE.LineBasicMaterial({ color: 0x0b0e14 })));
+const gizmoRay = new THREE.Raycaster();
+$('gizmo').addEventListener('pointerdown', (e) => {
+  const r = $('gizmo').getBoundingClientRect();
+  const ndc = new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  gizmoRay.setFromCamera(ndc, gizmoCam);
+  const hit = gizmoRay.intersectObject(gizmoCube)[0];
+  if (hit && hit.face) snapView(hit.face.normal.clone());   // local normal = world axis to view from
+});
+function snapView(n) {
+  const d = camera.position.distanceTo(controls.target) || 10;
+  camera.up.set(0, 1, 0);
+  if (Math.abs(n.y) > 0.9) camera.up.set(0, 0, -Math.sign(n.y));   // looking straight down/up
+  camera.position.copy(controls.target).add(n.normalize().multiplyScalar(d));
+  camera.lookAt(controls.target); controls.update();
+}
+
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera);
+  // cube mirrors the main camera orientation
+  gizmoCube.quaternion.copy(camera.quaternion).invert();
+  gizmoR.render(gizmoScene, gizmoCam);
+})();
 
 function frameAll() {
   const box = new THREE.Box3();
@@ -48,7 +97,12 @@ function frameAll() {
   const size = box.getSize(new THREE.Vector3()).length(), c = box.getCenter(new THREE.Vector3());
   controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(size*.6, size*.5, size*.6));
   camera.near = size/1000; camera.far = size*10; camera.updateProjectionMatrix();
+  // fit the orientation aids to the content
+  const g = size || 1;
+  grid.scale.setScalar(g); grid.position.set(c.x, box.min.y, c.z);
+  axes.scale.setScalar(g * 0.5); axes.position.copy(box.min);
 }
+function toggleHelpers() { helpers = !helpers; grid.visible = helpers; axes.visible = helpers; }
 
 // load an artifact into a THREE object (mesh / point cloud / gaussian splat as points)
 function loadObject(layer) {
@@ -518,6 +572,7 @@ async function loadWorkflows() {
   // Model menu = view helpers
   $('m-model').innerHTML = '';
   menuEntry('m-model', 'Frame all', frameAll);
+  menuEntry('m-model', '▦ Show / hide grid + axes', toggleHelpers);
   menuEntry('m-model', '📷 Show / hide cameras', () => showCameras(), 'camera positions of the active chunk');
   menuEntry('m-model', 'Hide all layers', () => { visible.forEach(id => { const o = objects.get(id); if (o) o.visible = false; });
     visible.clear(); renderWorkspace(); });
@@ -896,6 +951,30 @@ async function submitOp(op) {
   else log(`build error: ${j.error}`);
 }
 
+// ---- resizable panes (drag the splitters; persisted in localStorage) ------
+function setupSplitters() {
+  const root = document.documentElement, css = getComputedStyle(root);
+  const px = (v) => parseInt(v) || 0;
+  // restore saved sizes
+  ['--left-w', '--right-w', '--dock-h'].forEach(v => {
+    const s = localStorage.getItem('ore' + v); if (s) root.style.setProperty(v, s);
+  });
+  const drag = (el, onMove) => {
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); el.classList.add('drag'); el.setPointerCapture(e.pointerId);
+      const move = (ev) => onMove(ev);
+      const up = (ev) => { el.classList.remove('drag'); el.releasePointerCapture(ev.pointerId);
+        el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up);
+        ['--left-w', '--right-w', '--dock-h'].forEach(v => localStorage.setItem('ore' + v, css.getPropertyValue(v)));
+        resize(); };
+      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
+    });
+  };
+  drag($('splitL'), (e) => root.style.setProperty('--left-w', Math.max(160, Math.min(e.clientX, innerWidth - 400)) + 'px'));
+  drag($('splitR'), (e) => root.style.setProperty('--right-w', Math.max(180, Math.min(innerWidth - e.clientX, innerWidth - 400)) + 'px'));
+  drag($('splitD'), (e) => root.style.setProperty('--dock-h', Math.max(60, Math.min(innerHeight - e.clientY, innerHeight - 180)) + 'px'));
+}
+
 // ---- boot ----
-(async () => { resize(); await loadStages(); await loadWorkflows(); await loadProject();
-  await loadMarkers(); })();
+(async () => { setupSplitters(); resize(); await loadStages(); await loadWorkflows();
+  await loadProject(); await loadMarkers(); })();

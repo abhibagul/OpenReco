@@ -11,11 +11,18 @@
   html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
               font:13px/1.5 system-ui,sans-serif; overflow:hidden; }
   /* industry-standard layout: menu bar / toolbar / [left | center | right] / bottom dock */
+  :root { --left-w:300px; --right-w:330px; --dock-h:190px; --hdr-h:60px; }
   #app { display:grid;
-         grid-template-columns:300px 1fr 330px;
-         grid-template-rows:26px 34px 1fr 190px;
+         grid-template-columns:var(--left-w) 1fr var(--right-w);
+         grid-template-rows:26px 34px 1fr var(--dock-h);
          grid-template-areas:"menu menu menu" "tool tool tool" "left center right" "dock dock dock";
          height:100vh; }
+  /* drag handles to resize panes */
+  .split { position:fixed; z-index:40; background:transparent; }
+  .split:hover, .split.drag { background:var(--accent); opacity:.5; }
+  .split.v { width:6px; top:var(--hdr-h); bottom:var(--dock-h); cursor:col-resize; }
+  .split.h { height:6px; left:0; right:0; bottom:calc(var(--dock-h) - 3px); cursor:row-resize; }
+  #splitL { left:calc(var(--left-w) - 3px); } #splitR { right:calc(var(--right-w) - 3px); }
   /* menu bar */
   #menubar { grid-area:menu; display:flex; align-items:stretch; background:var(--panel);
              border-bottom:1px solid var(--line); }
@@ -50,6 +57,7 @@
   #imgview img { display:block; max-width:none; } #imgview .pin { position:absolute; width:12px; height:12px;
      margin:-6px 0 0 -6px; border:2px solid var(--warn); border-radius:50%; background:#0008; cursor:pointer; }
   #imgview .pin span { position:absolute; left:14px; top:-4px; color:var(--warn); font-size:11px; white-space:nowrap; }
+  #gizmo { position:absolute; top:38px; right:10px; width:96px; height:96px; z-index:6; cursor:pointer; }
   #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:5; }
   #vtabs button.on { background:var(--accent); color:#0b0e14; }
   #measure { position:absolute; top:8px; right:8px; background:#0009; border:1px solid var(--line);
@@ -180,6 +188,7 @@
       <button data-vtab="photo">Photo</button>
     </div>
     <canvas id="c"></canvas>
+    <canvas id="gizmo" title="Navigation cube — click a face to snap the view"></canvas>
     <div id="imgview"><div id="imgwrap"></div></div>
     <div id="orthoview"><img id="orthoimg" alt=""><div id="orthohint"></div></div>
     <div id="measure"></div>
@@ -205,6 +214,9 @@
 </div>
 
 <!-- Build dialog (workflow op) -->
+<div id="splitL" class="split v"></div>
+<div id="splitR" class="split v"></div>
+<div id="splitD" class="split h"></div>
 <div id="ctxMenu" class="hidden"></div>
 
 <div id="modal" class="modal hidden"><div class="dialog">
