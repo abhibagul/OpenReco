@@ -17,6 +17,7 @@ from openreco.stages import georef  # noqa: F401
 from openreco.stages import indices  # noqa: F401
 from openreco.stages import ingest  # noqa: F401
 from openreco.stages import markers  # noqa: F401
+from openreco.stages import merge  # noqa: F401
 from openreco.stages import mesh  # noqa: F401
 from openreco.stages import mvs  # noqa: F401
 from openreco.stages import panorama  # noqa: F401
@@ -27,4 +28,4 @@ from openreco.stages import texture  # noqa: F401
 from openreco.stages import tiles  # noqa: F401
 
 __all__ = ["classify", "contours", "coverage", "dsm", "dtm", "dummy", "export", "fuse", "georef",
-           "indices", "ingest", "markers", "mesh", "mvs", "panorama", "refine", "sfm", "splat", "texture", "tiles"]
+           "indices", "ingest", "markers", "merge", "mesh", "mvs", "panorama", "refine", "sfm", "splat", "texture", "tiles"]

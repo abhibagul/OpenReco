@@ -90,6 +90,12 @@ OPERATIONS: list[dict[str, Any]] = [
         "desc": "Generate contour lines from the DEM.",
         "fields": [{"label": "Interval (m)", "param": "interval_m", "type": "float", "default": 10.0}],
     },
+    {
+        "op": "Merge Chunks", "stage": "merge_chunks",
+        "desc": "Align separate chunks (ICP) and merge their point clouds into one.",
+        "fields": [{"label": "Initial alignment", "param": "init", "type": "enum", "default": "Centroid",
+                    "options": {"Centroid": "centroid", "None": "none"}}],
+    },
 ]
 
 _BY_OP = {o["op"]: o for o in OPERATIONS}
