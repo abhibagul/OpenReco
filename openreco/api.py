@@ -83,6 +83,14 @@ class Project:
         )
         return self
 
+    def add_operation(self, op: str, id: str, inputs: list[str] | None = None,
+                      values: dict[str, Any] | None = None) -> "Project":
+        """Add a stage from a familiar workflow operation (e.g. 'Build Dense Cloud') + field values,
+        translated to the underlying stage/params via openreco.workflow."""
+        from openreco.workflow import to_stage
+        spec = to_stage(op, values)
+        return self.add_stage(id, spec["stage_type"], inputs=inputs, params=spec["params"])
+
     @property
     def stages(self) -> list[StageSpec]:
         return self.manifest.stages

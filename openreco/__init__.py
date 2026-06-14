@@ -26,4 +26,8 @@ def __getattr__(name: str):
         from openreco.geo import crs
 
         return getattr(crs, name)
+    if name in ("workflow_operations", "to_stage"):
+        from openreco import workflow
+
+        return workflow.operations if name == "workflow_operations" else workflow.to_stage
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

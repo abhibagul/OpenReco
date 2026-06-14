@@ -111,6 +111,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self._static(route.lstrip("/"))
         if route == "/api/stages":
             return self._send(200, stage_info())
+        if route == "/api/workflows":
+            from openreco.workflow import operations
+            return self._send(200, operations())
         if route == "/api/project":
             return self._send(200, self.state.project_json())
         if route == "/api/events":
