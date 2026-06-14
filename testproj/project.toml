@@ -7,21 +7,21 @@ chunks = ["abhishek"]
 id = "ingest1"
 type = "ingest"
 chunk = "abhishek"
-params = { image_dir = "C:\\Users\\abbyb\\Downloads\\example_building\\images" }
+params = { image_dir = "C:\\Users\\abbyb\\Downloads\\example_building\\images", blur_relative = 0.15 }
 
 [[stage]]
 id = "sfm1"
 type = "sfm"
 chunk = "abhishek"
 inputs = ["ingest1"]
-params = { max_image_size = 3200, matcher = "exhaustive", max_num_features = 12000, camera_mode = "auto", mapper = "incremental" }
+params = { max_image_size = 1200, matcher = "sequential", max_num_features = 4096, camera_mode = "auto", mapper = "incremental" }
 
 [[stage]]
 id = "mvs1"
 type = "mvs"
 chunk = "abhishek"
 inputs = ["ingest1", "sfm1"]
-params = { quality = "high", geometric_consistency = true, dense_backend = "auto", planesweep_max_dim = 900 }
+params = { quality = "low", geometric_consistency = false, dense_backend = "auto", planesweep_max_dim = 600 }
 
 [[stage]]
 id = "classify1"

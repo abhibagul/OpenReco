@@ -333,23 +333,33 @@
         <button id="addBtn"><svg class="ic"><use href="#i-plus"/></svg> Add</button></div>
     </div>
     <div id="lt-reference" class="pad hidden">
-      <h3>Coordinate system</h3>
-      <div id="refCrs" class="muted"></div>
-      <button id="refCrsBtn" style="margin-top:6px"><svg class="ic"><use href="#i-globe"/></svg> Set CRS…</button>
-      <h3>Markers / GCPs</h3>
-      <div id="markerTable"></div>
-      <div class="row" style="margin-top:6px">
-        <button id="addMarker"><svg class="ic"><use href="#i-pin"/></svg> Marker</button><span class="sp"></span>
-        <button class="run" id="saveMarkers"><svg class="ic"><use href="#i-save"/></svg> Save GCPs</button></div>
-      <div class="row" style="margin-top:6px">
-        <select id="mkDict" title="Coded-target dictionary" style="width:auto"></select>
-        <button id="detectMarkers" title="Auto-detect coded targets in this chunk's photos"><svg class="ic"><use href="#i-target"/></svg> Detect</button>
-        <button id="markerSheet" title="Printable coded-target sheet"><svg class="ic"><use href="#i-image"/></svg> Sheet</button>
+      <div class="section" style="margin-top:0">
+        <div class="stitle"><svg class="ic"><use href="#i-globe"/></svg> Coordinate system</div>
+        <div id="refCrs" class="muted"></div>
+        <button id="refCrsBtn" style="margin-top:8px; width:100%; justify-content:center"><svg class="ic"><use href="#i-globe"/></svg> Set CRS…</button>
       </div>
-      <button id="useGcps" style="margin-top:6px; width:100%; justify-content:center"><svg class="ic"><use href="#i-target"/></svg> Use these GCPs for georeferencing</button>
-      <div class="muted" style="margin-top:6px">Pick: select a marker, open a photo in the Photo tab, click to add an observation. Mark some as <b>check</b> to validate accuracy (held out of the fit). Then Save and "Use these GCPs".</div>
-      <h3>GCP accuracy <span class="sp"></span><button id="refreshAcc" style="padding:2px 6px"><svg class="ic"><use href="#i-refresh"/></svg></button></h3>
-      <div id="gcpAccuracy" class="muted">Run Georeference with GCPs to see residuals.</div>
+
+      <div class="section">
+        <div class="stitle"><svg class="ic"><use href="#i-pin"/></svg> Ground control (GCPs)
+          <span class="sp"></span><select id="mkDict" title="Coded-target dictionary" style="width:auto"></select></div>
+        <div class="actions" style="margin-top:0">
+          <button id="addMarker" title="Add a marker manually"><svg class="ic"><use href="#i-plus"/></svg> Add</button>
+          <button id="detectMarkers" title="Auto-detect coded targets in this chunk's photos"><svg class="ic"><use href="#i-target"/></svg> Detect</button>
+          <button id="markerSheet" title="Printable coded-target sheet"><svg class="ic"><use href="#i-image"/></svg> Sheet</button>
+        </div>
+        <div id="markerTable" style="margin-top:8px"></div>
+        <div class="actions">
+          <button class="run" id="saveMarkers"><svg class="ic"><use href="#i-save"/></svg> Save GCPs</button>
+          <button id="useGcps" title="Point this chunk's Georeference step at these GCPs"><svg class="ic"><use href="#i-target"/></svg> Use for georef</button>
+        </div>
+        <div class="muted" style="margin-top:6px; font-size:11px">Detect coded targets (or Add a marker and pick it in a photo), set X/Y/Z, mark some as <b>check</b>, then Save → Use for georef.</div>
+      </div>
+
+      <div class="section">
+        <div class="stitle"><svg class="ic"><use href="#i-chart"/></svg> GCP accuracy
+          <span class="sp"></span><button id="refreshAcc" class="iconbtn" title="Refresh"><svg class="ic"><use href="#i-refresh"/></svg></button></div>
+        <div id="gcpAccuracy" class="muted">Run Georeference with GCPs to see residuals.</div>
+      </div>
     </div>
   </div>
   <!-- center viewport -->
