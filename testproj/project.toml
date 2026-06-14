@@ -1,6 +1,6 @@
 [project]
 name = "Aerial demo"
-crs = "EPSG:32613"
+crs = "EPSG:5864"
 
 [[stage]]
 id = "photos"

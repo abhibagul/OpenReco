@@ -124,6 +124,9 @@ def test_frontend_has_workflow_ui(server):
     assert b"loadWorkflows" in appjs and b"/api/operation" in appjs
     _, html = _get(base + "/")
     assert b"Workflow" in html and b"modal" in html
+    # modals/menus must start hidden — .hidden has to beat .modal's display:flex
+    assert b"display:none !important" in html
+    assert b'id="crsModal" class="modal hidden"' in html and b'id="modal" class="modal hidden"' in html
 
 
 def test_chunks_workspace(server):
