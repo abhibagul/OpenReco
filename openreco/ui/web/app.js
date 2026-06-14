@@ -65,34 +65,70 @@ const gizmoCam = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 100);
 gizmoCam.position.set(0, 0, 5);
 gizmoScene.add(new THREE.AmbientLight(0xffffff, 0.9));
 const gizmoLight = new THREE.DirectionalLight(0xffffff, 0.6); gizmoLight.position.set(2, 3, 4); gizmoScene.add(gizmoLight);
-function faceTex(label, bg) {
+function faceTex(label) {            // CAD-style: light face, dark centered label
   const c = document.createElement('canvas'); c.width = c.height = 128;
-  const x = c.getContext('2d'); x.fillStyle = bg; x.fillRect(0, 0, 128, 128);
-  x.strokeStyle = '#0b0e14'; x.lineWidth = 6; x.strokeRect(3, 3, 122, 122);
-  x.fillStyle = '#0b0e14'; x.font = 'bold 26px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.fillText(label, 64, 68);
-  const t = new THREE.CanvasTexture(c); return t;
+  const x = c.getContext('2d');
+  x.fillStyle = '#dfe4ec'; x.fillRect(0, 0, 128, 128);
+  x.strokeStyle = '#9aa6b8'; x.lineWidth = 4; x.strokeRect(2, 2, 124, 124);
+  x.fillStyle = '#2a3344'; x.font = 'bold 22px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(label, 64, 66);
+  return new THREE.CanvasTexture(c);
 }
-// BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z (Z-up world: +Z=TOP, +X=EAST/right, +Y=NORTH/back)
-const gizmoFaces = [['EAST', '#89b4fa'], ['WEST', '#89b4fa'], ['NORTH', '#f9e2af'],
-                    ['SOUTH', '#f9e2af'], ['TOP', '#a6e3a1'], ['BOTTOM', '#a6e3a1']];
+// BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z. Z-up world, CAD labels.
+const gizmoFaces = ['RIGHT', 'LEFT', 'BACK', 'FRONT', 'TOP', 'BOTTOM'];
 const gizmoCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2),
-  gizmoFaces.map(([l, b]) => new THREE.MeshBasicMaterial({ map: faceTex(l, b) })));
+  gizmoFaces.map(l => new THREE.MeshBasicMaterial({ map: faceTex(l) })));
 gizmoScene.add(gizmoCube);
 gizmoScene.add(new THREE.LineSegments(new THREE.EdgesGeometry(gizmoCube.geometry),
-  new THREE.LineBasicMaterial({ color: 0x0b0e14 })));
+  new THREE.LineBasicMaterial({ color: 0x6b7689 })));
+
+// per-region hover highlight (faces / edges / corners), child of the cube so it rotates with it
+const GZ_M = 0.66;                   // face half-extent; outer band [M,1] = edges/corners
+const gizmoHi = new THREE.Mesh(new THREE.BufferGeometry(),
+  new THREE.MeshBasicMaterial({ color: 0x1e88ff, transparent: true, opacity: 0.5, depthTest: false }));
+gizmoHi.renderOrder = 2; gizmoHi.visible = false; gizmoCube.add(gizmoHi);
+function gizmoZone(p) {              // p in cube-local [-1,1]^3 -> region normal (-1/0/1 per axis)
+  const s = (v) => (Math.abs(v) > GZ_M ? Math.sign(v) : 0);
+  const n = [s(p.x), s(p.y), s(p.z)];
+  // the face axis (|coord|~1) is always part of the zone even if exactly on M
+  [0, 1, 2].forEach(i => { if (Math.abs([p.x, p.y, p.z][i]) > 0.999) n[i] = Math.sign([p.x, p.y, p.z][i]); });
+  return n;
+}
+function gizmoHighlight(n) {         // build highlight quads on the cube surface for zone n
+  const verts = [];
+  const rng = (k) => (n[k] === 0 ? [-GZ_M, GZ_M] : (n[k] > 0 ? [GZ_M, 1] : [-1, -GZ_M]));
+  for (let fa = 0; fa < 3; fa++) {
+    if (n[fa] === 0) continue;
+    const o = [0, 1, 2].filter(i => i !== fa);
+    const [a0, a1] = rng(o[0]), [b0, b1] = rng(o[1]);
+    const mk = (av, bv) => { const q = [0, 0, 0]; q[fa] = n[fa] * 1.02; q[o[0]] = av; q[o[1]] = bv; return q; };
+    const c = [mk(a0, b0), mk(a1, b0), mk(a1, b1), mk(a0, b1)];
+    verts.push(...c[0], ...c[1], ...c[2], ...c[0], ...c[2], ...c[3]);
+  }
+  gizmoHi.geometry.dispose();
+  gizmoHi.geometry = new THREE.BufferGeometry();
+  gizmoHi.geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  gizmoHi.visible = verts.length > 0;
+}
 const gizmoRay = new THREE.Raycaster();
-$('gizmo').addEventListener('pointerdown', (e) => {
+let gizmoHoverN = null;
+function gizmoPick(e) {
   const r = $('gizmo').getBoundingClientRect();
   const ndc = new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
   gizmoRay.setFromCamera(ndc, gizmoCam);
   const hit = gizmoRay.intersectObject(gizmoCube)[0];
-  if (!hit) return;
-  // sign-snap the hit point in cube-local space -> face (1 axis), edge (2 axes) or corner (3 axes)
-  const loc = gizmoCube.worldToLocal(hit.point.clone());
-  const s = (v) => (Math.abs(v) > 0.45 ? Math.sign(v) : 0);
-  const n = new THREE.Vector3(s(loc.x), s(loc.y), s(loc.z));
-  if (n.lengthSq() > 0) snapView(n);
+  if (!hit) return null;
+  return gizmoZone(gizmoCube.worldToLocal(hit.point.clone()));
+}
+$('gizmo').addEventListener('pointermove', (e) => {
+  const n = gizmoPick(e);
+  gizmoHoverN = n;
+  if (n && (n[0] || n[1] || n[2])) gizmoHighlight(n); else gizmoHi.visible = false;
+});
+$('gizmo').addEventListener('pointerleave', () => { gizmoHi.visible = false; gizmoHoverN = null; });
+$('gizmo').addEventListener('pointerdown', (e) => {
+  const n = gizmoPick(e);
+  if (n && (n[0] || n[1] || n[2])) snapView(new THREE.Vector3(n[0], n[1], n[2]));
 });
 function snapView(n) {
   const d = camera.position.distanceTo(controls.target) || 10;
