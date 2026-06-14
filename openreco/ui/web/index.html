@@ -31,6 +31,10 @@
   .dot { width:8px; height:8px; border-radius:50%; background:#444c5c; flex:0 0 auto; }
   .dot.executed,.dot.cached { background:var(--ok); } .dot.failed { background:var(--err); }
   .dot.running { background:var(--warn); }
+  .chunk { padding:5px 6px; font-weight:600; cursor:pointer; border-radius:4px; display:flex; gap:6px; }
+  .chunk:hover { background:#1a2230; } .chunk.active { color:var(--accent); }
+  .chunk .cnt { color:var(--muted); font-weight:400; }
+  #workspace .layer { margin-left:12px; }
   label { display:block; margin:8px 0 2px; color:var(--muted); font-size:11px; }
   input,select { width:100%; background:#0d121b; color:var(--fg); border:1px solid var(--line);
                  border-radius:4px; padding:5px; font-size:12px; }
@@ -63,9 +67,12 @@
     <button class="run" id="runBtn">▶ Run pipeline</button>
   </div>
   <div id="left">
-    <h3>Layers</h3>
-    <div id="layers"></div>
-    <h3>Add layer</h3>
+    <h3>Workspace</h3>
+    <div class="row" style="margin-bottom:6px">
+      <span id="activeChunk" class="muted"></span><span class="sp"></span>
+      <button id="newChunk">+ Chunk</button></div>
+    <div id="workspace"></div>
+    <h3>Add layer (advanced)</h3>
     <div class="row"><select id="newType"></select></div>
     <div class="row" style="margin-top:6px"><input id="newId" placeholder="layer id" />
       <button id="addBtn">Add</button></div>

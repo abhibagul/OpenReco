@@ -74,22 +74,28 @@ class Project:
 
     # ---- editing -----------------------------------------------------------------------
     def add_stage(self, id: str, type: str, inputs: list[str] | None = None,
-                  params: dict[str, Any] | None = None) -> "Project":
-        """Append a stage. Returns self for chaining."""
+                  params: dict[str, Any] | None = None, chunk: str = "Chunk 1") -> "Project":
+        """Append a stage (layer) to a workspace chunk. Returns self for chaining."""
         if any(s.id == id for s in self.manifest.stages):
             raise ValueError(f"duplicate stage id: {id!r}")
         self.manifest.stages.append(
-            StageSpec(id=id, type=type, params=dict(params or {}), inputs=list(inputs or []))
-        )
+            StageSpec(id=id, type=type, params=dict(params or {}), inputs=list(inputs or []),
+                      chunk=chunk))
+        return self
+
+    def add_chunk(self, name: str) -> "Project":
+        """Register a (possibly empty) workspace chunk."""
+        if name not in self.manifest.chunks:
+            self.manifest.chunks.append(name)
         return self
 
     def add_operation(self, op: str, id: str, inputs: list[str] | None = None,
-                      values: dict[str, Any] | None = None) -> "Project":
+                      values: dict[str, Any] | None = None, chunk: str = "Chunk 1") -> "Project":
         """Add a stage from a familiar workflow operation (e.g. 'Build Dense Cloud') + field values,
         translated to the underlying stage/params via openreco.workflow."""
         from openreco.workflow import to_stage
         spec = to_stage(op, values)
-        return self.add_stage(id, spec["stage_type"], inputs=inputs, params=spec["params"])
+        return self.add_stage(id, spec["stage_type"], inputs=inputs, params=spec["params"], chunk=chunk)
 
     @property
     def stages(self) -> list[StageSpec]:
@@ -148,8 +154,13 @@ class Project:
         lines = ["[project]", f'name = "{self.manifest.name}"']
         if self.manifest.crs:
             lines.append(f'crs = "{self.manifest.crs}"')
+        chunks = self.manifest.chunk_names()
+        if chunks != ["Chunk 1"]:
+            lines.append("chunks = [" + ", ".join(f'"{c}"' for c in chunks) + "]")
         for s in self.manifest.stages:
             lines += ["", "[[stage]]", f'id = "{s.id}"', f'type = "{s.type}"']
+            if s.chunk and s.chunk != "Chunk 1":
+                lines.append(f'chunk = "{s.chunk}"')
             if s.inputs:
                 inputs = ", ".join(f'"{i}"' for i in s.inputs)
                 lines.append(f"inputs = [{inputs}]")

@@ -126,6 +126,28 @@ def test_frontend_has_workflow_ui(server):
     assert b"Workflow" in html and b"modal" in html
 
 
+def test_chunks_workspace(server):
+    base, _ = server
+    # project exposes chunks + per-layer chunk
+    _, raw = _get(base + "/api/project")
+    proj = json.loads(raw)
+    assert "Chunk 1" in proj["chunks"]
+    assert all("chunk" in layer for layer in proj["layers"])
+    # create a new chunk and build a layer into it
+    assert _post(base + "/api/chunk", {"name": "Site B"})[0] == 200
+    _post(base + "/api/operation", {"op": "Align Photos", "id": "alignB", "inputs": [],
+                                    "values": {}, "chunk": "Site B"})
+    proj = json.loads(_get(base + "/api/project")[1])
+    assert "Site B" in proj["chunks"]
+    assert next(layer for layer in proj["layers"] if layer["id"] == "alignB")["chunk"] == "Site B"
+
+
+def test_frontend_has_workspace_chunks(server):
+    base, _ = server
+    _, appjs = _get(base + "/app.js")
+    assert b"renderWorkspace" in appjs and b"ACTIVE_CHUNK" in appjs and b"/api/chunk" in appjs
+
+
 def test_desktop_mode_resolution(monkeypatch):
     from openreco.ui import desktop
     monkeypatch.setattr(desktop, "_have_webview", lambda: True)

@@ -5,8 +5,9 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 let STAGES = {};      // type -> {default_params, params_schema, ...}
-let PROJECT = null;   // {name, layers:[...]}
+let PROJECT = null;   // {name, chunks:[...], layers:[...]}
 let selected = null;
+let ACTIVE_CHUNK = "Chunk 1";
 
 const $ = (id) => document.getElementById(id);
 const log = (m, cls) => { const l = $('log'); l.innerHTML += `\n${m}`; l.scrollTop = l.scrollHeight; };
@@ -65,19 +66,35 @@ async function loadStages() {
 async function loadProject() {
   PROJECT = await (await fetch('/api/project')).json();
   $('pname').textContent = `${PROJECT.name} · ${PROJECT.crs || 'local'}`;
-  renderLayers();
+  if (!PROJECT.chunks.includes(ACTIVE_CHUNK)) ACTIVE_CHUNK = PROJECT.chunks[0] || "Chunk 1";
+  renderWorkspace();
 }
-function renderLayers() {
-  const el = $('layers'); el.innerHTML = '';
-  PROJECT.layers.forEach(L => {
-    const d = document.createElement('div'); d.className = 'layer' + (selected === L.id ? ' sel' : '');
-    d.innerHTML = `<span class="dot ${L.status||''}"></span><span class="id">${L.id}</span>`
-                + `<span class="t">${L.type}</span>`;
-    d.onclick = () => selectLayer(L.id); el.appendChild(d);
+function renderWorkspace() {
+  const el = $('workspace'); el.innerHTML = '';
+  $('activeChunk').textContent = `active: ${ACTIVE_CHUNK}`;
+  const byChunk = {}; PROJECT.chunks.forEach(c => byChunk[c] = []);
+  PROJECT.layers.forEach(L => { (byChunk[L.chunk] = byChunk[L.chunk] || []).push(L); });
+  Object.keys(byChunk).forEach(chunk => {
+    const h = document.createElement('div'); h.className = 'chunk' + (chunk === ACTIVE_CHUNK ? ' active' : '');
+    h.innerHTML = `<span>▸ ${chunk}</span><span class="cnt">${byChunk[chunk].length}</span>`;
+    h.onclick = () => { ACTIVE_CHUNK = chunk; renderWorkspace(); };
+    el.appendChild(h);
+    byChunk[chunk].forEach(L => {
+      const d = document.createElement('div'); d.className = 'layer' + (selected === L.id ? ' sel' : '');
+      d.innerHTML = `<span class="dot ${L.status||''}"></span><span class="id">${L.id}</span>`
+                  + `<span class="t">${L.type}</span>`;
+      d.onclick = () => selectLayer(L.id); el.appendChild(d);
+    });
   });
 }
+$('newChunk').onclick = async () => {
+  const name = prompt('New chunk name:', `Chunk ${PROJECT.chunks.length + 1}`);
+  if (!name) return;
+  await fetch('/api/chunk', { method:'POST', body: JSON.stringify({ name }) });
+  ACTIVE_CHUNK = name; await loadProject();
+};
 function selectLayer(id) {
-  selected = id; renderLayers();
+  selected = id; renderWorkspace();
   const L = PROJECT.layers.find(x => x.id === id);
   renderParams(L);
   const v = viewable(L);
@@ -142,13 +159,13 @@ function collectParams(L) {
 }
 async function updateStage(L) {
   await fetch('/api/stage', { method:'POST', body: JSON.stringify(
-    { id: L.id, type: L.type, inputs: L.inputs, params: collectParams(L) }) });
+    { id: L.id, type: L.type, inputs: L.inputs, params: collectParams(L), chunk: L.chunk }) });
   log(`updated ${L.id}`); await loadProject(); selectLayer(L.id);
 }
 $('addBtn').onclick = async () => {
   const id = $('newId').value.trim(), type = $('newType').value;
   if (!id) return;
-  const r = await fetch('/api/stage', { method:'POST', body: JSON.stringify({ id, type, inputs: [], params: {} }) });
+  const r = await fetch('/api/stage', { method:'POST', body: JSON.stringify({ id, type, inputs: [], params: {}, chunk: ACTIVE_CHUNK }) });
   if (r.ok) { $('newId').value = ''; log(`added ${id} (${type})`); await loadProject(); selectLayer(id); }
 };
 
@@ -171,7 +188,7 @@ $('runBtn').onclick = async () => {
     await loadProject(); if (selected) selectLayer(selected); });
 };
 function setDot(id, cls) {
-  const L = PROJECT.layers.find(x => x.id === id); if (L) L.status = cls; renderLayers();
+  const L = PROJECT.layers.find(x => x.id === id); if (L) L.status = cls; renderWorkspace();
 }
 
 // ---- workflow menu + build dialog -----------------------------------------
@@ -233,7 +250,7 @@ async function submitOp(op) {
       : inp.dataset.type === 'enum' ? inp.value : parseFloat(inp.value);
   });
   const r = await fetch('/api/operation', { method:'POST',
-    body: JSON.stringify({ op: op.op, id, inputs, values }) });
+    body: JSON.stringify({ op: op.op, id, inputs, values, chunk: ACTIVE_CHUNK }) });
   const j = await r.json();
   if (r.ok) { $('modal').classList.add('hidden'); log(`built ${id} (${op.op})`);
     await loadProject(); selectLayer(id); }

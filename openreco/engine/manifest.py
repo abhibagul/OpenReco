@@ -34,6 +34,7 @@ class StageSpec:
     type: str
     params: dict[str, Any] = field(default_factory=dict)
     inputs: list[str] = field(default_factory=list)
+    chunk: str = "Chunk 1"        # workspace grouping (industry-standard chunks); not part of the cache key
 
 
 @dataclass
@@ -43,6 +44,15 @@ class Manifest:
     stages: list[StageSpec]
     project_dir: Path
     raw: dict[str, Any]
+    chunks: list[str] = field(default_factory=lambda: ["Chunk 1"])
+
+    def chunk_names(self) -> list[str]:
+        """All chunks: the registered list plus any referenced by a stage, order-preserving."""
+        names = list(self.chunks)
+        for s in self.stages:
+            if s.chunk not in names:
+                names.append(s.chunk)
+        return names or ["Chunk 1"]
 
     @property
     def openreco_dir(self) -> Path:
@@ -70,6 +80,7 @@ def load_manifest(path: str | Path) -> Manifest:
     project = raw.get("project", {})
     name = project.get("name", p.parent.name)
     crs = project.get("crs")
+    chunks = list(project.get("chunks", ["Chunk 1"]))
 
     stage_entries = raw.get("stage", [])
     if not isinstance(stage_entries, list):
@@ -93,7 +104,8 @@ def load_manifest(path: str | Path) -> Manifest:
                 type=stype,
                 params=dict(entry.get("params", {})),
                 inputs=list(entry.get("inputs", [])),
+                chunk=entry.get("chunk", "Chunk 1"),
             )
         )
 
-    return Manifest(name=name, crs=crs, stages=stages, project_dir=p.parent, raw=raw)
+    return Manifest(name=name, crs=crs, stages=stages, project_dir=p.parent, raw=raw, chunks=chunks)

@@ -56,6 +56,19 @@ def test_cancel_stops_run(tmp_path):
     assert not out.ok
 
 
+def test_chunks_roundtrip(tmp_path):
+    # workspace chunks: assign stages to chunks + register empty chunks; survive save/reload
+    p = Project.create(tmp_path, name="chunked")
+    p.add_chunk("Site B")
+    p.add_stage("a", "dummy_generate", chunk="Chunk 1")
+    p.add_stage("b", "dummy_generate", chunk="Site B")
+    assert set(p.manifest.chunk_names()) >= {"Chunk 1", "Site B"}
+    reloaded = load_manifest(p.save())
+    by_id = {s.id: s for s in reloaded.stages}
+    assert by_id["a"].chunk == "Chunk 1" and by_id["b"].chunk == "Site B"
+    assert "Site B" in reloaded.chunk_names()
+
+
 def test_artifacts_exposed_with_paths(tmp_path):
     # D: layer-tree needs per-stage artifacts as absolute paths
     out = _demo(tmp_path).run()

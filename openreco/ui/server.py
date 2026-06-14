@@ -51,11 +51,12 @@ class AppState:
         for s in m.stages:
             run = last.get(s.id, {})
             layers.append({
-                "id": s.id, "type": s.type, "inputs": s.inputs, "params": s.params,
+                "id": s.id, "type": s.type, "inputs": s.inputs, "params": s.params, "chunk": s.chunk,
                 "status": run.get("status"), "metrics": run.get("metrics", {}),
                 "artifacts": run.get("artifacts", {}), "key": keys.get(s.id, {}).get("key"),
             })
-        return {"name": m.name, "crs": m.crs, "project_dir": str(m.project_dir), "layers": layers}
+        return {"name": m.name, "crs": m.crs, "project_dir": str(m.project_dir),
+                "chunks": m.chunk_names(), "layers": layers}
 
     def _last_run(self) -> dict:
         latest = self.project.manifest.runs_dir / "latest.json"
@@ -137,6 +138,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._add_stage(body)
         if u.path == "/api/operation":
             return self._operation(body)
+        if u.path == "/api/chunk":
+            return self._add_chunk(body)
         if u.path == "/api/export":
             return self._export(body)
         return self._send(404, {"error": "not found"})
@@ -148,20 +151,30 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": f"{name} missing"})
         self._send(200, p.read_bytes(), _CT.get(p.suffix, "application/octet-stream"))
 
+    def _add_chunk(self, body):
+        name = (body.get("name") or "").strip()
+        if not name:
+            return self._send(400, {"error": "chunk name required"})
+        self.state.project.add_chunk(name)
+        self.state.project.save()
+        return self._send(200, {"ok": True})
+
     def _add_stage(self, body):
         try:
-            ids = {s.id for s in self.state.project.manifest.stages}
-            if body["id"] in ids:                       # update -> replace params/inputs
+            stages = self.state.project.manifest.stages
+            ids = {s.id for s in stages}
+            if body["id"] in ids:                       # update -> replace params/inputs/chunk
                 from openreco.engine.manifest import StageSpec
-                stages = self.state.project.manifest.stages
                 for i, s in enumerate(stages):
                     if s.id == body["id"]:
                         stages[i] = StageSpec(id=body["id"], type=body["type"],
                                               params=body.get("params", {}),
-                                              inputs=body.get("inputs", []))
+                                              inputs=body.get("inputs", []),
+                                              chunk=body.get("chunk", s.chunk))
             else:
-                self.state.project.add_stage(body["id"], body["type"],
-                                             inputs=body.get("inputs"), params=body.get("params"))
+                self.state.project.add_stage(body["id"], body["type"], inputs=body.get("inputs"),
+                                             params=body.get("params"),
+                                             chunk=body.get("chunk", "Chunk 1"))
             self.state.project.save()
             return self._send(200, {"ok": True})
         except Exception as exc:  # noqa: BLE001
@@ -173,7 +186,8 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             spec = to_stage(body["op"], body.get("values"))
             return self._add_stage({"id": body["id"], "type": spec["stage_type"],
-                                    "inputs": body.get("inputs", []), "params": spec["params"]})
+                                    "inputs": body.get("inputs", []), "params": spec["params"],
+                                    "chunk": body.get("chunk", "Chunk 1")})
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})
 
