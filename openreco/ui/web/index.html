@@ -43,6 +43,10 @@
   #c { width:100%; height:100%; display:block; }
   #imgview { position:absolute; inset:0; display:none; overflow:auto; background:#05070b; }
   #imgview.show { display:block; } #imgwrap { position:relative; display:inline-block; }
+  #orthoview { position:absolute; inset:0; display:none; overflow:hidden; background:#05070b; cursor:grab; }
+  #orthoview.show { display:block; } #orthoview.drag { cursor:grabbing; }
+  #orthoview img { position:absolute; top:0; left:0; transform-origin:0 0; image-rendering:pixelated; }
+  #orthohint { position:absolute; bottom:8px; left:8px; color:var(--muted); font-size:11px; }
   #imgview img { display:block; max-width:none; } #imgview .pin { position:absolute; width:12px; height:12px;
      margin:-6px 0 0 -6px; border:2px solid var(--warn); border-radius:50%; background:#0008; cursor:pointer; }
   #imgview .pin span { position:absolute; left:14px; top:-4px; color:var(--warn); font-size:11px; white-space:nowrap; }
@@ -145,17 +149,20 @@
       <div class="row" style="margin-top:6px">
         <button id="addMarker">+ Marker</button><span class="sp"></span>
         <button class="run" id="saveMarkers">Save GCPs</button></div>
-      <div class="muted" style="margin-top:6px">Pick: select a marker, open a photo in the Photo tab, click to add an observation.</div>
+      <button id="useGcps" style="margin-top:6px; width:100%">Use these GCPs for georeferencing</button>
+      <div class="muted" style="margin-top:6px">Pick: select a marker, open a photo in the Photo tab, click to add an observation. Then Save, and "Use these GCPs" to point this chunk's Georeference step at them.</div>
     </div>
   </div>
   <!-- center viewport -->
   <div id="center">
     <div id="vtabs">
       <button class="on" data-vtab="model">Model</button>
+      <button data-vtab="ortho">Ortho</button>
       <button data-vtab="photo">Photo</button>
     </div>
     <canvas id="c"></canvas>
     <div id="imgview"><div id="imgwrap"></div></div>
+    <div id="orthoview"><img id="orthoimg" alt=""><div id="orthohint"></div></div>
     <div id="measure"></div>
   </div>
   <!-- right: properties -->

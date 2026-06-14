@@ -73,6 +73,59 @@ def reproject_geotiff(src: Path, dst: Path, dst_epsg: int) -> None:
                           resampling=Resampling.bilinear)
 
 
+def raster_to_png(path: Path, max_dim: int = 2000) -> bytes:
+    """Render a GeoTIFF to PNG bytes for the 2D viewer (browsers can't show GeoTIFF directly).
+
+    RGB(A) rasters (ortho) pass through; single-band rasters (DSM / vegetation index) get a 2–98
+    percentile grayscale stretch with nodata made transparent. Large rasters are downscaled so the
+    2D canvas stays responsive. Returns PNG bytes."""
+    import io
+
+    import rasterio
+    from PIL import Image
+
+    with rasterio.open(path) as ds:
+        scale = min(1.0, max_dim / max(ds.width, ds.height))
+        out_w, out_h = max(1, int(ds.width * scale)), max(1, int(ds.height * scale))
+        nodata = ds.nodata
+        if ds.count >= 3:
+            arr = ds.read([1, 2, 3], out_shape=(3, out_h, out_w)).transpose(1, 2, 0)
+            rgb = arr.astype(np.uint8) if arr.dtype == np.uint8 else _stretch(arr)
+            alpha = np.full((out_h, out_w), 255, np.uint8)
+            if ds.count >= 4:
+                alpha = ds.read(4, out_shape=(out_h, out_w)).astype(np.uint8)
+            img = Image.fromarray(np.dstack([rgb, alpha]))      # HxWx4 uint8 -> RGBA
+        else:
+            band = ds.read(1, out_shape=(out_h, out_w)).astype(np.float32)
+            valid = np.isfinite(band)
+            if nodata is not None:
+                valid &= band != nodata
+            gray = _stretch(band, valid)
+            alpha = np.where(valid, 255, 0).astype(np.uint8)
+            img = Image.fromarray(np.dstack([gray, gray, gray, alpha]))   # RGBA
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _stretch(arr: np.ndarray, valid: np.ndarray | None = None) -> np.ndarray:
+    """Percentile (2–98) contrast stretch to uint8; per-channel for RGB, single for grayscale."""
+    a = arr.astype(np.float32)
+    if a.ndim == 3:
+        out = np.zeros_like(a, np.uint8)
+        for c in range(a.shape[2]):
+            out[:, :, c] = _stretch(a[:, :, c])
+        return out
+    m = valid if valid is not None else np.isfinite(a)
+    if not m.any():
+        return np.zeros(a.shape, np.uint8)
+    lo, hi = np.percentile(a[m], [2, 98])
+    if hi <= lo:
+        hi = lo + 1.0
+    a = np.where(m, a, lo)                       # neutralize nodata/NaN before the cast
+    return np.clip((a - lo) / (hi - lo) * 255, 0, 255).astype(np.uint8)
+
+
 def write_geotiff(path: Path, array: np.ndarray, west: float, north: float, res: float,
                   crs_epsg: int | None, nodata=None) -> None:
     import rasterio

@@ -203,7 +203,9 @@ $('newChunk').onclick = async () => {
 };
 function selectLayer(id) {
   selected = id; renderWorkspace();
-  renderParams(PROJECT.layers.find(x => x.id === id));
+  const L = PROJECT.layers.find(x => x.id === id);
+  renderParams(L);
+  if (L) rasterView(L);          // raster products (ortho/DSM/index) open in the 2D Ortho view
 }
 
 // ---- properties / params --------------------------------------------------
@@ -358,9 +360,51 @@ document.querySelectorAll('[data-dtab]').forEach(b => b.onclick = () => selectDo
 function selectVtab(name) {
   document.querySelectorAll('[data-vtab]').forEach(b => b.classList.toggle('on', b.dataset.vtab === name));
   $('imgview').classList.toggle('show', name === 'photo');
+  $('orthoview').classList.toggle('show', name === 'ortho');
   $('c').style.display = name === 'model' ? 'block' : 'none';
 }
 document.querySelectorAll('[data-vtab]').forEach(b => b.onclick = () => selectVtab(b.dataset.vtab));
+
+// ---- Ortho 2D raster view (pan/zoom a server-rendered PNG of any GeoTIFF) --
+// raster products that render as 2D layers: prefer a .tif (ortho/DSM), else an index .tif
+function rasterArtifact(layer) {
+  const a = layer.artifacts || {};
+  for (const k of ['ortho', 'dsm'])
+    if (a[k] && /\.tif/i.test(a[k])) return a[k];
+  for (const v of Object.values(a))
+    if (typeof v === 'string' && /\.tif$/i.test(v)) return v;       // e.g. a vegetation index
+  return null;
+}
+let oz = { s: 1, tx: 0, ty: 0 };
+function applyOrtho() { $('orthoimg').style.transform = `translate(${oz.tx}px,${oz.ty}px) scale(${oz.s})`; }
+function rasterView(layer) {
+  const tif = rasterArtifact(layer); if (!tif) return false;
+  selectVtab('ortho');
+  const img = $('orthoimg');
+  img.onload = () => {                                   // fit to viewport
+    const w = $('center').clientWidth, h = $('center').clientHeight;
+    oz.s = Math.min(w / img.naturalWidth, h / img.naturalHeight) * 0.95;
+    oz.tx = (w - img.naturalWidth * oz.s) / 2; oz.ty = (h - img.naturalHeight * oz.s) / 2;
+    applyOrtho();
+  };
+  img.src = `/api/raster_png?path=${encodeURIComponent(tif)}`;
+  $('orthohint').textContent = `${layer.id} · ${tif.split(/[\\/]/).pop()} · scroll to zoom, drag to pan`;
+  return true;
+}
+(function orthoNav() {
+  const view = $('orthoview');
+  view.addEventListener('wheel', (e) => { e.preventDefault();
+    const r = view.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const f = e.deltaY < 0 ? 1.15 : 1/1.15;
+    oz.tx = mx - (mx - oz.tx) * f; oz.ty = my - (my - oz.ty) * f; oz.s *= f; applyOrtho();
+  }, { passive: false });
+  let drag = null;
+  view.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, tx: oz.tx, ty: oz.ty };
+    view.classList.add('drag'); view.setPointerCapture(e.pointerId); });
+  view.addEventListener('pointermove', (e) => { if (!drag) return;
+    oz.tx = drag.tx + (e.clientX - drag.x); oz.ty = drag.ty + (e.clientY - drag.y); applyOrtho(); });
+  view.addEventListener('pointerup', () => { drag = null; view.classList.remove('drag'); });
+})();
 
 // ---- photos pane + GCP picking --------------------------------------------
 let PHOTOS = { images: [] };
@@ -449,6 +493,19 @@ $('addMarker').onclick = () => {
 $('saveMarkers').onclick = async () => {
   const j = await (await fetch('/api/markers', { method:'POST', body: JSON.stringify({ markers: MARKERS }) })).json();
   log(j.ok ? `saved ${j.count} marker(s) -> ${j.gcp_csv}` : `marker save error: ${j.error}`);
+};
+$('useGcps').onclick = async () => {
+  await $('saveMarkers').onclick();            // persist current picks first
+  let epsg = (PROJECT.crs || '').replace(/^EPSG:/i, '');
+  if (!/^\d+$/.test(epsg)) {
+    epsg = prompt('GCP coordinate system EPSG code (e.g. 32613):', '');
+    if (!epsg) return;
+  }
+  const r = await fetch('/api/use_gcps', { method:'POST',
+    body: JSON.stringify({ chunk: ACTIVE_CHUNK, crs_epsg: parseInt(epsg) }) });
+  const j = await r.json();
+  if (r.ok) { log(`georef now uses GCPs: ${j.updated.join(', ')} (EPSG:${j.gcp_crs_epsg})`); await loadProject(); }
+  else log(`use GCPs error: ${j.error} — add a Georeference step to this chunk first`);
 };
 $('refCrsBtn').onclick = openCrsPicker;
 

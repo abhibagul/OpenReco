@@ -24,8 +24,10 @@ in a **layered desktop UI** that surpasses the reference tool's. Pillars, in pri
    SSE progress; three.js viewport with **multi-layer visibility, distance & area measurement, and
    Gaussian-splat rendering**; per-layer **Export as…**; a **CRS picker widget** (search /api/crs →
    set project CRS); **Photos thumbnail pane** + **GCP/marker picking** (click photos to place
-   observations → writes a georef-ready `gcps.csv`). UI edits save the manifest (undo-via-diff).
-   Remaining: drag-to-reorder, ortho 2D canvas, depth-map viewer. Original plan: a
+   observations → writes a georef-ready `gcps.csv`, and **"Use these GCPs"** wires them straight
+   into the chunk's Georeference step). An **Ortho 2D view** pans/zooms any raster product
+   (ortho / DSM / vegetation index) rendered server-side to PNG (/api/raster_png). UI edits save
+   the manifest (undo-via-diff). Remaining: drag-to-reorder, depth-map viewer. Original plan: a
    cross-platform app (evaluated:
    **Tauri + web frontend** for the WebGPU 3D viewport we already have, vs Qt) presenting the
    project as a **layer tree** (chunks, cameras, tie/dense points, mesh, texture, DSM/DTM, ortho,

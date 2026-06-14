@@ -194,10 +194,53 @@ def test_images_endpoint_lists_chunk_photos(tmp_path):
         httpd.server_close()
 
 
+def test_use_gcps_wires_georef_stage(tmp_path):
+    proj = (Project.create(tmp_path, name="gcp", crs="EPSG:32613")
+            .add_stage("align", "sfm")
+            .add_stage("ref", "georef", inputs=["align"]))
+    (tmp_path / "gcps.csv").write_text("GCP1,1,2,3,a.jpg,10,20\n", "utf-8")
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        status, body = _post(base + "/api/use_gcps", {"chunk": "Chunk 1"})
+        assert status == 200 and body["updated"] == ["ref"] and body["gcp_crs_epsg"] == 32613
+        layer = next(layer for layer in json.loads(_get(base + "/api/project")[1])["layers"]
+                     if layer["id"] == "ref")
+        assert layer["params"]["method"] == "gcp" and layer["params"]["gcp_file"] == "gcps.csv"
+        assert layer["params"]["gcp_crs_epsg"] == 32613
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_use_gcps_needs_georef_stage(server):
+    base, root = server
+    (root / "gcps.csv").write_text("GCP1,1,2,3,a.jpg,10,20\n", "utf-8")
+    _post(base + "/api/project", {"crs": "EPSG:32613"})
+    try:
+        _post(base + "/api/use_gcps", {"chunk": "Chunk 1"})
+        raise AssertionError("expected 400")
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
+
+
+def test_raster_png_endpoint(server, tmp_path):
+    base, root = server
+    import numpy as np
+    from openreco.io.raster import write_geotiff
+    dsm = root / "dsm.tif"
+    write_geotiff(dsm, np.linspace(0, 100, 64*64).reshape(64, 64).astype("float32"),
+                  500000.0, 4000000.0, 1.0, 32613, nodata=float("nan"))
+    status, png = _get(base + "/api/raster_png?path=" + urllib.request.quote(str(dsm)))
+    assert status == 200 and png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
 def test_frontend_has_crs_and_marker_ui(server):
     base, _ = server
     _, appjs = _get(base + "/app.js")
     assert b"/api/markers" in appjs and b"openCrsPicker" in appjs
+    assert b"/api/use_gcps" in appjs and b"/api/raster_png" in appjs
 
 
 def test_desktop_mode_resolution(monkeypatch):

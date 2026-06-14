@@ -13,6 +13,8 @@ Endpoints (JSON unless noted):
   GET  /api/images?chunk=...   -> source images of a chunk (for the Photos pane + GCP picking)
   GET  /api/markers            -> saved GCP/markers (markers.json)
   POST /api/markers            -> save GCP/markers; also writes gcps.csv consumable by the georef stage
+  POST /api/use_gcps           -> point a chunk's georef stage(s) at gcps.csv (method=gcp + CRS)
+  GET  /api/raster_png?path=... -> render a GeoTIFF (ortho/DSM/index) to PNG for the 2D Ortho view
 
 Zero third-party deps; ThreadingHTTPServer + a per-run event queue for SSE.
 """
@@ -174,6 +176,8 @@ class _Handler(BaseHTTPRequestHandler):
                 parse_qs(u.query).get("chunk", [None])[0]))
         if route == "/api/markers":
             return self._send(200, self.state.load_markers())
+        if route == "/api/raster_png":
+            return self._raster_png(parse_qs(u.query).get("path", [""])[0])
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -189,6 +193,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._add_stage(body)
         if u.path == "/api/markers":
             return self._set_markers(body)
+        if u.path == "/api/use_gcps":
+            return self._use_gcps(body)
         if u.path == "/api/operation":
             return self._operation(body)
         if u.path == "/api/chunk":
@@ -229,6 +235,34 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True, "count": len(markers), "gcp_csv": str(csv)})
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})
+
+    def _use_gcps(self, body):
+        """Wire the picked GCPs (gcps.csv) into a chunk's georef stage(s): method=gcp + CRS."""
+        chunk = body.get("chunk")
+        m = self.state.project.manifest
+        epsg = int(body.get("crs_epsg") or self._epsg_from_crs(m.crs) or 0)
+        if not epsg:
+            return self._send(400, {"error": "set a projected EPSG CRS first (crs_epsg or project CRS)"})
+        if not (m.project_dir / "gcps.csv").exists():
+            return self._send(400, {"error": "no gcps.csv yet — pick & save markers first"})
+        updated = []
+        for s in m.stages:
+            if s.type == "georef" and (not chunk or s.chunk == chunk):
+                s.params.update({"method": "gcp", "gcp_file": "gcps.csv", "gcp_crs_epsg": epsg})
+                updated.append(s.id)
+        if not updated:
+            return self._send(400, {"error": f"no georef stage in chunk {chunk!r}; add one first"})
+        self.state.project.save()
+        return self._send(200, {"ok": True, "updated": updated, "gcp_crs_epsg": epsg})
+
+    @staticmethod
+    def _epsg_from_crs(crs):
+        if crs and str(crs).upper().startswith("EPSG:"):
+            try:
+                return int(str(crs).split(":", 1)[1])
+            except ValueError:
+                return 0
+        return 0
 
     def _add_stage(self, body):
         try:
@@ -272,6 +306,16 @@ class _Handler(BaseHTTPRequestHandler):
         if not p.is_file():
             return self._send(404, {"error": "not found"})
         self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "application/octet-stream"))
+
+    def _raster_png(self, path):
+        from openreco.io.raster import raster_to_png
+        p = Path(path)
+        if not path or not self._in_project(p) or not p.is_file():
+            return self._send(400, {"error": "valid in-project raster path required"})
+        try:
+            return self._send(200, raster_to_png(p), "image/png")
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
 
     def _in_project(self, p: Path) -> bool:
         root = self.state.project.manifest.project_dir.resolve()

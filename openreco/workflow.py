@@ -30,6 +30,14 @@ OPERATIONS: list[dict[str, Any]] = [
         ],
     },
     {
+        "op": "Georeference", "stage": "georef",
+        "desc": "Place the model in a CRS from EXIF GPS or GCPs (use the marker tool, then 'Use these GCPs').",
+        "fields": [
+            {"label": "Source", "param": "method", "type": "enum", "default": "Auto",
+             "options": {"Auto": "auto", "GCPs": "gcp", "GPS (EXIF)": "gps", "Local": "local"}},
+        ],
+    },
+    {
         "op": "Build Dense Cloud", "stage": "mvs",
         "desc": "Dense multi-view stereo depth maps fused into a dense point cloud.",
         "fields": [
