@@ -47,8 +47,12 @@ scene.add(grid);
 const axes = new THREE.AxesHelper(1); scene.add(axes);
 let helpers = true;
 function resize() { const w = $('center').clientWidth, h = $('center').clientHeight;
-  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);              // false: don't force inline CSS size; let CSS fill #center
+  camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize);
+// track the actual size of the viewport pane — fires on pane-splitter drags, dock resize, window, etc.
+new ResizeObserver(() => resize()).observe($('center'));
 
 // ---- navigation cube (CAD-style navigation cube) -----------------------------
 const gizmoR = new THREE.WebGLRenderer({ canvas: $('gizmo'), antialias: true, alpha: true });
