@@ -17,14 +17,14 @@ import numpy as np
 from openreco.classify_ground import BUILDING, GROUND, VEGETATION, classify_points
 from openreco.engine.context import Issue, RunContext, Severity, StageResult
 from openreco.engine.stage import Stage, register_stage
-from openreco.io.pointcloud import read_ply, write_las
+from openreco.io.pointcloud import read_ply, write_las, write_ply
 from openreco.io.raster import grid_topdown, write_geotiff
 
 
 @register_stage
 class Classify(Stage):
     type = "classify"
-    version = "2"  # v2: multi-class (ground/building/vegetation) via planarity
+    version = "3"  # v3: also emit a class-coloured PLY (+ meta) for the viewer
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
@@ -47,6 +47,15 @@ class Classify(Stage):
                   "vegetation": int((cls == VEGETATION).sum())}
         n_ground = counts["ground"]
 
+        # class-coloured point cloud (so the UI can show the classification) + meta for downstream
+        ccol = np.full((len(xyz), 3), 170, np.uint8)            # default grey = unclassified
+        for code, col in ((GROUND, (160, 120, 80)), (BUILDING, (230, 90, 80)), (VEGETATION, (90, 190, 90))):
+            ccol[cls == code] = col
+        write_ply(ctx.artifact_path("classified.ply"), xyz, ccol)
+        ctx.write_json("points.json", {"mode": "classified", "num_points": int(len(xyz)),
+                                       "crs": meta.get("crs", "local"), "crs_epsg": epsg,
+                                       "origin": origin.tolist()})
+
         # classified LAS (true CRS coords); LAS classification field
         try:
             write_las(ctx.artifact_path("classified.las"), xyz + origin, rgb, epsg, origin,
@@ -59,7 +68,7 @@ class Classify(Stage):
         # bare-earth DTM from ground points
         ground = xyz[cls == GROUND]
         res = float(ctx.params["dtm_resolution_m"])
-        artifacts = {"classified_meta": "classify.json"}
+        artifacts = {"points": "classified.ply", "meta": "points.json", "classified_meta": "classify.json"}
         if len(ground) >= 4:
             gz = ground[:, 2] + origin[2]
             dtm, _o, west, north = grid_topdown(ground, gz, np.zeros((len(ground), 3), np.uint8), res)

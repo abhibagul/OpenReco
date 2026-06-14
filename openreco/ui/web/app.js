@@ -666,10 +666,14 @@ async function runPipeline(body = {}) {
   es.addEventListener('eof', async () => { es.close(); $('status').textContent = 'done';
     setTimeout(progHide, 1600);
     const reshow = [...visible];
+    const camChunks = reshow.filter(id => id.startsWith('cameras:')).map(id => id.slice(8));
     reshow.forEach(id => { if (objects.has(id)) { scene.remove(objects.get(id)); objects.delete(id); } });
     visible.clear();
     await loadProject(); await loadPhotos();
     for (const id of reshow) { const L = PROJECT.layers.find(x => x.id === id); if (L) await setVisible(L, true); }
+    for (const ch of camChunks) {                 // re-show camera overlays (not layers) after a run
+      const prev = ACTIVE_CHUNK; ACTIVE_CHUNK = ch; await showCameras(); ACTIVE_CHUNK = prev;
+    }
     if (selected) selectLayer(selected); });
 }
 function setDot(id, cls) { const L = PROJECT.layers.find(x => x.id === id); if (L) L.status = cls; renderWorkspace(); }

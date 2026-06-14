@@ -311,42 +311,44 @@ class AppState:
         an sfm/georef reconstruction (centers + orientation); falls back to EXIF GPS as a local
         ENU preview before alignment."""
         last = self._last_run()
+        # use the model the dense/mesh are actually in, so cameras align with the displayed cloud:
+        # prefer mvs (exact dense frame) > georef > sfm
+        order = {"mvs": 0, "georef": 1, "sfm": 2}
+        cands = []
         for s in self.project.manifest.stages:
-            if s.type in ("sfm", "georef") and (not chunk or s.chunk == chunk):
-                art = last.get(s.id, {}).get("artifacts", {})
-                poses = art.get("poses")
-                if poses and Path(poses).is_file():
-                    data = json.loads(Path(poses).read_text(encoding="utf-8"))
-                    cams = [{"name": im["name"], "c": im["center"]} for im in data.get("images", [])]
-                    orient = self._orient_from_model(art.get("model"))
-                    for cm in cams:
-                        if cm["name"] in orient:
-                            cm.update(orient[cm["name"]])
-                    if cams:
-                        return {"frame": "model", "source": s.id, "cameras": cams}
+            if chunk and s.chunk != chunk:
+                continue
+            model = last.get(s.id, {}).get("artifacts", {}).get("model")
+            if s.type in order and model and Path(model).is_dir():
+                cands.append((order[s.type], s.id, model))
+        cands.sort()
+        if cands:
+            cams = self._cameras_from_model(cands[0][2])
+            if cams:
+                return {"frame": "model", "source": cands[0][1], "cameras": cams}
         gps = [im for im in self.images_for_chunk(chunk)["images"] if im.get("lat") is not None]
         if gps:
             return {"frame": "gps", "cameras": _cameras_from_gps(gps)}
         return {"frame": "none", "cameras": []}
 
     @staticmethod
-    def _orient_from_model(model_dir) -> dict:
-        """Best-effort camera orientation (forward/up) from a COLMAP reconstruction."""
-        if not model_dir or not Path(model_dir).is_dir():
-            return {}
+    def _cameras_from_model(model_dir) -> list[dict]:
+        """Camera centers + orientation (forward/up) from a COLMAP reconstruction."""
         try:
             import numpy as np
             import pycolmap
             rec = pycolmap.Reconstruction(str(model_dir))
-            out = {}
+            out = []
             for i in rec.reg_image_ids():
                 img = rec.image(i)
+                c = np.asarray(img.projection_center())
                 r = np.asarray(img.cam_from_world().matrix())[:, :3]   # world->cam rotation
-                out[img.name] = {"fwd": (r.T @ np.array([0, 0, 1.0])).tolist(),
-                                 "up": (r.T @ np.array([0, -1.0, 0])).tolist()}
+                out.append({"name": img.name, "c": c.tolist(),
+                            "fwd": (r.T @ np.array([0, 0, 1.0])).tolist(),
+                            "up": (r.T @ np.array([0, -1.0, 0])).tolist()})
             return out
-        except Exception:  # noqa: BLE001 — orientation is optional eye-candy
-            return {}
+        except Exception:  # noqa: BLE001
+            return []
 
     def allowed_roots(self) -> list[Path]:
         """Dirs the viewer may read from: the project dir + each chunk's ingest image folder
