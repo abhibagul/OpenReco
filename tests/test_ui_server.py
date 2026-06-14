@@ -85,3 +85,29 @@ def test_file_sandbox_rejects_outside_project(server):
         raise AssertionError("expected non-200")
     except urllib.error.HTTPError as e:
         assert e.code in (403, 404)
+
+
+def test_export_endpoint(server, tmp_path):
+    base, root = server
+    # make a small in-project mesh to export
+    import numpy as np
+    from openreco.io.pointcloud import write_mesh_ply
+    mesh = root / "m.ply"
+    write_mesh_ply(mesh, np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], float),
+                   np.array([[0, 1, 2]]), np.full((3, 3), 100, np.uint8))
+    _, fmts = _get(base + "/api/formats?path=" + urllib.request.quote(str(mesh)))
+    assert "stl" in json.loads(fmts)["formats"]
+    status, body = _post(base + "/api/export", {"path": str(mesh), "fmt": "stl"})
+    assert status == 200 and body["out"].endswith(".stl")
+    from pathlib import Path
+    assert Path(body["out"]).exists()
+
+
+def test_desktop_mode_resolution(monkeypatch):
+    from openreco.ui import desktop
+    monkeypatch.setattr(desktop, "_have_webview", lambda: True)
+    assert desktop.resolve_mode("auto") == "window"
+    assert desktop.resolve_mode("browser") == "browser"
+    monkeypatch.setattr(desktop, "_have_webview", lambda: False)
+    assert desktop.resolve_mode("auto") == "browser"
+    assert desktop.resolve_mode("window") == "browser"   # downgrades when pywebview absent

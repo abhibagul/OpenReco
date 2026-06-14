@@ -99,12 +99,36 @@ function renderParams(L) {
   const btn = document.createElement('button'); btn.textContent = 'Update layer'; btn.style.marginTop='10px';
   btn.onclick = () => updateStage(L);
   box.appendChild(btn);
+  buildExport(box, L);
   if (Object.keys(L.metrics || {}).length) {
     const m = document.createElement('div'); m.className = 'muted'; m.style.marginTop = '8px';
     m.textContent = Object.entries(L.metrics).map(([k, v]) => `${k}=${v}`).join('  ');
     box.appendChild(m);
   }
 }
+function buildExport(box, L) {
+  const arts = Object.entries(L.artifacts || {}).filter(
+    ([, v]) => typeof v === 'string' && /\.(ply|las|tif|tiff|geojson|obj|glb)$/i.test(v));
+  if (!arts.length) return;
+  const h = document.createElement('label'); h.textContent = 'Export'; box.appendChild(h);
+  const asel = document.createElement('select');
+  arts.forEach(([k, v]) => { const o = document.createElement('option'); o.value = v; o.textContent = k; asel.appendChild(o); });
+  const fsel = document.createElement('select');
+  const refresh = async () => {
+    fsel.innerHTML = '';
+    const { formats } = await (await fetch('/api/formats?path=' + encodeURIComponent(asel.value))).json();
+    (formats || []).forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f; fsel.appendChild(o); });
+  };
+  asel.onchange = refresh; box.appendChild(asel); box.appendChild(fsel); refresh();
+  const eb = document.createElement('button'); eb.textContent = 'Export as…'; eb.style.marginTop = '6px';
+  eb.onclick = async () => {
+    const j = await (await fetch('/api/export', { method:'POST',
+      body: JSON.stringify({ path: asel.value, fmt: fsel.value }) })).json();
+    log(j.out ? `exported -> ${j.out}` : `export error: ${j.error}`);
+  };
+  box.appendChild(eb);
+}
+
 function collectParams(L) {
   const defaults = (STAGES[L.type] || {}).default_params || {};
   const out = {};

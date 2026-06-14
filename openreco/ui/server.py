@@ -117,6 +117,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._sse()
         if route == "/api/file":
             return self._file(parse_qs(u.query).get("path", [""])[0])
+        if route == "/api/formats":
+            return self._formats(parse_qs(u.query).get("path", [""])[0])
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -128,6 +130,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(202 if started else 409, {"started": started})
         if u.path == "/api/stage":
             return self._add_stage(body)
+        if u.path == "/api/export":
+            return self._export(body)
         return self._send(404, {"error": "not found"})
 
     # ---- handlers ----
@@ -166,6 +170,34 @@ class _Handler(BaseHTTPRequestHandler):
         if not p.is_file():
             return self._send(404, {"error": "not found"})
         self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "application/octet-stream"))
+
+    def _in_project(self, p: Path) -> bool:
+        root = self.state.project.manifest.project_dir.resolve()
+        p = p.resolve()
+        return p == root or root in p.parents
+
+    def _formats(self, path):
+        from openreco.exporters import list_formats
+        if not path or not self._in_project(Path(path)):
+            return self._send(400, {"error": "valid in-project path required"})
+        try:
+            return self._send(200, {"formats": list_formats(path)})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
+
+    def _export(self, body):
+        from openreco.exporters import export_product
+        src = Path(body.get("path", ""))
+        fmt = body.get("fmt", "")
+        if not self._in_project(src):
+            return self._send(403, {"error": "outside project"})
+        out_dir = self.state.project.manifest.project_dir / "exports"
+        out = out_dir / f"{src.stem}.{fmt}"
+        try:
+            export_product(src, fmt, out)
+            return self._send(200, {"out": str(out)})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
 
     def _sse(self):
         self.send_response(200)

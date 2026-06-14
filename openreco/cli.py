@@ -137,26 +137,12 @@ def cmd_export(args: argparse.Namespace) -> int:
 
 
 def cmd_ui(args: argparse.Namespace) -> int:
-    import webbrowser
-
     from openreco.api import Project
-    from openreco.ui.server import serve
+    from openreco.ui.desktop import launch
 
     proj = Project.open(args.project) if Path(args.project).exists() else Project.create(args.project)
-    httpd = serve(proj, host=args.host, port=args.port)
-    url = f"http://{args.host}:{args.port}/"
-    print(f"OpenReco UI for '{proj.manifest.name}' -> {url}  (Ctrl+C to stop)")
-    if not args.no_browser:
-        try:
-            webbrowser.open(url)
-        except Exception:  # noqa: BLE001
-            pass
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nstopping")
-    finally:
-        httpd.server_close()
+    mode = "browser" if args.browser else "window" if args.window else "auto"
+    launch(proj, host=args.host, port=args.port, mode=mode, open_browser=not args.no_browser)
     return 0
 
 
@@ -245,11 +231,13 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--out", help="output path (default: <src stem>.<fmt>)")
     pe.set_defaults(func=cmd_export)
 
-    pu = sub.add_parser("ui", help="launch the local web UI (layer tree, params, run, 3D viewport)")
+    pu = sub.add_parser("ui", help="launch the UI (native window if pywebview present, else browser)")
     pu.add_argument("project", nargs="?", default=".", help="project dir/toml (created if absent)")
     pu.add_argument("--host", default="127.0.0.1")
     pu.add_argument("--port", type=int, default=8000)
-    pu.add_argument("--no-browser", action="store_true")
+    pu.add_argument("--window", action="store_true", help="force a native desktop window")
+    pu.add_argument("--browser", action="store_true", help="force the system browser")
+    pu.add_argument("--no-browser", action="store_true", help="don't auto-open a browser")
     pu.set_defaults(func=cmd_ui)
 
     pv = sub.add_parser("volume", help="cut/fill volume of a DSM GeoTIFF")

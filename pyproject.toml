@@ -15,6 +15,7 @@ authors = [{ name = "OpenReco" }]
 dependencies = []
 
 [project.optional-dependencies]
+desktop = ["pywebview"]   # BSD — native desktop window for `openreco ui` (else falls back to browser)
 slice = [
   # Phase 1 (the vertical slice). All BSD/MIT/Apache. NO AGPL (OpenMVS) / NC (SuperGlue).
   "pycolmap",   # BSD — SfM + dense PatchMatch MVS + Poisson/Delaunay meshing
