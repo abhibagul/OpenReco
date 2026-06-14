@@ -179,8 +179,9 @@ def test_frontend_has_workspace_chunks(server):
     assert b"/api/new_project" in appjs and b"/api/save_project" in appjs
     assert b"/api/cameras" in appjs and b"buildCameras" in appjs
     assert b"setupSplitters" in appjs and b"snapView" in appjs and b"GridHelper" in appjs
+    assert b"runPipeline" in appjs and b"camera.up.set(0, 0, 1)" in appjs   # Z-up world
     _, html = _get(base + "/")
-    assert b'id="gizmo"' in html and b'class="split' in html
+    assert b'id="gizmo"' in html and b'class="split' in html and b"mAddOnly" in html
 
 
 def test_chunk_rename_and_remove(tmp_path):

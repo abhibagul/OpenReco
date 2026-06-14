@@ -32,12 +32,15 @@ const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
 renderer.setPixelRatio(devicePixelRatio);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0e14);
 const camera = new THREE.PerspectiveCamera(55, 1, 0.01, 1e7);
+camera.up.set(0, 0, 1);                 // Z-up world (matches survey/ENU data: X east, Y north, Z up)
 const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(1, 1, 1); scene.add(dl);
 const measureGroup = new THREE.Group(); scene.add(measureGroup);
 // ground grid + axis triad (orientation aids)
-const grid = new THREE.GridHelper(1, 20, 0x3b4660, 0x222b38); scene.add(grid);
+const grid = new THREE.GridHelper(1, 20, 0x3b4660, 0x222b38);
+grid.rotation.x = Math.PI / 2;          // GridHelper is XZ by default; rotate into the XY ground plane (Z-up)
+scene.add(grid);
 const axes = new THREE.AxesHelper(1); scene.add(axes);
 let helpers = true;
 function resize() { const w = $('center').clientWidth, h = $('center').clientHeight;
@@ -60,9 +63,9 @@ function faceTex(label, bg) {
   x.fillText(label, 64, 68);
   const t = new THREE.CanvasTexture(c); return t;
 }
-// BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z
-const gizmoFaces = [['RIGHT', '#89b4fa'], ['LEFT', '#89b4fa'], ['TOP', '#a6e3a1'],
-                    ['BOTTOM', '#a6e3a1'], ['FRONT', '#f9e2af'], ['BACK', '#f9e2af']];
+// BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z (Z-up world: +Z=TOP, +X=EAST/right, +Y=NORTH/back)
+const gizmoFaces = [['EAST', '#89b4fa'], ['WEST', '#89b4fa'], ['NORTH', '#f9e2af'],
+                    ['SOUTH', '#f9e2af'], ['TOP', '#a6e3a1'], ['BOTTOM', '#a6e3a1']];
 const gizmoCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2),
   gizmoFaces.map(([l, b]) => new THREE.MeshBasicMaterial({ map: faceTex(l, b) })));
 gizmoScene.add(gizmoCube);
@@ -78,8 +81,8 @@ $('gizmo').addEventListener('pointerdown', (e) => {
 });
 function snapView(n) {
   const d = camera.position.distanceTo(controls.target) || 10;
-  camera.up.set(0, 1, 0);
-  if (Math.abs(n.y) > 0.9) camera.up.set(0, 0, -Math.sign(n.y));   // looking straight down/up
+  camera.up.set(0, 0, 1);                                          // Z-up world
+  if (Math.abs(n.z) > 0.9) camera.up.set(0, 1, 0);                 // top/bottom: use north as up
   camera.position.copy(controls.target).add(n.normalize().multiplyScalar(d));
   camera.lookAt(controls.target); controls.update();
 }
@@ -95,11 +98,12 @@ function frameAll() {
   objects.forEach((o, id) => { if (visible.has(id)) box.expandByObject(o); });
   if (box.isEmpty()) return;
   const size = box.getSize(new THREE.Vector3()).length(), c = box.getCenter(new THREE.Vector3());
-  controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(size*.6, size*.5, size*.6));
+  controls.target.copy(c);
+  camera.position.copy(c).add(new THREE.Vector3(size*.6, -size*.6, size*.45));  // oblique, Z-up
   camera.near = size/1000; camera.far = size*10; camera.updateProjectionMatrix();
-  // fit the orientation aids to the content
+  // fit the orientation aids to the content (grid on the XY ground plane at min Z)
   const g = size || 1;
-  grid.scale.setScalar(g); grid.position.set(c.x, box.min.y, c.z);
+  grid.scale.setScalar(g); grid.position.set(c.x, c.y, box.min.z);
   axes.scale.setScalar(g * 0.5); axes.position.copy(box.min);
 }
 function toggleHelpers() { helpers = !helpers; grid.visible = helpers; axes.visible = helpers; }
@@ -517,7 +521,8 @@ $('addBtn').onclick = async () => {
 };
 
 // ---- run + live progress (SSE) --------------------------------------------
-$('runBtn').onclick = async () => {
+$('runBtn').onclick = () => runPipeline();
+async function runPipeline() {
   const r = await fetch('/api/run', { method:'POST', body: '{}' });
   if (r.status === 409) { log('already running'); return; }
   log('--- run started ---'); $('status').textContent = 'running…'; selectDock('console');
@@ -533,13 +538,13 @@ $('runBtn').onclick = async () => {
     else if (ev.event === 'run_error') log(`error: ${ev.error}`);
   };
   es.addEventListener('eof', async () => { es.close(); $('status').textContent = 'done';
-    for (const id of [...visible]) objects.delete(id);   // force reload of refreshed artifacts
-    objects.forEach(o => scene.remove(o)); objects.clear();
-    const reshow = [...visible]; visible.clear();
+    const reshow = [...visible];
+    reshow.forEach(id => { if (objects.has(id)) { scene.remove(objects.get(id)); objects.delete(id); } });
+    visible.clear();
     await loadProject(); await loadPhotos();
     for (const id of reshow) { const L = PROJECT.layers.find(x => x.id === id); if (L) await setVisible(L, true); }
     if (selected) selectLayer(selected); });
-};
+}
 function setDot(id, cls) { const L = PROJECT.layers.find(x => x.id === id); if (L) L.status = cls; renderWorkspace(); }
 
 // ---- menus ----------------------------------------------------------------
@@ -861,7 +866,8 @@ function openOp(op) {
   // Add Photos (ingest) gets a file picker that selects specific images across folders
   $('mBrowse').classList.toggle('hidden', op.stage !== 'ingest');
   $('mBrowse').onclick = () => openBrowse($('mId').value.trim());
-  $('mOk').onclick = () => submitOp(op);
+  $('mOk').onclick = () => submitOp(op, true);
+  $('mAddOnly').onclick = () => submitOp(op, false);
   $('modal').classList.remove('hidden');
 }
 $('mCancel').onclick = () => $('modal').classList.add('hidden');
@@ -935,7 +941,7 @@ $('brAdd').onclick = async () => {
   }
   await loadProject(); selectLayer(toSelect); selectDock('photos');
 };
-async function submitOp(op) {
+async function submitOp(op, run) {
   const id = $('mId').value.trim(); if (!id) return;
   const inputs = [...$('mInputs').querySelectorAll('input:checked')].map(c => c.value);
   const values = {};
@@ -947,14 +953,15 @@ async function submitOp(op) {
   const r = await fetch('/api/operation', { method:'POST',
     body: JSON.stringify({ op: op.op, id, inputs, values, chunk: ACTIVE_CHUNK }) });
   const j = await r.json();
-  if (r.ok) { $('modal').classList.add('hidden'); log(`built ${id} (${op.op})`); await loadProject(); selectLayer(id); }
-  else log(`build error: ${j.error}`);
+  if (!r.ok) { log(`build error: ${j.error}`); return; }
+  $('modal').classList.add('hidden'); log(`built ${id} (${op.op})`);
+  await loadProject(); selectLayer(id);
+  if (run) await runPipeline();           // industry-standard: process the step right away (cache-aware)
 }
 
 // ---- resizable panes (drag the splitters; persisted in localStorage) ------
 function setupSplitters() {
   const root = document.documentElement, css = getComputedStyle(root);
-  const px = (v) => parseInt(v) || 0;
   // restore saved sizes
   ['--left-w', '--right-w', '--dock-h'].forEach(v => {
     const s = localStorage.getItem('ore' + v); if (s) root.style.setProperty(v, s);
@@ -962,17 +969,20 @@ function setupSplitters() {
   const drag = (el, onMove) => {
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault(); el.classList.add('drag'); el.setPointerCapture(e.pointerId);
-      const move = (ev) => onMove(ev);
-      const up = (ev) => { el.classList.remove('drag'); el.releasePointerCapture(ev.pointerId);
+      const move = (ev) => { onMove(ev); resize(); };           // live: panes + 3D canvas follow
+      const up = (ev) => { el.classList.remove('drag');
+        try { el.releasePointerCapture(ev.pointerId); } catch (_e) { /* already released */ }
         el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up);
-        ['--left-w', '--right-w', '--dock-h'].forEach(v => localStorage.setItem('ore' + v, css.getPropertyValue(v)));
-        resize(); };
+        ['--left-w', '--right-w', '--dock-h'].forEach(v =>
+          localStorage.setItem('ore' + v, css.getPropertyValue(v).trim()));
+        resize();
+      };
       el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
     });
   };
-  drag($('splitL'), (e) => root.style.setProperty('--left-w', Math.max(160, Math.min(e.clientX, innerWidth - 400)) + 'px'));
-  drag($('splitR'), (e) => root.style.setProperty('--right-w', Math.max(180, Math.min(innerWidth - e.clientX, innerWidth - 400)) + 'px'));
-  drag($('splitD'), (e) => root.style.setProperty('--dock-h', Math.max(60, Math.min(innerHeight - e.clientY, innerHeight - 180)) + 'px'));
+  drag($('splitL'), (e) => root.style.setProperty('--left-w', Math.max(160, Math.min(e.clientX, innerWidth - 420)) + 'px'));
+  drag($('splitR'), (e) => root.style.setProperty('--right-w', Math.max(180, Math.min(innerWidth - e.clientX, innerWidth - 420)) + 'px'));
+  drag($('splitD'), (e) => root.style.setProperty('--dock-h', Math.max(60, Math.min(innerHeight - e.clientY, innerHeight - 200)) + 'px'));
 }
 
 // ---- boot ----

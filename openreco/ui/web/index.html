@@ -18,11 +18,14 @@
          grid-template-areas:"menu menu menu" "tool tool tool" "left center right" "dock dock dock";
          height:100vh; }
   /* drag handles to resize panes */
-  .split { position:fixed; z-index:40; background:transparent; }
-  .split:hover, .split.drag { background:var(--accent); opacity:.5; }
-  .split.v { width:6px; top:var(--hdr-h); bottom:var(--dock-h); cursor:col-resize; }
-  .split.h { height:6px; left:0; right:0; bottom:calc(var(--dock-h) - 3px); cursor:row-resize; }
-  #splitL { left:calc(var(--left-w) - 3px); } #splitR { right:calc(var(--right-w) - 3px); }
+  .split { position:fixed; z-index:50; }
+  .split::after { content:""; position:absolute; background:var(--line); }
+  .split:hover::after, .split.drag::after { background:var(--accent); }
+  .split.v { width:11px; top:var(--hdr-h); bottom:var(--dock-h); cursor:col-resize; }
+  .split.v::after { top:0; bottom:0; left:4px; width:3px; }
+  .split.h { height:11px; left:0; right:0; bottom:calc(var(--dock-h) - 5px); cursor:row-resize; }
+  .split.h::after { left:0; right:0; top:4px; height:3px; }
+  #splitL { left:calc(var(--left-w) - 5px); } #splitR { right:calc(var(--right-w) - 5px); }
   /* menu bar */
   #menubar { grid-area:menu; display:flex; align-items:stretch; background:var(--panel);
              border-bottom:1px solid var(--line); }
@@ -226,7 +229,8 @@
   <h3>Inputs</h3><div id="mInputs"></div>
   <h3>Options</h3><div id="mFields"></div>
   <div class="row" style="margin-top:14px"><button id="mCancel">Cancel</button><span class="sp"></span>
-    <button class="run" id="mOk">Build</button></div>
+    <button id="mAddOnly">Add only</button>
+    <button class="run" id="mOk">OK &amp; Run</button></div>
 </div></div>
 
 <!-- file picker dialog (Add Photos) -->
