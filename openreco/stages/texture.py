@@ -49,11 +49,14 @@ class Texture(Stage):
         image_dir = Path(images["image_dir"])
         rec = pycolmap.Reconstruction(str(model_dir))
 
+        ctx.logger.info("texturing mesh: %d vertices, %d faces", len(verts), len(faces))
         verts, faces = self._decimate(ctx, verts, faces, int(ctx.params["target_faces"]))
         ctx.progress(0.3, "UV unwrap (xatlas)")
+        ctx.logger.info("UV unwrapping %d faces with xatlas (this can take a while) …", len(faces))
         vmapping, indices, uvs = xatlas.parametrize(verts, faces)
         tverts = verts[vmapping]
         faces = indices.astype(np.int64)
+        ctx.logger.info("UV unwrap done: %d atlas vertices", len(tverts))
 
         cams = self._cameras(rec)
         res = int(ctx.params["atlas_resolution"])
@@ -114,8 +117,14 @@ class Texture(Stage):
         accum = np.zeros((res, res, 3), np.float64)
         wsum = np.zeros((res, res), np.float64)
         auv = uvs * (res - 1)                                      # atlas pixel coords (u=col, v=row)
-        ctx.progress(0.55, "blending images into atlas")
-        for fi in range(len(faces)):
+        nfaces = len(faces)
+        ctx.logger.info("baking %d faces into a %d^2 atlas from %d images …", nfaces, res, len(used_ids))
+        step = max(1, nfaces // 50)                                # ~50 progress ticks over the bake
+        for fi in range(nfaces):
+            if fi % step == 0:
+                ctx.progress(0.55 + 0.4 * fi / nfaces, f"baking face {fi:,}/{nfaces:,}")
+                if ctx.is_cancelled():
+                    raise RuntimeError("cancelled during texture bake")
             samples = []
             for j in range(idx.shape[1]):
                 ci = int(idx[fi, j])
@@ -137,12 +146,14 @@ class Texture(Stage):
         from PIL import Image
 
         images, means = {}, {}
-        for ci in used_ids:
+        ctx.logger.info("loading %d source images for baking …", len(used_ids))
+        for n, ci in enumerate(used_ids, 1):
             cam = cams[ci]
             arr = np.asarray(Image.open(image_dir / cam["name"]).convert("RGB").resize(cam["wh"]),
                              np.float32)
             images[ci] = arr
             means[ci] = arr.reshape(-1, 3).mean(axis=0)
+            ctx.progress(0.45 + 0.1 * n / len(used_ids), f"loaded image {n}/{len(used_ids)}")
         gains = {ci: np.ones(3, np.float32) for ci in used_ids}
         if equalize and len(means) > 1:
             target = np.median(np.stack(list(means.values())), axis=0)   # per-channel target
