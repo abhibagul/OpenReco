@@ -164,6 +164,8 @@ async function loadStages() {
 }
 async function loadProject() {
   PROJECT = await (await fetch('/api/project')).json();
+  if ($('pname')) $('pname').textContent = PROJECT.name || '';
+  document.title = `${PROJECT.name || 'OpenReco'} — OpenReco`;
   $('crsLabel').textContent = PROJECT.crs || 'CRS';
   $('refCrs').textContent = PROJECT.crs ? `Project CRS: ${PROJECT.crs}` : 'No CRS set (local frame).';
   if (!PROJECT.chunks.includes(ACTIVE_CHUNK)) ACTIVE_CHUNK = PROJECT.chunks[0] || "Chunk 1";
@@ -468,7 +470,10 @@ async function loadWorkflows() {
   WORKFLOWS = await (await fetch('/api/workflows')).json();
   // File menu
   $('m-file').innerHTML = '';
-  menuEntry('m-file', '＋ New chunk', () => $('newChunk').click());
+  menuEntry('m-file', '📄 New project…', newProject);
+  menuEntry('m-file', '💾 Save project', saveProject);
+  menuSep('m-file');
+  menuEntry('m-file', '＋ New chunk', addChunk);
   menuEntry('m-file', '🌐 Set coordinate system…', openCrsPicker);
   // Workflow menu = the familiar operations
   $('m-workflow').innerHTML = '';
@@ -487,6 +492,26 @@ async function loadWorkflows() {
   // Help
   $('m-help').innerHTML = '';
   menuEntry('m-help', 'About OpenReco', () => log('OpenReco — open, reproducible photogrammetry. Clean-room; permissive OSS.'));
+}
+
+// ---- project: new / save --------------------------------------------------
+async function newProject() {
+  const path = prompt('New project folder (full path):', '');
+  if (!path) return;
+  const name = prompt('Project name:', path.split(/[\\/]/).filter(Boolean).pop()) || undefined;
+  const r = await fetch('/api/new_project', { method:'POST', body: JSON.stringify({ path, name }) });
+  const j = await r.json();
+  if (!r.ok) { log('new project error: ' + j.error); return; }
+  // reset all client state for the freshly loaded project
+  objects.forEach(o => scene.remove(o)); objects.clear(); visible.clear(); selected = null;
+  ACTIVE_CHUNK = 'Chunk 1'; MARKERS = []; activeMarker = null;
+  await loadProject(); await loadMarkers(); await loadPhotos();
+  $('pname') && ($('pname').textContent = j.name);
+  log(`new project: ${j.name} @ ${j.project_dir}`);
+}
+async function saveProject() {
+  const j = await (await fetch('/api/save_project', { method:'POST', body: '{}' })).json();
+  log(j.ok ? `saved ${j.path}` : `save error: ${j.error}`);
 }
 
 // ---- tabs (left pane / dock / viewport) -----------------------------------

@@ -5,6 +5,8 @@ Endpoints (JSON unless noted):
   GET  /app.js, /viewer.js    -> static frontend assets
   GET  /api/stages            -> stage_info() (palette + parameter-panel schemas)
   GET  /api/project           -> {name, crs, stages[], layers[]} (layer tree + last-run status/artifacts)
+  POST /api/new_project        -> create/open a project at {path,name,crs} and load it
+  POST /api/save_project       -> write project.toml now (explicit Save)
   POST /api/project           -> set project metadata {crs}; re-saves project.toml (CRS picker)
   POST /api/stage             -> add/update a stage {id,type,inputs,params}; re-saves project.toml
   POST /api/run               -> start a run in a background thread (force? in body); 202
@@ -63,6 +65,23 @@ class AppState:
         self.lock = threading.Lock()
 
     # ---- data for the frontend ----
+    def new_project(self, path: str, name: str | None, crs: str | None) -> dict:
+        """Create (or open) a project at `path` and make it the loaded project."""
+        from openreco.api import Project
+        p = Path(path).expanduser()
+        if (p / "project.toml").exists():
+            self.project = Project.open(p)
+        else:
+            self.project = Project.create(p, name=name or p.name, crs=crs or None)
+            self.project.save()
+        self.running = False
+        self.events = queue.Queue()
+        return {"ok": True, "project_dir": str(self.project.manifest.project_dir),
+                "name": self.project.manifest.name}
+
+    def save_project(self) -> dict:
+        return {"ok": True, "path": str(self.project.save())}
+
     def project_json(self) -> dict:
         m = self.project.manifest
         keys = compute_keys(m)
@@ -320,6 +339,10 @@ class _Handler(BaseHTTPRequestHandler):
         if u.path == "/api/run":
             started = self.state.start_run(force=body.get("force"))
             return self._send(202 if started else 409, {"started": started})
+        if u.path == "/api/new_project":
+            return self._new_project(body)
+        if u.path == "/api/save_project":
+            return self._send(200, self.state.save_project())
         if u.path == "/api/project":
             return self._set_project(body)
         if u.path == "/api/stage":
@@ -389,6 +412,15 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": f"unknown action {action!r}"})
             p.save()
             return self._send(200, {"ok": True})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
+
+    def _new_project(self, body):
+        path = (body.get("path") or "").strip()
+        if not path:
+            return self._send(400, {"error": "project path required"})
+        try:
+            return self._send(200, self.state.new_project(path, body.get("name"), body.get("crs")))
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})
 

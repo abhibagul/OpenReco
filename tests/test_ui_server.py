@@ -151,6 +151,7 @@ def test_frontend_has_workspace_chunks(server):
     assert b"renderWorkspace" in appjs and b"ACTIVE_CHUNK" in appjs and b"/api/chunk" in appjs
     assert b"/api/layer" in appjs and b"showCtx" in appjs       # context menu + layer ops
     assert b"set_enabled" in appjs and b"openLayer" in appjs and b"ondragstart" in appjs
+    assert b"/api/new_project" in appjs and b"/api/save_project" in appjs
 
 
 def test_chunk_rename_and_remove(tmp_path):
@@ -195,6 +196,25 @@ def test_layer_rename_remove_move(tmp_path):
         assert _post(base + "/api/layer", {"action": "remove", "id": "src"})[0] == 200
         layers = {L["id"]: L for L in json.loads(_get(base + "/api/project")[1])["layers"]}
         assert "src" not in layers and layers["total"]["inputs"] == []
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_new_and_save_project(tmp_path):
+    proj = Project.create(tmp_path / "first", name="first")
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        newdir = tmp_path / "second"
+        status, body = _post(base + "/api/new_project", {"path": str(newdir), "name": "second"})
+        assert status == 200 and body["name"] == "second"
+        assert (newdir / "project.toml").exists()
+        # the server now serves the new project
+        assert json.loads(_get(base + "/api/project")[1])["name"] == "second"
+        # explicit save returns the manifest path
+        assert _post(base + "/api/save_project", {})[1]["path"].endswith("project.toml")
     finally:
         httpd.shutdown()
         httpd.server_close()
