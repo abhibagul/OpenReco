@@ -27,7 +27,11 @@ in a **layered desktop UI** that surpasses the reference tool's. Pillars, in pri
    observations → writes a georef-ready `gcps.csv`, and **"Use these GCPs"** wires them straight
    into the chunk's Georeference step). An **Ortho 2D view** pans/zooms any raster product
    (ortho / DSM / vegetation index) rendered server-side to PNG (/api/raster_png). UI edits save
-   the manifest (undo-via-diff). Remaining: drag-to-reorder, depth-map viewer. Original plan: a
+   the manifest (undo-via-diff). **Add Photos** is a file picker (/api/browse + /api/thumb) — navigate
+   folders, multi-select specific images (thumbnails), and add them to a chunk: a subset of one folder
+   becomes an ingest `select` whitelist; images spanning folders are staged-copied into the project so
+   SfM keeps a single image root (/api/add_photos). Remaining: drag-to-reorder, depth-map viewer.
+   Original plan: a
    cross-platform app (evaluated:
    **Tauri + web frontend** for the WebGPU 3D viewport we already have, vs Qt) presenting the
    project as a **layer tree** (chunks, cameras, tie/dense points, mesh, texture, DSM/DTM, ortho,

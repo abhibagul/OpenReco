@@ -1,7 +1,7 @@
 [project]
 name = "Aerial demo"
 crs = "EPSG:2027"
-chunks = ["Chunk 1", "Chunk 2"]
+chunks = ["Chunk 1", "Chunk 2", "Chunk 3"]
 
 [[stage]]
 id = "photos"
@@ -41,3 +41,26 @@ id = "ortho"
 type = "ortho"
 inputs = ["dense", "georef"]
 params = { resolution_m = 0.5 }
+
+[[stage]]
+id = "sfm1"
+type = "sfm"
+inputs = ["photos"]
+params = { max_image_size = 1000, matcher = "exhaustive", max_num_features = 8192, camera_mode = "auto", mapper = "incremental" }
+
+[[stage]]
+id = "sfm2"
+type = "sfm"
+params = { max_image_size = 1600, matcher = "exhaustive", max_num_features = 8192, camera_mode = "auto", mapper = "incremental" }
+
+[[stage]]
+id = "ingest1"
+type = "ingest"
+chunk = "Chunk 3"
+params = { image_dir = "D:\\openreco\\aerialdata", blur_threshold = 0, blur_relative = 0.15, min_images = 3 }
+
+[[stage]]
+id = "sfm3"
+type = "sfm"
+chunk = "Chunk 3"
+params = { max_image_size = 1600, matcher = "exhaustive", max_num_features = 8192, camera_mode = "auto", mapper = "incremental" }

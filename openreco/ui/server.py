@@ -11,6 +11,9 @@ Endpoints (JSON unless noted):
   GET  /api/events            -> Server-Sent Events: live run events (stage_start/progress/.../run_done)
   GET  /api/file?path=...      -> serve an artifact file (sandboxed to the project dir) for the viewer
   GET  /api/images?chunk=...   -> source images of a chunk (for the Photos pane + GCP picking)
+  GET  /api/browse?path=...    -> list sub-folders + image files of a dir (Add-Photos file picker)
+  GET  /api/thumb?path=...     -> serve an image file from anywhere (picker previews; image-only)
+  POST /api/add_photos         -> create an ingest layer from chosen image paths {paths,chunk,id}
   GET  /api/markers            -> saved GCP/markers (markers.json)
   POST /api/markers            -> save GCP/markers; also writes gcps.csv consumable by the georef stage
   POST /api/use_gcps           -> point a chunk's georef stage(s) at gcps.csv (method=gcp + CRS)
@@ -22,6 +25,7 @@ Zero third-party deps; ThreadingHTTPServer + a per-run event queue for SSE.
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,6 +41,13 @@ _CT = {".html": "text/html", ".js": "text/javascript", ".css": "text/css",
        ".json": "application/json", ".ply": "application/octet-stream",
        ".glb": "model/gltf-binary", ".tif": "image/tiff", ".png": "image/png",
        ".jpg": "image/jpeg", ".geojson": "application/json", ".las": "application/octet-stream"}
+
+
+def _unique_id(base: str, taken: set[str]) -> str:
+    n = 1
+    while f"{base}{n}" in taken:
+        n += 1
+    return f"{base}{n}"
 
 
 class AppState:
@@ -92,10 +103,77 @@ class AppState:
             p = Path(idir) if Path(idir).is_absolute() else (proj_dir / idir)
             if p.is_dir():
                 image_dir = str(p)
+                select = set(s.params.get("select") or [])
                 for f in list_images(p):
+                    if select and f.name not in select:
+                        continue
                     out.append({"name": f.name, "path": str(f), "lat": None, "lon": None,
                                 "excluded": False, "layer": s.id})
         return {"image_dir": image_dir, "images": out}
+
+    def browse(self, path: str | None) -> dict:
+        """List sub-folders + image files of a directory (a local file picker for Add Photos).
+
+        With no path: Windows drive roots (else '/'). Local-first desktop tool bound to 127.0.0.1."""
+        from openreco.io.images import IMAGE_SUFFIXES
+        if not path:
+            if os.name == "nt":
+                import string
+                drives = [f"{d}:\\" for d in string.ascii_uppercase if Path(f"{d}:\\").exists()]
+                return {"path": "", "parent": None, "dirs": drives, "images": []}
+            path = "/"
+        p = Path(path)
+        if not p.is_dir():
+            return {"error": f"not a directory: {path}"}
+        dirs, images = [], []
+        try:
+            for e in sorted(p.iterdir(), key=lambda x: x.name.lower()):
+                try:
+                    if e.is_dir():
+                        dirs.append(str(e))
+                    elif e.suffix.lower() in IMAGE_SUFFIXES:
+                        images.append({"name": e.name, "path": str(e)})
+                except OSError:
+                    continue
+        except PermissionError:
+            return {"error": f"permission denied: {path}"}
+        parent = str(p.parent) if p.parent != p else None
+        return {"path": str(p), "parent": parent, "dirs": dirs, "images": images}
+
+    def add_photos(self, paths: list[str], chunk: str, layer_id: str | None) -> dict:
+        """Create an ingest layer from chosen image paths. One folder -> image_dir (+ select for a
+        subset); spanning folders -> stage copies into the project so SfM keeps a single image root."""
+        import shutil
+
+        from openreco.io.images import IMAGE_SUFFIXES
+        files = [Path(p) for p in paths]
+        files = [f for f in files if f.is_file() and f.suffix.lower() in IMAGE_SUFFIXES]
+        if not files:
+            raise ValueError("no valid image files selected")
+        ids = {s.id for s in self.project.manifest.stages}
+        lid = layer_id or _unique_id("photos", ids)
+        params: dict
+        dirs = {f.parent for f in files}
+        if len(dirs) == 1:
+            folder = next(iter(dirs))
+            all_names = {p.name for p in folder.iterdir()
+                         if p.suffix.lower() in IMAGE_SUFFIXES}
+            chosen = {f.name for f in files}
+            params = {"image_dir": str(folder)}
+            if chosen != all_names:                      # a subset -> whitelist it
+                params["select"] = sorted(chosen)
+        else:                                            # multiple folders -> stage into the project
+            staged = self.project.manifest.project_dir / f"{lid}_photos"
+            staged.mkdir(parents=True, exist_ok=True)
+            for f in files:
+                dst = staged / f.name
+                if not dst.exists():
+                    shutil.copy2(f, dst)
+            params = {"image_dir": str(staged)}
+        self.project.add_stage(lid, "ingest", params=params, chunk=chunk)
+        self.project.save()
+        return {"ok": True, "id": lid, "count": len(files),
+                "image_dir": params["image_dir"], "staged": len(dirs) > 1}
 
     def allowed_roots(self) -> list[Path]:
         """Dirs the viewer may read from: the project dir + each chunk's ingest image folder
@@ -207,6 +285,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, self.state.load_markers())
         if route == "/api/raster_png":
             return self._raster_png(parse_qs(u.query).get("path", [""])[0])
+        if route == "/api/browse":
+            return self._send(200, self.state.browse(parse_qs(u.query).get("path", [None])[0]))
+        if route == "/api/thumb":
+            return self._thumb(parse_qs(u.query).get("path", [""])[0])
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -224,6 +306,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._set_markers(body)
         if u.path == "/api/use_gcps":
             return self._use_gcps(body)
+        if u.path == "/api/add_photos":
+            return self._add_photos(body)
         if u.path == "/api/operation":
             return self._operation(body)
         if u.path == "/api/chunk":
@@ -262,6 +346,14 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             csv = self.state.save_markers(markers)
             return self._send(200, {"ok": True, "count": len(markers), "gcp_csv": str(csv)})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
+
+    def _add_photos(self, body):
+        try:
+            res = self.state.add_photos(body.get("paths", []), body.get("chunk", "Chunk 1"),
+                                        body.get("id"))
+            return self._send(200, res)
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})
 
@@ -335,6 +427,14 @@ class _Handler(BaseHTTPRequestHandler):
         if not p.is_file():
             return self._send(404, {"error": "not found"})
         self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "application/octet-stream"))
+
+    def _thumb(self, path):
+        """Serve an image file from anywhere (image suffixes only) for the Add-Photos picker."""
+        from openreco.io.images import IMAGE_SUFFIXES
+        p = Path(path)
+        if not path or not p.is_file() or p.suffix.lower() not in IMAGE_SUFFIXES:
+            return self._send(400, {"error": "image file required"})
+        self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "image/jpeg"))
 
     def _raster_png(self, path):
         from openreco.io.raster import raster_to_png

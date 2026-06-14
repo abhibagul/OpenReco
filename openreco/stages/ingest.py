@@ -27,6 +27,7 @@ class Ingest(Stage):
     def default_params(self) -> dict[str, Any]:
         return {
             "image_dir": "images",     # relative to the project dir
+            "select": [],              # optional whitelist of filenames in image_dir ([] = use all)
             "blur_threshold": 0.0,     # 0 = disable culling; else absolute variance-of-Laplacian
             "blur_relative": 0.15,     # also cull images below this fraction of the median blur
             "min_images": 3,
@@ -35,6 +36,7 @@ class Ingest(Stage):
     def params_schema(self) -> dict[str, Any]:
         return {
             "image_dir": {"type": "string"},
+            "select": {"type": "array", "items": {"type": "string"}},
             "blur_threshold": {"type": "number", "minimum": 0},
             "blur_relative": {"type": "number", "minimum": 0, "maximum": 1},
             "min_images": {"type": "integer", "minimum": 2},
@@ -46,8 +48,12 @@ class Ingest(Stage):
             raise FileNotFoundError(f"image_dir not found: {image_dir}")
 
         paths = list_images(image_dir)
+        select = set(ctx.params.get("select") or [])
+        if select:                                  # whitelist a chosen subset of the folder
+            paths = [p for p in paths if p.name in select]
         if not paths:
-            raise FileNotFoundError(f"no images in {image_dir}")
+            raise FileNotFoundError(f"no images in {image_dir}"
+                                    + (f" matching {len(select)} selected name(s)" if select else ""))
 
         infos: list[ImageInfo] = []
         for i, p in enumerate(paths):

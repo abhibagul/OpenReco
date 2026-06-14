@@ -573,10 +573,76 @@ function openOp(op) {
     else { inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any'; inp.value = f.default; }
     inp.dataset.label = f.label; inp.dataset.type = f.type; fb.appendChild(inp);
   });
+  // Add Photos (ingest) gets a file picker that selects specific images across folders
+  $('mBrowse').classList.toggle('hidden', op.stage !== 'ingest');
+  $('mBrowse').onclick = () => openBrowse($('mId').value.trim());
   $('mOk').onclick = () => submitOp(op);
   $('modal').classList.remove('hidden');
 }
 $('mCancel').onclick = () => $('modal').classList.add('hidden');
+
+// ---- file picker (Add Photos: navigate folders, multi-select images) ------
+let brSelected = new Map();    // path -> name
+let brCurrent = null;
+async function openBrowse(layerId) {
+  $('browseModal').dataset.layerId = layerId || '';
+  brSelected = new Map();
+  $('browseModal').classList.remove('hidden');
+  await browseTo(brCurrent);             // resume last dir, or drives/root
+}
+async function browseTo(path) {
+  const url = '/api/browse' + (path ? '?path=' + encodeURIComponent(path) : '');
+  const d = await (await fetch(url)).json();
+  if (d.error) { log('browse: ' + d.error); return; }
+  brCurrent = d.path; $('brPath').value = d.path || '';
+  const dirs = $('brDirs'); dirs.innerHTML = '';
+  if (d.parent !== null && d.parent !== undefined) {
+    // up handled by button; list child folders
+  }
+  d.dirs.forEach(p => {
+    const row = document.createElement('div'); row.className = 'brdir';
+    row.textContent = '📁 ' + p.split(/[\\/]/).filter(Boolean).pop();
+    row.onclick = () => browseTo(p); dirs.appendChild(row);
+  });
+  if (!d.dirs.length) dirs.innerHTML = '<div class="muted" style="padding:6px">no sub-folders</div>';
+  const grid = $('brImages'); grid.innerHTML = '';
+  d.images.forEach(im => {
+    const t = document.createElement('div'); t.className = 'brth' + (brSelected.has(im.path) ? ' sel' : '');
+    t.innerHTML = `<img loading="lazy" src="/api/thumb?path=${encodeURIComponent(im.path)}"><div>${im.name}</div>`;
+    t.onclick = () => { if (brSelected.has(im.path)) brSelected.delete(im.path); else brSelected.set(im.path, im.name);
+      t.classList.toggle('sel'); updateBrCount(); };
+    grid.appendChild(t);
+  });
+  $('brImages').dataset.all = JSON.stringify(d.images.map(i => i.path));
+  $('brAll').checked = false;
+  if (!d.images.length) grid.innerHTML = '<div class="muted" style="padding:6px">no images in this folder</div>';
+  updateBrCount();
+}
+function updateBrCount() { $('brCount').textContent = `${brSelected.size} selected`; }
+$('brUp').onclick = async () => {
+  const d = await (await fetch('/api/browse' + (brCurrent ? '?path=' + encodeURIComponent(brCurrent) : ''))).json();
+  browseTo(d.parent);                    // null parent -> drives/root
+};
+$('brGo').onclick = () => browseTo($('brPath').value.trim() || null);
+$('brPath').onkeydown = (e) => { if (e.key === 'Enter') $('brGo').onclick(); };
+$('brAll').onchange = (e) => {
+  const all = JSON.parse($('brImages').dataset.all || '[]');
+  if (e.target.checked) all.forEach(p => brSelected.set(p, p.split(/[\\/]/).pop()));
+  else all.forEach(p => brSelected.delete(p));
+  browseTo(brCurrent);                    // re-render selection state
+};
+$('brCancel').onclick = () => $('browseModal').classList.add('hidden');
+$('brAdd').onclick = async () => {
+  if (!brSelected.size) { log('select at least one image'); return; }
+  const id = $('browseModal').dataset.layerId || undefined;
+  const r = await fetch('/api/add_photos', { method:'POST',
+    body: JSON.stringify({ paths: [...brSelected.keys()], chunk: ACTIVE_CHUNK, id }) });
+  const j = await r.json();
+  if (!r.ok) { log('add photos error: ' + j.error); return; }
+  $('browseModal').classList.add('hidden'); $('modal').classList.add('hidden');
+  log(`added ${j.count} photo(s) to ${ACTIVE_CHUNK} as ${j.id}` + (j.staged ? ' (copied into project)' : ''));
+  await loadProject(); selectLayer(j.id); selectDock('photos');
+};
 async function submitOp(op) {
   const id = $('mId').value.trim(); if (!id) return;
   const inputs = [...$('mInputs').querySelectorAll('input:checked')].map(c => c.value);

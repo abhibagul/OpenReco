@@ -100,6 +100,10 @@
   .dialog h2 { font-size:15px; margin:0 0 4px; }
   .chk { display:flex; gap:6px; align-items:center; margin:3px 0; }
   .crsrow { padding:6px 8px; border-radius:4px; cursor:pointer; } .crsrow:hover { background:#1a2230; }
+  .brdir { padding:5px 8px; border-radius:4px; cursor:pointer; } .brdir:hover { background:#1a2230; }
+  .brth { width:96px; border:2px solid transparent; border-radius:5px; cursor:pointer; overflow:hidden; }
+  .brth.sel { border-color:var(--accent); } .brth img { width:100%; height:64px; object-fit:cover; display:block; }
+  .brth div { font-size:10px; padding:2px 3px; color:var(--muted); white-space:nowrap; overflow:hidden; }
 </style>
 </head>
 <body>
@@ -189,10 +193,29 @@
 <div id="modal" class="modal hidden"><div class="dialog">
   <h2 id="mTitle"></h2><div id="mDesc" class="muted"></div>
   <label>Layer id</label><input id="mId" />
+  <button id="mBrowse" class="hidden" style="margin:8px 0; width:100%">📂 Browse / select images…</button>
   <h3>Inputs</h3><div id="mInputs"></div>
   <h3>Options</h3><div id="mFields"></div>
   <div class="row" style="margin-top:14px"><button id="mCancel">Cancel</button><span class="sp"></span>
     <button class="run" id="mOk">Build</button></div>
+</div></div>
+
+<!-- file picker dialog (Add Photos) -->
+<div id="browseModal" class="modal hidden"><div class="dialog" style="width:640px">
+  <h2>Select images</h2>
+  <div class="row" style="gap:6px; margin:6px 0">
+    <button id="brUp">⬆ Up</button>
+    <input id="brPath" placeholder="path…" style="flex:1" />
+    <button id="brGo">Go</button>
+  </div>
+  <div id="brDirs" style="max-height:18vh; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:4px; margin-bottom:6px"></div>
+  <div class="row" style="margin:4px 0">
+    <label class="chk" style="margin:0"><input type="checkbox" id="brAll"> Select all</label>
+    <span class="sp"></span><span id="brCount" class="muted">0 selected</span>
+  </div>
+  <div id="brImages" style="display:flex; flex-wrap:wrap; gap:6px; max-height:38vh; overflow:auto"></div>
+  <div class="row" style="margin-top:14px"><button id="brCancel">Cancel</button><span class="sp"></span>
+    <button class="run" id="brAdd">Add selected</button></div>
 </div></div>
 
 <!-- CRS picker dialog -->

@@ -262,11 +262,79 @@ def test_images_scan_before_run_and_serve_external(tmp_path):
         httpd.server_close()
 
 
+def test_browse_lists_dirs_and_images(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "a.JPG").write_bytes(b"\xff\xd8x")
+    (tmp_path / "notes.txt").write_text("x")
+    proj = Project.create(tmp_path / "proj", name="b")
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        d = json.loads(_get(base + "/api/browse?path=" + urllib.request.quote(str(tmp_path)))[1])
+        assert str(tmp_path / "sub") in d["dirs"]
+        assert [i["name"] for i in d["images"]] == ["a.JPG"]   # .txt excluded
+        assert d["parent"] == str(tmp_path.parent)
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_add_photos_subset_uses_select(tmp_path):
+    folder = tmp_path / "flight"
+    folder.mkdir()
+    for n in ("a.JPG", "b.JPG", "c.JPG"):
+        (folder / n).write_bytes(b"\xff\xd8x")
+    proj = Project.create(tmp_path / "proj", name="ap")
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        # pick 2 of 3 -> a select whitelist, image_dir = the folder
+        body = _post(base + "/api/add_photos",
+                     {"paths": [str(folder / "a.JPG"), str(folder / "b.JPG")], "chunk": "Chunk 1"})[1]
+        assert body["ok"] and body["count"] == 2 and not body["staged"]
+        layer = next(layer for layer in json.loads(_get(base + "/api/project")[1])["layers"]
+                     if layer["id"] == body["id"])
+        assert layer["type"] == "ingest" and layer["params"]["image_dir"] == str(folder)
+        assert sorted(layer["params"]["select"]) == ["a.JPG", "b.JPG"]
+        # Photos pane reflects the subset before any run
+        imgs = json.loads(_get(base + "/api/images?chunk=Chunk%201")[1])["images"]
+        assert sorted(i["name"] for i in imgs) == ["a.JPG", "b.JPG"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_add_photos_multi_folder_stages_copies(tmp_path):
+    f1 = tmp_path / "d1"
+    f2 = tmp_path / "d2"
+    f1.mkdir()
+    f2.mkdir()
+    (f1 / "a.JPG").write_bytes(b"\xff\xd8x")
+    (f2 / "b.JPG").write_bytes(b"\xff\xd8x")
+    proj = Project.create(tmp_path / "proj", name="multi")
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        body = _post(base + "/api/add_photos",
+                     {"paths": [str(f1 / "a.JPG"), str(f2 / "b.JPG")], "chunk": "Chunk 1"})[1]
+        assert body["ok"] and body["staged"] and body["count"] == 2
+        from pathlib import Path
+        staged = Path(body["image_dir"])
+        assert (staged / "a.JPG").exists() and (staged / "b.JPG").exists()
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_frontend_has_crs_and_marker_ui(server):
     base, _ = server
     _, appjs = _get(base + "/app.js")
     assert b"/api/markers" in appjs and b"openCrsPicker" in appjs
     assert b"/api/use_gcps" in appjs and b"/api/raster_png" in appjs
+    assert b"/api/add_photos" in appjs and b"openBrowse" in appjs and b"/api/browse" in appjs
 
 
 def test_desktop_mode_resolution(monkeypatch):
