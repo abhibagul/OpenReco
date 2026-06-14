@@ -326,6 +326,16 @@ class AppState:
             cams = self._cameras_from_model(cands[0][2])
             if cams:
                 return {"frame": "model", "source": cands[0][1], "cameras": cams}
+        # fallback: poses.json centers (no orientation) if the model couldn't be loaded
+        for s in self.project.manifest.stages:
+            if chunk and s.chunk != chunk:
+                continue
+            poses = last.get(s.id, {}).get("artifacts", {}).get("poses")
+            if poses and Path(poses).is_file():
+                data = json.loads(Path(poses).read_text(encoding="utf-8"))
+                cams = [{"name": im["name"], "c": im["center"]} for im in data.get("images", [])]
+                if cams:
+                    return {"frame": "model", "source": s.id, "cameras": cams}
         gps = [im for im in self.images_for_chunk(chunk)["images"] if im.get("lat") is not None]
         if gps:
             return {"frame": "gps", "cameras": _cameras_from_gps(gps)}
