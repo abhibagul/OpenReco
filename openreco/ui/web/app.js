@@ -415,10 +415,20 @@ async function loadPhotos() {
   PHOTOS.images.forEach(im => {
     const t = document.createElement('div'); t.className = 'th' + (im.excluded ? ' exc' : '');
     const url = `/api/file?path=${encodeURIComponent(im.path)}`;
-    t.innerHTML = `<img loading="lazy" src="${url}"><div>${im.name}</div>`;
-    t.onclick = () => openPhoto(im);
+    t.innerHTML = `<button class="rm" title="Remove from chunk">✕</button>`
+                + `<img loading="lazy" src="${url}"><div>${im.name}</div>`;
+    t.querySelector('img').onclick = () => openPhoto(im);
+    t.querySelector('.rm').onclick = (e) => { e.stopPropagation(); removePhoto(im); };
     el.appendChild(t);
   });
+}
+async function removePhoto(im) {
+  if (!confirm(`Remove ${im.name} from this chunk? (source file is not deleted)`)) return;
+  const r = await fetch('/api/remove_photo', { method:'POST',
+    body: JSON.stringify({ layer: im.layer, name: im.name }) });
+  const j = await r.json();
+  if (r.ok) { log(`removed ${im.name} (${j.remaining} left in ${im.layer})`); await loadPhotos(); await loadProject(); }
+  else log('remove error: ' + j.error);
 }
 let curPhoto = null;
 function openPhoto(im) {
@@ -641,7 +651,14 @@ $('brAdd').onclick = async () => {
   if (!r.ok) { log('add photos error: ' + j.error); return; }
   $('browseModal').classList.add('hidden'); $('modal').classList.add('hidden');
   log(`added ${j.count} photo(s) to ${ACTIVE_CHUNK} as ${j.id}` + (j.staged ? ' (copied into project)' : ''));
-  await loadProject(); selectLayer(j.id); selectDock('photos');
+  let toSelect = j.id;
+  if ($('brAlign').checked) {                 // auto-chain an Align Photos step on these images
+    const ids = new Set([j.id]); let n = 1; while (ids.has('sfm' + n)) n++;
+    const ar = await fetch('/api/operation', { method:'POST', body: JSON.stringify(
+      { op: 'Align Photos', id: 'sfm' + n, inputs: [j.id], values: {}, chunk: ACTIVE_CHUNK }) });
+    if (ar.ok) { toSelect = 'sfm' + n; log(`+ Align Photos (sfm${n}) wired to ${j.id}`); }
+  }
+  await loadProject(); selectLayer(toSelect); selectDock('photos');
 };
 async function submitOp(op) {
   const id = $('mId').value.trim(); if (!id) return;

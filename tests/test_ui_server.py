@@ -306,6 +306,28 @@ def test_add_photos_subset_uses_select(tmp_path):
         httpd.server_close()
 
 
+def test_remove_photo_updates_select(tmp_path):
+    folder = tmp_path / "flight"
+    folder.mkdir()
+    for n in ("a.JPG", "b.JPG", "c.JPG"):
+        (folder / n).write_bytes(b"\xff\xd8x")
+    proj = Project.create(tmp_path / "proj", name="rm").add_stage(
+        "photos", "ingest", params={"image_dir": str(folder)})    # no select = whole folder
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        status, body = _post(base + "/api/remove_photo", {"layer": "photos", "name": "b.JPG"})
+        assert status == 200 and body["remaining"] == 2
+        params = json.loads(_get(base + "/api/project")[1])["layers"][0]["params"]
+        assert sorted(params["select"]) == ["a.JPG", "c.JPG"]       # materialized minus b
+        imgs = json.loads(_get(base + "/api/images?chunk=Chunk%201")[1])["images"]
+        assert sorted(i["name"] for i in imgs) == ["a.JPG", "c.JPG"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_add_photos_multi_folder_stages_copies(tmp_path):
     f1 = tmp_path / "d1"
     f2 = tmp_path / "d2"
@@ -335,6 +357,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"/api/markers" in appjs and b"openCrsPicker" in appjs
     assert b"/api/use_gcps" in appjs and b"/api/raster_png" in appjs
     assert b"/api/add_photos" in appjs and b"openBrowse" in appjs and b"/api/browse" in appjs
+    assert b"/api/remove_photo" in appjs and b"brAlign" in appjs
 
 
 def test_desktop_mode_resolution(monkeypatch):

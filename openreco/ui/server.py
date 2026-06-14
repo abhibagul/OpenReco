@@ -14,6 +14,7 @@ Endpoints (JSON unless noted):
   GET  /api/browse?path=...    -> list sub-folders + image files of a dir (Add-Photos file picker)
   GET  /api/thumb?path=...     -> serve an image file from anywhere (picker previews; image-only)
   POST /api/add_photos         -> create an ingest layer from chosen image paths {paths,chunk,id}
+  POST /api/remove_photo       -> drop one image from an ingest layer {layer,name} (select list)
   GET  /api/markers            -> saved GCP/markers (markers.json)
   POST /api/markers            -> save GCP/markers; also writes gcps.csv consumable by the georef stage
   POST /api/use_gcps           -> point a chunk's georef stage(s) at gcps.csv (method=gcp + CRS)
@@ -175,6 +176,24 @@ class AppState:
         return {"ok": True, "id": lid, "count": len(files),
                 "image_dir": params["image_dir"], "staged": len(dirs) > 1}
 
+    def remove_photo(self, layer_id: str, name: str) -> dict:
+        """Drop one image from an ingest layer by adding it to (the complement of) the select list.
+
+        If the layer had no select (whole folder), we materialize the current folder listing minus
+        this image, so the removal sticks without touching the source files."""
+        from openreco.io.images import list_images
+
+        stage = next((s for s in self.project.manifest.stages if s.id == layer_id), None)
+        if stage is None or stage.type != "ingest":
+            raise ValueError(f"no ingest layer {layer_id!r}")
+        idir = stage.params.get("image_dir", "images")
+        p = Path(idir) if Path(idir).is_absolute() else (self.project.manifest.project_dir / idir)
+        current = set(stage.params.get("select") or [f.name for f in list_images(p)])
+        current.discard(name)
+        stage.params["select"] = sorted(current)
+        self.project.save()
+        return {"ok": True, "id": layer_id, "remaining": len(current)}
+
     def allowed_roots(self) -> list[Path]:
         """Dirs the viewer may read from: the project dir + each chunk's ingest image folder
         (source photos commonly live outside the project)."""
@@ -308,6 +327,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._use_gcps(body)
         if u.path == "/api/add_photos":
             return self._add_photos(body)
+        if u.path == "/api/remove_photo":
+            return self._remove_photo(body)
         if u.path == "/api/operation":
             return self._operation(body)
         if u.path == "/api/chunk":
@@ -354,6 +375,12 @@ class _Handler(BaseHTTPRequestHandler):
             res = self.state.add_photos(body.get("paths", []), body.get("chunk", "Chunk 1"),
                                         body.get("id"))
             return self._send(200, res)
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
+
+    def _remove_photo(self, body):
+        try:
+            return self._send(200, self.state.remove_photo(body.get("layer", ""), body.get("name", "")))
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})
 

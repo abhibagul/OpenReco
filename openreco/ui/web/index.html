@@ -89,9 +89,12 @@
   #dockbody { flex:1; overflow:auto; }
   #log { font-family:ui-monospace,monospace; font-size:11px; white-space:pre-wrap; color:var(--muted); padding:8px; }
   #photos { display:flex; gap:6px; flex-wrap:wrap; padding:8px; }
-  #photos .th { width:120px; cursor:pointer; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  #photos .th { position:relative; width:120px; cursor:pointer; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
   #photos .th.exc { opacity:.4; } #photos .th img { width:100%; height:78px; object-fit:cover; display:block; }
   #photos .th div { font-size:10px; padding:2px 4px; color:var(--muted); white-space:nowrap; overflow:hidden; }
+  #photos .th .rm { position:absolute; top:2px; right:2px; padding:1px 5px; font-size:11px; line-height:1.2;
+                    background:#0009; color:var(--err); border-radius:4px; opacity:0; }
+  #photos .th:hover .rm { opacity:1; } #photos .th .rm:hover { background:var(--err); color:#0b0e14; }
   /* dropdown + modal */
   .hidden { display:none !important; }   /* must beat .modal/.mMenu display rules */
   .modal { position:fixed; inset:0; background:#0009; display:flex; align-items:center; justify-content:center; z-index:80; }
@@ -214,7 +217,9 @@
     <span class="sp"></span><span id="brCount" class="muted">0 selected</span>
   </div>
   <div id="brImages" style="display:flex; flex-wrap:wrap; gap:6px; max-height:38vh; overflow:auto"></div>
-  <div class="row" style="margin-top:14px"><button id="brCancel">Cancel</button><span class="sp"></span>
+  <label class="chk" style="margin-top:8px"><input type="checkbox" id="brAlign" checked>
+    Also add an Align Photos step wired to these images</label>
+  <div class="row" style="margin-top:10px"><button id="brCancel">Cancel</button><span class="sp"></span>
     <button class="run" id="brAdd">Add selected</button></div>
 </div></div>
 
