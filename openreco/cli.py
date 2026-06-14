@@ -136,6 +136,30 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ui(args: argparse.Namespace) -> int:
+    import webbrowser
+
+    from openreco.api import Project
+    from openreco.ui.server import serve
+
+    proj = Project.open(args.project) if Path(args.project).exists() else Project.create(args.project)
+    httpd = serve(proj, host=args.host, port=args.port)
+    url = f"http://{args.host}:{args.port}/"
+    print(f"OpenReco UI for '{proj.manifest.name}' -> {url}  (Ctrl+C to stop)")
+    if not args.no_browser:
+        try:
+            webbrowser.open(url)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopping")
+    finally:
+        httpd.server_close()
+    return 0
+
+
 def cmd_stages(_args: argparse.Namespace) -> int:
     for t in registered_types():
         print(t)
@@ -220,6 +244,13 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--to", help="target format (omit to list available formats)")
     pe.add_argument("--out", help="output path (default: <src stem>.<fmt>)")
     pe.set_defaults(func=cmd_export)
+
+    pu = sub.add_parser("ui", help="launch the local web UI (layer tree, params, run, 3D viewport)")
+    pu.add_argument("project", nargs="?", default=".", help="project dir/toml (created if absent)")
+    pu.add_argument("--host", default="127.0.0.1")
+    pu.add_argument("--port", type=int, default=8000)
+    pu.add_argument("--no-browser", action="store_true")
+    pu.set_defaults(func=cmd_ui)
 
     pv = sub.add_parser("volume", help="cut/fill volume of a DSM GeoTIFF")
     pv.add_argument("dsm", help="path to a DSM GeoTIFF (e.g. output/dsm.tif)")

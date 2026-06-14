@@ -1,0 +1,87 @@
+"""UI server endpoints — headless (no browser): static, stages, project, run+SSE, file sandbox."""
+
+from __future__ import annotations
+
+import json
+import threading
+import urllib.request
+
+import pytest
+
+from openreco.api import Project
+from openreco.ui.server import serve
+
+
+@pytest.fixture()
+def server(tmp_path):
+    proj = (Project.create(tmp_path, name="ui-test")
+            .add_stage("gen", "dummy_generate", params={"n": 4})
+            .add_stage("total", "dummy_sum", inputs=["gen"]))
+    httpd = serve(proj, port=0)
+    port = httpd.server_address[1]
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    yield f"http://127.0.0.1:{port}", tmp_path
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def _get(url):
+    with urllib.request.urlopen(url, timeout=10) as r:
+        return r.status, r.read()
+
+
+def _post(url, body):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST")
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return r.status, json.loads(r.read())
+
+
+def test_static_and_api_stages(server):
+    base, _ = server
+    _, html = _get(base + "/")
+    assert b"OpenReco" in html
+    _, appjs = _get(base + "/app.js")
+    assert b"OrbitControls" in appjs
+    _, raw = _get(base + "/api/stages")
+    types = {s["type"] for s in json.loads(raw)}
+    assert {"ingest", "sfm", "classify", "dummy_generate"} <= types
+
+
+def test_project_tree(server):
+    base, _ = server
+    _, raw = _get(base + "/api/project")
+    proj = json.loads(raw)
+    assert proj["name"] == "ui-test"
+    assert [layer["id"] for layer in proj["layers"]] == ["gen", "total"]
+
+
+def test_run_streams_events_and_updates_status(server):
+    base, _ = server
+    status, body = _post(base + "/api/run", {})
+    assert status == 202 and body["started"]
+    # read the SSE stream until eof
+    events = []
+    with urllib.request.urlopen(base + "/api/events", timeout=15) as r:
+        for raw in r:
+            line = raw.decode().strip()
+            if line.startswith("data:"):
+                events.append(json.loads(line[5:]))
+            if line.startswith("event: eof"):
+                break
+    kinds = [e["event"] for e in events]
+    assert "stage_done" in kinds and any(e.get("event") == "run_done" for e in events)
+    # project now reports completed layers
+    _, raw = _get(base + "/api/project")
+    statuses = {layer["id"]: layer["status"] for layer in json.loads(raw)["layers"]}
+    assert statuses["total"] in ("executed", "cached")
+
+
+def test_file_sandbox_rejects_outside_project(server):
+    base, _ = server
+    req = base + "/api/file?path=" + urllib.request.quote("C:/Windows/system32/drivers/etc/hosts")
+    try:
+        _get(req)
+        raise AssertionError("expected non-200")
+    except urllib.error.HTTPError as e:
+        assert e.code in (403, 404)

@@ -1,0 +1,154 @@
+// OpenReco UI — layer tree, schema-driven parameter panels, run+SSE, three.js viewport.
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+let STAGES = {};      // type -> {default_params, params_schema, ...}
+let PROJECT = null;   // {name, layers:[...]}
+let selected = null;
+
+const $ = (id) => document.getElementById(id);
+const log = (m, cls) => { const l = $('log'); l.innerHTML += `\n${m}`; l.scrollTop = l.scrollHeight; };
+
+// ---- 3D viewport ----------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0e14);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.01, 1e7);
+const controls = new OrbitControls(camera, renderer.domElement);
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(1, 1, 1); scene.add(dl);
+let current = null;
+function resize() { const w = $('center').clientWidth, h = $('center').clientHeight;
+  renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize);
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+function frame(obj) {
+  const box = new THREE.Box3().setFromObject(obj), size = box.getSize(new THREE.Vector3()).length();
+  const c = box.getCenter(new THREE.Vector3());
+  controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(size*.6, size*.5, size*.6));
+  camera.near = size/1000; camera.far = size*10; camera.updateProjectionMatrix();
+}
+function clearView() { if (current) { scene.remove(current); current = null; } }
+function viewFile(url, kind) {
+  clearView();
+  if (kind === 'glb') new GLTFLoader().load(url, g => { current = g.scene; scene.add(current); frame(current); });
+  else new PLYLoader().load(url, geo => {
+    geo.computeBoundingBox();
+    let o;
+    if (geo.index) { if (!geo.getAttribute('normal')) geo.computeVertexNormals();
+      o = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: !!geo.getAttribute('color'),
+        flatShading:true, side:THREE.DoubleSide })); }
+    else o = new THREE.Points(geo, new THREE.PointsMaterial({ size:1, sizeAttenuation:false,
+        vertexColors: !!geo.getAttribute('color') }));
+    if (!geo.getAttribute('color')) o.material.color.set(0x89b4fa);
+    current = o; scene.add(o); frame(o);
+  });
+}
+// pick a viewable artifact from a layer (textured glb > mesh ply > points ply)
+function viewable(layer) {
+  const a = layer.artifacts || {};
+  for (const [k, kind] of [['glb','glb'],['mesh','ply'],['points','ply'],['sparse_ply','ply']])
+    if (a[k]) return { path: a[k], kind };
+  return null;
+}
+
+// ---- data + rendering -----------------------------------------------------
+async function loadStages() {
+  STAGES = {}; for (const s of await (await fetch('/api/stages')).json()) STAGES[s.type] = s;
+  const sel = $('newType'); sel.innerHTML = '';
+  Object.keys(STAGES).filter(t => !t.startsWith('dummy')).sort().forEach(t => {
+    const o = document.createElement('option'); o.value = t; o.textContent = t; sel.appendChild(o); });
+}
+async function loadProject() {
+  PROJECT = await (await fetch('/api/project')).json();
+  $('pname').textContent = `${PROJECT.name} · ${PROJECT.crs || 'local'}`;
+  renderLayers();
+}
+function renderLayers() {
+  const el = $('layers'); el.innerHTML = '';
+  PROJECT.layers.forEach(L => {
+    const d = document.createElement('div'); d.className = 'layer' + (selected === L.id ? ' sel' : '');
+    d.innerHTML = `<span class="dot ${L.status||''}"></span><span class="id">${L.id}</span>`
+                + `<span class="t">${L.type}</span>`;
+    d.onclick = () => selectLayer(L.id); el.appendChild(d);
+  });
+}
+function selectLayer(id) {
+  selected = id; renderLayers();
+  const L = PROJECT.layers.find(x => x.id === id);
+  renderParams(L);
+  const v = viewable(L);
+  if (v) viewFile(`/api/file?path=${encodeURIComponent(v.path)}`, v.kind); else clearView();
+}
+function renderParams(L) {
+  const info = STAGES[L.type] || { default_params: {} };
+  const defaults = info.default_params || {};
+  const cur = { ...defaults, ...L.params };
+  const box = $('params'); box.innerHTML = `<div class="muted">${L.id} — ${L.type}</div>`;
+  for (const [k, v] of Object.entries(cur)) {
+    const lab = document.createElement('label'); lab.textContent = k; box.appendChild(lab);
+    const inp = document.createElement('input'); inp.dataset.k = k;
+    if (typeof v === 'boolean') { inp.type = 'checkbox'; inp.checked = v; }
+    else if (typeof v === 'number') { inp.type = 'number'; inp.value = v; inp.step = 'any'; }
+    else { inp.type = 'text'; inp.value = Array.isArray(v) ? v.join(',') : v; }
+    box.appendChild(inp);
+  }
+  const btn = document.createElement('button'); btn.textContent = 'Update layer'; btn.style.marginTop='10px';
+  btn.onclick = () => updateStage(L);
+  box.appendChild(btn);
+  if (Object.keys(L.metrics || {}).length) {
+    const m = document.createElement('div'); m.className = 'muted'; m.style.marginTop = '8px';
+    m.textContent = Object.entries(L.metrics).map(([k, v]) => `${k}=${v}`).join('  ');
+    box.appendChild(m);
+  }
+}
+function collectParams(L) {
+  const defaults = (STAGES[L.type] || {}).default_params || {};
+  const out = {};
+  $('params').querySelectorAll('input[data-k]').forEach(inp => {
+    const k = inp.dataset.k, d = defaults[k];
+    if (inp.type === 'checkbox') out[k] = inp.checked;
+    else if (inp.type === 'number') out[k] = parseFloat(inp.value);
+    else out[k] = Array.isArray(d) ? inp.value.split(',').map(s => s.trim()).filter(Boolean) : inp.value;
+  });
+  return out;
+}
+async function updateStage(L) {
+  await fetch('/api/stage', { method:'POST', body: JSON.stringify(
+    { id: L.id, type: L.type, inputs: L.inputs, params: collectParams(L) }) });
+  log(`updated ${L.id}`); await loadProject(); selectLayer(L.id);
+}
+$('addBtn').onclick = async () => {
+  const id = $('newId').value.trim(), type = $('newType').value;
+  if (!id) return;
+  const r = await fetch('/api/stage', { method:'POST', body: JSON.stringify({ id, type, inputs: [], params: {} }) });
+  if (r.ok) { $('newId').value = ''; log(`added ${id} (${type})`); await loadProject(); selectLayer(id); }
+};
+
+// ---- run + live progress (SSE) --------------------------------------------
+$('runBtn').onclick = async () => {
+  const r = await fetch('/api/run', { method:'POST', body: '{}' });
+  if (r.status === 409) { log('already running'); return; }
+  log('--- run started ---'); $('status').textContent = 'running…';
+  const es = new EventSource('/api/events');
+  es.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    if (ev.event === 'stage_start') setDot(ev.id, 'running'), log(`▶ ${ev.id} (${ev.type})`);
+    else if (ev.event === 'progress') $('status').textContent = `${ev.id}: ${Math.round(ev.frac*100)}% ${ev.message||''}`;
+    else if (ev.event === 'stage_done') { setDot(ev.id, ev.status); log(`✓ ${ev.id} [${ev.status}]`); }
+    else if (ev.event === 'stage_skipped') { setDot(ev.id, 'failed'); log(`⨯ ${ev.id} skipped`); }
+    else if (ev.event === 'run_done') log(`--- run ${ev.ok ? 'OK' : 'FAILED'} ---`);
+    else if (ev.event === 'run_error') log(`error: ${ev.error}`);
+  };
+  es.addEventListener('eof', async () => { es.close(); $('status').textContent = 'done';
+    await loadProject(); if (selected) selectLayer(selected); });
+};
+function setDot(id, cls) {
+  const L = PROJECT.layers.find(x => x.id === id); if (L) L.status = cls; renderLayers();
+}
+
+// ---- boot ----
+(async () => { resize(); await loadStages(); await loadProject(); })();

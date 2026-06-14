@@ -36,6 +36,9 @@ openreco = "openreco.cli:main"
 [tool.setuptools.packages.find]
 include = ["openreco*"]
 
+[tool.setuptools.package-data]
+openreco = ["ui/web/*", "viewer/template/*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
