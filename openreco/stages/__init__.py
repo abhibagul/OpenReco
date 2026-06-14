@@ -6,6 +6,7 @@ photogrammetry stages (ingest, sfm, georef, mvs, mesh, dsm, ortho, export).
 """
 
 from openreco.stages import classify  # noqa: F401
+from openreco.stages import clean  # noqa: F401
 from openreco.stages import contours  # noqa: F401
 from openreco.stages import coverage  # noqa: F401
 from openreco.stages import dsm  # noqa: F401
@@ -27,5 +28,5 @@ from openreco.stages import splat  # noqa: F401
 from openreco.stages import texture  # noqa: F401
 from openreco.stages import tiles  # noqa: F401
 
-__all__ = ["classify", "contours", "coverage", "dsm", "dtm", "dummy", "export", "fuse", "georef",
+__all__ = ["classify", "clean", "contours", "coverage", "dsm", "dtm", "dummy", "export", "fuse", "georef",
            "indices", "ingest", "markers", "merge", "mesh", "mvs", "panorama", "refine", "sfm", "splat", "texture", "tiles"]

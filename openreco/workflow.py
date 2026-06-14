@@ -108,6 +108,26 @@ OPERATIONS: list[dict[str, Any]] = [
         "fields": [{"label": "Interval (m)", "param": "interval_m", "type": "float", "default": 10.0}],
     },
     {
+        "op": "Clean Point Cloud", "stage": "clean",
+        "desc": "Remove noise / stray points (statistical outlier removal).",
+        "fields": [
+            {"label": "Mode", "param": "mode", "type": "enum", "default": "Points",
+             "options": {"Points": "points"}},
+            {"label": "Strength", "param": "std_ratio", "type": "enum", "default": "Moderate",
+             "options": {"Aggressive": 1.0, "Moderate": 2.0, "Mild": 3.0}},
+        ],
+    },
+    {
+        "op": "Clean Mesh", "stage": "clean",
+        "desc": "Remove small floating mesh islands (keep the main surface).",
+        "fields": [
+            {"label": "Mode", "param": "mode", "type": "enum", "default": "Mesh",
+             "options": {"Mesh": "mesh"}},
+            {"label": "Keep islands ≥", "param": "min_component_ratio", "type": "enum", "default": "2% of largest",
+             "options": {"10% of largest": 0.1, "2% of largest": 0.02, "0.5% of largest": 0.005}},
+        ],
+    },
+    {
         "op": "Merge Chunks", "stage": "merge_chunks",
         "desc": "Align separate chunks (ICP) and merge their point clouds into one.",
         "fields": [{"label": "Initial alignment", "param": "init", "type": "enum", "default": "Centroid",
@@ -126,6 +146,7 @@ STAGE_PROVIDES: dict[str, list[str]] = {
     "merge_chunks": ["points", "meta", "merged"],
     "fuse": ["points", "meta"],
     "classify": ["points", "meta"],
+    "clean": ["points", "meta", "mesh"],
     "mesh": ["mesh"],
     "texture": ["mesh", "glb"],
     "dsm": ["dsm", "meta"],
@@ -146,6 +167,8 @@ OP_NEEDS: dict[str, list[str]] = {
     "Build DEM": ["points"],
     "Build Orthomosaic": ["points"],
     "Classify Points": ["points"],
+    "Clean Point Cloud": ["points"],
+    "Clean Mesh": ["mesh"],
     "Build Tiled Model": ["mesh"],
     "Build Contours": ["dsm"],
     "Merge Chunks": ["points"],

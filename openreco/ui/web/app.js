@@ -17,6 +17,7 @@ const objects = new Map();          // layer id -> THREE object (cached once loa
 const CATEGORY = {
   ingest: "Cameras", sfm: "Tie Points", refine: "Tie Points", markers: "Markers",
   mvs: "Dense Cloud", fuse: "Dense Cloud", merge_chunks: "Dense Cloud", classify: "Point Cloud",
+  clean: "Dense Cloud",
   mesh: "3D Model", texture: "3D Model", splat: "3D Model", tiles: "Tiled Model",
   dsm: "DEM", ortho: "Orthomosaic", contours: "Shapes", indices: "Orthomosaic",
   volume: "Shapes", profile: "Shapes", panorama: "Orthomosaic",
@@ -357,7 +358,8 @@ const CAT_ICON = { Cameras:'camera', "Tie Points":'dots', "Dense Cloud":'cloud',
   "3D Model":'triangle', "Tiled Model":'grid', DEM:'layers', Orthomosaic:'map', Shapes:'hex',
   Markers:'pin', Other:'box' };
 const OP_ICON = { ingest:'image', sfm:'camera', georef:'globe', mvs:'cloud', merge_chunks:'box',
-  mesh:'triangle', texture:'image', dsm:'layers', ortho:'map', classify:'mountain', contours:'hex', tiles:'grid' };
+  mesh:'triangle', texture:'image', dsm:'layers', ortho:'map', classify:'mountain', contours:'hex',
+  tiles:'grid', clean:'eraser' };
 const collapsed = new Set();           // node ids that are collapsed (everything expanded by default)
 const isOpen = (id) => !collapsed.has(id);
 function toggle(id) { if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id); renderWorkspace(); }
@@ -1037,16 +1039,18 @@ function renderMarkers() {
   const box = $('markerTable');
   if (!MARKERS.length) { box.innerHTML = '<div class="muted">No markers. Add one, then pick it in photos.</div>'; return; }
   const t = document.createElement('table');
-  t.innerHTML = '<tr><th>name</th><th>X</th><th>Y</th><th>Z</th><th>obs</th><th>type</th></tr>';
+  t.innerHTML = '<tr><th>name</th><th>X</th><th>Y</th><th>Z</th><th>obs</th><th>type</th><th></th></tr>';
   MARKERS.forEach((m, i) => {
     const tr = document.createElement('tr'); tr.className = (i === activeMarker ? 'sel' : '');
     const w = m.world || ['','',''];
     tr.innerHTML = `<td>${m.name}</td>`
-      + [0,1,2].map(k => `<td><input data-mi="${i}" data-wk="${k}" value="${w[k]}" style="width:56px"></td>`).join('')
+      + [0,1,2].map(k => `<td><input data-mi="${i}" data-wk="${k}" value="${w[k]}" style="width:54px"></td>`).join('')
       + `<td>${m.observations.length}</td>`
-      + `<td><select data-ti="${i}" style="width:74px"><option value="control"${m.type!=='check'?' selected':''}>control</option>`
-      + `<option value="check"${m.type==='check'?' selected':''}>check</option></select></td>`;
-    tr.onclick = (e) => { if (!['INPUT', 'SELECT'].includes(e.target.tagName)) { activeMarker = i; renderMarkers(); } };
+      + `<td><select data-ti="${i}" style="width:72px"><option value="control"${m.type!=='check'?' selected':''}>control</option>`
+      + `<option value="check"${m.type==='check'?' selected':''}>check</option></select></td>`
+      + `<td><button class="iconbtn mrm" data-rm="${i}" title="Remove marker">${ic('trash')}</button></td>`;
+    tr.onclick = (e) => { if (!['INPUT', 'SELECT', 'BUTTON'].includes(e.target.tagName) && !e.target.closest('button'))
+      { activeMarker = i; renderMarkers(); } };
     t.appendChild(tr);
   });
   box.innerHTML = ''; box.appendChild(t);
@@ -1056,6 +1060,14 @@ function renderMarkers() {
   });
   box.querySelectorAll('select[data-ti]').forEach(sel => sel.onchange = () => {
     MARKERS[+sel.dataset.ti].type = sel.value;
+  });
+  box.querySelectorAll('button[data-rm]').forEach(b => b.onclick = (e) => {
+    e.stopPropagation(); const i = +b.dataset.rm;
+    log(`removed marker ${MARKERS[i].name}`);
+    MARKERS.splice(i, 1);
+    if (activeMarker === i) activeMarker = MARKERS.length ? 0 : null;
+    else if (activeMarker > i) activeMarker--;
+    renderMarkers(); drawPins();
   });
 }
 $('addMarker').onclick = () => {
