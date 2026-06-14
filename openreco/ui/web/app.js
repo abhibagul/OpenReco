@@ -49,7 +49,8 @@ let helpers = true;
 function resize() {
   const w = $('center').clientWidth, h = $('center').clientHeight;
   if (!w || !h) return;
-  renderer.setSize(w, h);                      // sets the canvas buffer + inline px style to match #center
+  // canvas is position:absolute filling #center via CSS, so only update the draw buffer (no inline px)
+  renderer.setSize(w, h, false);
   camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);

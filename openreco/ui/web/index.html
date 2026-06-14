@@ -49,8 +49,11 @@
   #left,#right { background:var(--panel); overflow:auto; }
   #left { grid-area:left; border-right:1px solid var(--line); }
   #right { grid-area:right; border-left:1px solid var(--line); padding:10px; }
-  #center { grid-area:center; position:relative; background:#0b0e14; }
-  #c { width:100%; height:100%; display:block; }
+  /* min-width/height:0 stops grid items from expanding to their content (canvas) size */
+  #left,#right,#center,#dock { min-width:0; min-height:0; }
+  #center { grid-area:center; position:relative; overflow:hidden; background:#0b0e14; }
+  /* canvas is taken out of flow (absolute) so its size never feeds back into the grid layout */
+  #c { position:absolute; inset:0; width:100%; height:100%; display:block; }
   #imgview { position:absolute; inset:0; display:none; overflow:auto; background:#05070b; }
   #imgview.show { display:block; } #imgwrap { position:relative; display:inline-block; }
   #orthoview { position:absolute; inset:0; display:none; overflow:hidden; background:#05070b; cursor:grab; }
