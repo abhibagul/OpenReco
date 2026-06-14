@@ -181,6 +181,7 @@ def test_frontend_has_workspace_chunks(server):
     assert b"/api/cameras" in appjs and b"buildCameras" in appjs
     assert b"setupSplitters" in appjs and b"snapView" in appjs and b"GridHelper" in appjs
     assert b"runPipeline" in appjs and b"camera.up.set(0, 0, 1)" in appjs   # Z-up world
+    assert b"rotateGizmo" in appjs and b"contourView" in appjs               # navcube nav + contour overlay
     assert b"progShow" in appjs and b"/api/cancel" in appjs and b"event === 'log'" in appjs
     _, html = _get(base + "/")
     assert b'id="gizmo"' in html and b'class="split' in html and b"mAddOnly" in html

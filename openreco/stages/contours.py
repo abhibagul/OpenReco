@@ -24,7 +24,7 @@ from openreco.geo.contour import contour_levels, contour_segments
 @register_stage
 class Contours(Stage):
     type = "contours"
-    version = "1"
+    version = "2"  # v2: also emit pixel-space lines for the UI overlay
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
@@ -54,6 +54,7 @@ class Contours(Stage):
             to_wgs84 = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
 
         features = []
+        px_segments = []                 # pixel-space [c0,r0,c1,r1] for the UI overlay on the DSM raster
         total_segments = 0
         for level in levels:
             segs = contour_segments(z, level)
@@ -61,6 +62,7 @@ class Contours(Stage):
                 continue
             lines = []
             for (c0, r0), (c1, r1) in segs:
+                px_segments.append([round(c0, 2), round(r0, 2), round(c1, 2), round(r1, 2)])
                 x0, y0 = transform * (c0, r0)
                 x1, y1 = transform * (c1, r1)
                 if to_wgs84 is not None:
@@ -74,6 +76,11 @@ class Contours(Stage):
                 "geometry": {"type": "MultiLineString", "coordinates": lines},
             })
 
+        # pixel-space overlay (aligns 1:1 with the DSM raster PNG in the 2D Ortho view)
+        ctx.artifact_path("contours_px.json").write_text(json.dumps({
+            "width": int(z.shape[1]), "height": int(z.shape[0]), "segments": px_segments,
+        }), encoding="utf-8")
+
         fc: dict[str, Any] = {"type": "FeatureCollection", "features": features}
         if to_wgs84 is None:  # local frame -> annotate non-WGS84 coordinates
             fc["properties"] = {"crs": "local"}
@@ -85,7 +92,8 @@ class Contours(Stage):
             "wgs84": to_wgs84 is not None,
         })
         return StageResult(
-            artifacts={"contours": "contours.geojson", "meta": "contours.json"},
+            artifacts={"contours": "contours.geojson", "lines": "contours_px.json",
+                       "meta": "contours.json"},
             metrics={"levels": len(features), "segments": total_segments, "interval_m": interval},
         )
 

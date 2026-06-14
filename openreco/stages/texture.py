@@ -28,15 +28,16 @@ from openreco.texture_bake import bake_face_blend, select_top_k
 @register_stage
 class Texture(Stage):
     type = "texture"
-    version = "3"  # v3: multi-image blending + exposure equalization (de-lighting v1)
+    version = "4"  # v4: downscale source images for baking + lighter defaults (speed)
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
         return {
-            "target_faces": 200000,
+            "target_faces": 150000,
             "atlas_resolution": 2048,
-            "blend_images": 4,          # blend up to N most front-facing views per face (1 = single best)
+            "blend_images": 3,          # blend up to N most front-facing views per face (1 = single best, fastest)
             "equalize_exposure": True,  # per-image gain to a common brightness (radiometric balance)
+            "image_max_dim": 2000,      # downscale source images for baking (0 = full res); big speed/memory win
         }
 
     def run(self, ctx: RunContext) -> StageResult:
@@ -58,7 +59,7 @@ class Texture(Stage):
         faces = indices.astype(np.int64)
         ctx.logger.info("UV unwrap done: %d atlas vertices", len(tverts))
 
-        cams = self._cameras(rec)
+        cams = self._cameras(rec, int(ctx.params.get("image_max_dim", 2000)))
         res = int(ctx.params["atlas_resolution"])
         atlas, filled, used = self._bake(ctx, tverts, faces, uvs, cams, image_dir, res)
 
@@ -88,16 +89,22 @@ class Texture(Stage):
                                             faces.astype(np.int32), target_reduction=reduction)
         return v.astype(np.float32), f.astype(np.int32)
 
-    def _cameras(self, rec) -> list[dict]:
+    def _cameras(self, rec, max_dim: int = 0) -> list[dict]:
         cams = []
         for image_id in rec.reg_image_ids():
             img = rec.image(image_id)
             cam = rec.camera(img.camera_id)
             k = np.asarray(cam.calibration_matrix(), np.float64)
             m = np.asarray(img.cam_from_world().matrix())          # 3x4 world->cam
+            w, h = int(cam.width), int(cam.height)
+            # downscale source images for baking (huge speed/memory win on big photos): scale K + size
+            f = min(1.0, max_dim / max(w, h)) if max_dim else 1.0
+            if f < 1.0:
+                k = k.copy()
+                k[:2, :] *= f
+                w, h = max(1, round(w * f)), max(1, round(h * f))
             cams.append({"P": k @ m, "C": np.asarray(img.projection_center()),
-                         "w": int(cam.width), "h": int(cam.height), "name": img.name,
-                         "wh": (int(cam.width), int(cam.height))})
+                         "w": w, "h": h, "name": img.name, "wh": (w, h)})
         return cams
 
     def _bake(self, ctx, tverts, faces, uvs, cams, image_dir, res):

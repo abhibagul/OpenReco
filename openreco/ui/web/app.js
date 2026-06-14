@@ -87,15 +87,41 @@ $('gizmo').addEventListener('pointerdown', (e) => {
   const ndc = new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
   gizmoRay.setFromCamera(ndc, gizmoCam);
   const hit = gizmoRay.intersectObject(gizmoCube)[0];
-  if (hit && hit.face) snapView(hit.face.normal.clone());   // local normal = world axis to view from
+  if (!hit) return;
+  // sign-snap the hit point in cube-local space -> face (1 axis), edge (2 axes) or corner (3 axes)
+  const loc = gizmoCube.worldToLocal(hit.point.clone());
+  const s = (v) => (Math.abs(v) > 0.45 ? Math.sign(v) : 0);
+  const n = new THREE.Vector3(s(loc.x), s(loc.y), s(loc.z));
+  if (n.lengthSq() > 0) snapView(n);
 });
 function snapView(n) {
   const d = camera.position.distanceTo(controls.target) || 10;
+  n = n.clone().normalize();
   camera.up.set(0, 0, 1);                                          // Z-up world
-  if (Math.abs(n.z) > 0.9) camera.up.set(0, 1, 0);                 // top/bottom: use north as up
-  camera.position.copy(controls.target).add(n.normalize().multiplyScalar(d));
+  if (Math.abs(n.z) > 0.9) camera.up.set(0, 1, 0);                 // straight top/bottom: north up
+  camera.position.copy(controls.target).add(n.multiplyScalar(d));
   camera.lookAt(controls.target); controls.update();
 }
+// 90-degree rotations (CAD nav arrows): orbit around an axis, or roll the view
+function orbitView(axis, deg) {
+  const off = camera.position.clone().sub(controls.target);
+  const q = new THREE.Quaternion().setFromAxisAngle(axis, deg * Math.PI / 180);
+  off.applyQuaternion(q); camera.up.applyQuaternion(q);
+  camera.position.copy(controls.target).add(off);
+  camera.lookAt(controls.target); controls.update();
+}
+function rotateGizmo(kind) {
+  const fwd = controls.target.clone().sub(camera.position).normalize();
+  const right = new THREE.Vector3().crossVectors(fwd, camera.up).normalize();
+  if (kind === 'left') orbitView(new THREE.Vector3(0, 0, 1), 90);
+  else if (kind === 'right') orbitView(new THREE.Vector3(0, 0, 1), -90);
+  else if (kind === 'up') orbitView(right, -90);
+  else if (kind === 'down') orbitView(right, 90);
+  else if (kind === 'rollL') orbitView(fwd, -90);
+  else if (kind === 'rollR') orbitView(fwd, 90);
+  else if (kind === 'home') snapView(new THREE.Vector3(1, -1, 0.8));
+}
+document.querySelectorAll('#gizmoNav .gn').forEach(b => b.onclick = () => rotateGizmo(b.dataset.rot));
 
 (function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera);
   // cube mirrors the main camera orientation
@@ -415,11 +441,13 @@ function selectLayer(id) {
   selected = id; renderWorkspace();
   const L = PROJECT.layers.find(x => x.id === id);
   renderParams(L);
-  if (L) rasterView(L);          // raster products (ortho/DSM/index) open in the 2D Ortho view
+  if (L && L.type === 'contours') contourView(L);
+  else if (L) rasterView(L);     // raster products (ortho/DSM/index) open in the 2D Ortho view
 }
 // double-click: open a layer in whichever view fits it best
 function openLayer(L) {
   selected = L.id; renderParams(L);
+  if (L.type === 'contours') { contourView(L); return; }       // contour lines over the DSM
   if (rasterArtifact(L)) { rasterView(L); return; }            // ortho / DEM / index -> 2D
   if (viewable(L)) { setVisible(L, true); selectVtab('model'); frameAll(); return; }  // mesh/cloud -> 3D
   if (L.type === 'ingest') { showCameras(L); return; }         // cameras -> 3D positions
@@ -707,20 +735,46 @@ function rasterArtifact(layer) {
   return null;
 }
 let oz = { s: 1, tx: 0, ty: 0 };
-function applyOrtho() { $('orthoimg').style.transform = `translate(${oz.tx}px,${oz.ty}px) scale(${oz.s})`; }
-function rasterView(layer) {
-  const tif = rasterArtifact(layer); if (!tif) return false;
+function applyOrtho() {
+  const t = `translate(${oz.tx}px,${oz.ty}px) scale(${oz.s})`;
+  $('orthoimg').style.transform = t; $('orthocanvas').style.transform = t;
+}
+function rasterView(layer, tifOverride, onReady) {
+  const tif = tifOverride || rasterArtifact(layer); if (!tif) return false;
   selectVtab('ortho');
-  const img = $('orthoimg');
+  const img = $('orthoimg'), cv = $('orthocanvas');
+  cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);   // clear any prior overlay
   img.onload = () => {                                   // fit to viewport
     const w = $('center').clientWidth, h = $('center').clientHeight;
     oz.s = Math.min(w / img.naturalWidth, h / img.naturalHeight) * 0.95;
     oz.tx = (w - img.naturalWidth * oz.s) / 2; oz.ty = (h - img.naturalHeight * oz.s) / 2;
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
     applyOrtho();
+    if (onReady) onReady(img);
   };
   img.src = `/api/raster_png?path=${encodeURIComponent(tif)}`;
   $('orthohint').textContent = `${layer.id} · ${tif.split(/[\\/]/).pop()} · scroll to zoom, drag to pan`;
   return true;
+}
+// contours: draw pixel-space lines over their input DSM raster in the 2D Ortho view
+async function contourView(L) {
+  const dsmLayer = (L.inputs || []).map(id => PROJECT.layers.find(x => x.id === id))
+    .find(x => x && (x.artifacts || {}).dsm);
+  const linesPath = (L.artifacts || {}).lines;
+  if (!dsmLayer || !linesPath) { selectDock('console'); log(`${L.id}: run it (needs a DSM input) to view contours`); return; }
+  rasterView(L, dsmLayer.artifacts.dsm, async (img) => {
+    const data = await (await fetch(`/api/file?path=${encodeURIComponent(linesPath)}`)).json();
+    const cv = $('orthocanvas'), g = cv.getContext('2d');
+    const sx = img.naturalWidth / data.width, sy = img.naturalHeight / data.height;
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.strokeStyle = '#f9e2af'; g.lineWidth = Math.max(1, img.naturalWidth / 1200);
+    g.beginPath();
+    for (const [c0, r0, c1, r1] of data.segments) {
+      g.moveTo(c0 * sx, r0 * sy); g.lineTo(c1 * sx, r1 * sy);
+    }
+    g.stroke();
+    $('orthohint').textContent = `${L.id} · ${data.segments.length} contour segments over ${dsmLayer.id}`;
+  });
 }
 (function orthoNav() {
   const view = $('orthoview');

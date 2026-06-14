@@ -58,12 +58,17 @@
   #imgview.show { display:block; } #imgwrap { position:relative; display:inline-block; }
   #orthoview { position:absolute; inset:0; display:none; overflow:hidden; background:#05070b; cursor:grab; }
   #orthoview.show { display:block; } #orthoview.drag { cursor:grabbing; }
-  #orthoview img { position:absolute; top:0; left:0; transform-origin:0 0; image-rendering:pixelated; }
+  #orthoview img, #orthocanvas { position:absolute; top:0; left:0; transform-origin:0 0; image-rendering:pixelated; }
+  #orthocanvas { pointer-events:none; }
   #orthohint { position:absolute; bottom:8px; left:8px; color:var(--muted); font-size:11px; }
   #imgview img { display:block; max-width:none; } #imgview .pin { position:absolute; width:12px; height:12px;
      margin:-6px 0 0 -6px; border:2px solid var(--warn); border-radius:50%; background:#0008; cursor:pointer; }
   #imgview .pin span { position:absolute; left:14px; top:-4px; color:var(--warn); font-size:11px; white-space:nowrap; }
   #gizmo { position:absolute; top:38px; right:10px; width:96px; height:96px; z-index:6; cursor:pointer; }
+  #gizmoNav { position:absolute; top:138px; right:10px; width:96px; z-index:6;
+              display:grid; grid-template-columns:repeat(3,1fr); gap:2px; }
+  #gizmoNav .gn { padding:3px 0; font-size:11px; line-height:1; background:#1a2230cc; border:1px solid var(--line); }
+  #gizmoNav .gn:hover { background:var(--accent); color:#0b0e14; }
   #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:5; }
   #vtabs button.on { background:var(--accent); color:#0b0e14; }
   #measure { position:absolute; top:8px; right:8px; background:#0009; border:1px solid var(--line);
@@ -209,9 +214,18 @@
       <button data-vtab="photo">Photo</button>
     </div>
     <canvas id="c"></canvas>
-    <canvas id="gizmo" title="Navigation cube — click a face to snap the view"></canvas>
+    <canvas id="gizmo" title="Navigation cube — click a face, edge or corner to snap the view"></canvas>
+    <div id="gizmoNav">
+      <button class="gn" data-rot="rollL" title="Roll left">⟲</button>
+      <button class="gn" data-rot="up" title="Rotate up">▲</button>
+      <button class="gn" data-rot="rollR" title="Roll right">⟳</button>
+      <button class="gn" data-rot="left" title="Rotate left">◄</button>
+      <button class="gn" data-rot="home" title="Home / iso view">⌂</button>
+      <button class="gn" data-rot="right" title="Rotate right">►</button>
+      <button class="gn" data-rot="down" title="Rotate down" style="grid-column:2">▼</button>
+    </div>
     <div id="imgview"><div id="imgwrap"></div></div>
-    <div id="orthoview"><img id="orthoimg" alt=""><div id="orthohint"></div></div>
+    <div id="orthoview"><img id="orthoimg" alt=""><canvas id="orthocanvas"></canvas><div id="orthohint"></div></div>
     <div id="measure"></div>
   </div>
   <!-- right: properties -->
