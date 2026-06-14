@@ -1,0 +1,3 @@
+# name,X,Y,Z,image,u,v,type  (type=control|check; written by the UI marker tool)
+GCP1,0.0,0.0,0.0,DSC00154.JPG,977,2085,check
+GCP2,0.0,0.0,0.0,DSC00154.JPG,306,2108,check

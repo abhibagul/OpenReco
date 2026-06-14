@@ -1,0 +1,34 @@
+{
+  "markers": [
+    {
+      "name": "GCP1",
+      "world": null,
+      "observations": [
+        {
+          "image": "DSC00154.JPG",
+          "u": 977,
+          "v": 2085
+        }
+      ],
+      "type": "check"
+    },
+    {
+      "name": "GCP2",
+      "world": null,
+      "observations": [
+        {
+          "image": "DSC00154.JPG",
+          "u": 306,
+          "v": 2108
+        }
+      ],
+      "type": "check"
+    },
+    {
+      "name": "GCP3",
+      "world": null,
+      "observations": [],
+      "type": "check"
+    }
+  ]
+}

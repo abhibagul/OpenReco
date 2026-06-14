@@ -1,83 +1,31 @@
 [project]
 name = "Aerial demo"
 crs = "EPSG:32613"
-chunks = ["Chunk 1", "Chunk 2"]
+chunks = ["abhishek"]
 
 [[stage]]
 id = "ingest1"
 type = "ingest"
+chunk = "abhishek"
 params = { image_dir = "C:\\Users\\abbyb\\Downloads\\example_building\\images" }
 
 [[stage]]
 id = "sfm1"
 type = "sfm"
+chunk = "abhishek"
 inputs = ["ingest1"]
-params = { max_image_size = 1000, matcher = "spatial", max_num_features = 4000, camera_mode = "auto", mapper = "incremental" }
+params = { max_image_size = 1600, matcher = "exhaustive", max_num_features = 8192, camera_mode = "auto", mapper = "incremental" }
 
 [[stage]]
 id = "mvs1"
 type = "mvs"
+chunk = "abhishek"
 inputs = ["ingest1", "sfm1"]
-params = { quality = "low", geometric_consistency = true, dense_backend = "auto" }
-
-[[stage]]
-id = "mesh1"
-type = "mesh"
-inputs = ["mvs1"]
-params = { method = "poisson", poisson_depth = 11 }
-
-[[stage]]
-id = "texture1"
-type = "texture"
-inputs = ["ingest1", "sfm1", "mesh1"]
-params = { atlas_resolution = 2048, blend_images = 4, equalize_exposure = true }
-
-[[stage]]
-id = "dsm1"
-type = "dsm"
-inputs = ["mvs1"]
-params = { resolution_m = 1 }
-
-[[stage]]
-id = "ortho1"
-type = "ortho"
-inputs = ["mvs1"]
-params = { resolution_m = 0.5 }
-
-[[stage]]
-id = "ortho2"
-type = "ortho"
-inputs = ["mvs1"]
-params = { resolution_m = 0.1 }
-
-[[stage]]
-id = "dsm2"
-type = "dsm"
-inputs = ["mvs1"]
-params = { resolution_m = 0.1 }
+params = { quality = "medium", geometric_consistency = true, dense_backend = "auto" }
 
 [[stage]]
 id = "classify1"
 type = "classify"
+chunk = "abhishek"
 inputs = ["mvs1"]
-params = { cell_m = 1, ground_threshold_m = 0.2 }
-
-[[stage]]
-id = "ingest2"
-type = "ingest"
-chunk = "Chunk 2"
-params = { image_dir = "D:\\openreco\\aerialdata" }
-
-[[stage]]
-id = "sfm2"
-type = "sfm"
-chunk = "Chunk 2"
-inputs = ["ingest2"]
-params = { max_image_size = 1000, matcher = "spatial", max_num_features = 4000, camera_mode = "auto", mapper = "incremental" }
-
-[[stage]]
-id = "mvs2"
-type = "mvs"
-chunk = "Chunk 2"
-inputs = ["ingest2", "sfm2"]
-params = { quality = "low", geometric_consistency = true, dense_backend = "auto" }
+params = { cell_m = 5, ground_threshold_m = 0.5 }

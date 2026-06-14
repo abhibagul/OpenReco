@@ -25,10 +25,27 @@ const CAT_ORDER = ["Cameras", "Tie Points", "Markers", "Dense Cloud", "Point Clo
                    "3D Model", "Tiled Model", "DEM", "Orthomosaic", "Shapes", "Other"];
 
 const $ = (id) => document.getElementById(id);
-const log = (m) => { const l = $('log');
-  let lines = (l.textContent + `\n${m}`).split('\n');
-  if (lines.length > 800) lines = lines.slice(-800);   // cap: native run logs can be thousands of lines
-  l.textContent = lines.join('\n'); l.scrollTop = l.scrollHeight; };
+// styled console: each entry gets a timestamp + colored level chip
+function classifyLog(m) {
+  if (/^E\d{8}|\berror\b|\bfail|✗|⨯/i.test(m)) return 'err';
+  if (/^W\d{8}|\bwarn/i.test(m)) return 'warn';
+  if (/✓|\bOK\b|\bdone\b|\bsaved\b|\bexported\b|registered/i.test(m)) return 'ok';
+  if (/^▶|^---|\brun\b|^built|^added|^updated/i.test(m)) return 'run';
+  if (/^I\d{8}/.test(m)) return 'debug';                 // native COLMAP/glog info line
+  return 'info';
+}
+function log(m, level) {
+  const el = $('log'); if (!el) return;
+  const lvl = level || classifyLog(m);
+  const near = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
+  const row = document.createElement('div'); row.className = 'logrow ' + lvl;
+  row.innerHTML = `<span class="lt">${new Date().toTimeString().slice(0, 8)}</span>`
+                + `<span class="ll">${lvl}</span>`;
+  const msg = document.createElement('span'); msg.className = 'lm'; msg.textContent = m;
+  row.appendChild(msg); el.appendChild(row);
+  while (el.childElementCount > 1200) el.removeChild(el.firstChild);
+  if (near) el.scrollTop = el.scrollHeight;              // autoscroll only if already at bottom
+}
 
 // ---- 3D viewport ----------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
@@ -40,10 +57,36 @@ const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(1, 1, 1); scene.add(dl);
 const measureGroup = new THREE.Group(); scene.add(measureGroup);
-// ground grid + axis triad (orientation aids)
-const grid = new THREE.GridHelper(1, 20, 0x3b4660, 0x222b38);
-grid.rotation.x = Math.PI / 2;          // GridHelper is XZ by default; rotate into the XY ground plane (Z-up)
+// ---- infinite ground grid (shader plane in the XY world plane, Z-up) -------
+const grid = new THREE.Mesh(
+  new THREE.PlaneGeometry(2e6, 2e6),
+  new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    extensions: { derivatives: true },          // enable fwidth() for the grid AA
+    uniforms: { uCam: { value: new THREE.Vector3() }, uFade: { value: 100.0 },
+                uMinor: { value: new THREE.Color(0x3a4252) }, uMajor: { value: new THREE.Color(0x5a657c) } },
+    vertexShader: `varying vec3 vW;
+      void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vW = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp; }`,
+    fragmentShader: `precision highp float; varying vec3 vW;
+      uniform vec3 uCam; uniform float uFade; uniform vec3 uMinor; uniform vec3 uMajor;
+      float gridline(float size){ vec2 c = vW.xy / size;
+        vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c);
+        return 1.0 - min(min(g.x, g.y), 1.0); }
+      void main(){
+        float d = distance(uCam, vW);
+        float fade = 1.0 - clamp(d / uFade, 0.0, 1.0);
+        if (fade <= 0.0) discard;
+        float minor = gridline(1.0), major = gridline(10.0), huge = gridline(100.0);
+        float a = max(max(minor * 0.5, major * 0.85), huge);   // LOD: fine lines fade when sub-pixel
+        if (a < 0.012) discard;
+        vec3 col = mix(uMinor, uMajor, step(0.5, max(major, huge)));
+        gl_FragColor = vec4(col, a * fade * 0.7); }`,
+  }));
+grid.renderOrder = -1;
 scene.add(grid);
+
+
 const axes = new THREE.AxesHelper(1); scene.add(axes);
 let helpers = true;
 function resize() {
@@ -159,9 +202,15 @@ function rotateGizmo(kind) {
 }
 document.querySelectorAll('#gizmoNav .gn').forEach(b => b.onclick = () => rotateGizmo(b.dataset.rot));
 
-(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera);
-  // cube mirrors the main camera orientation
-  gizmoCube.quaternion.copy(camera.quaternion).invert();
+(function loop(){ requestAnimationFrame(loop); controls.update();
+  if (grid.visible) {                    // keep the infinite grid under the view + scale fade to zoom
+    const u = grid.material.uniforms;
+    u.uCam.value.copy(camera.position);
+    u.uFade.value = Math.max(30, camera.position.distanceTo(controls.target) * 4.5);
+    grid.position.x = controls.target.x; grid.position.y = controls.target.y;
+  }
+  renderer.render(scene, camera);
+  gizmoCube.quaternion.copy(camera.quaternion).invert();   // cube mirrors the main camera
   gizmoR.render(gizmoScene, gizmoCam);
 })();
 
@@ -172,11 +221,12 @@ function frameAll() {
   const size = box.getSize(new THREE.Vector3()).length(), c = box.getCenter(new THREE.Vector3());
   controls.target.copy(c);
   camera.position.copy(c).add(new THREE.Vector3(size*.6, -size*.6, size*.45));  // oblique, Z-up
-  camera.near = size/1000; camera.far = size*10; camera.updateProjectionMatrix();
-  // fit the orientation aids to the content (grid on the XY ground plane at min Z)
+  camera.near = Math.max(size/1000, 1e-3); camera.far = Math.max(size*1000, 1e6);
+  camera.updateProjectionMatrix();
+  // ground grid sits at the content's lowest Z (the infinite plane spans everything); axes at corner
+  grid.position.z = box.min.z;
   const g = size || 1;
-  grid.scale.setScalar(g); grid.position.set(c.x, c.y, box.min.z);
-  axes.scale.setScalar(g * 0.5); axes.position.copy(box.min);
+  axes.scale.setScalar(g * 0.4); axes.position.copy(box.min);
 }
 function toggleHelpers() { helpers = !helpers; grid.visible = helpers; axes.visible = helpers; }
 
@@ -543,36 +593,70 @@ function buildCameras(cams) {
 }
 
 // ---- properties / params --------------------------------------------------
+function section(title) {
+  const s = document.createElement('div'); s.className = 'section';
+  if (title) { const h = document.createElement('div'); h.className = 'stitle'; h.textContent = title; s.appendChild(h); }
+  return s;
+}
+function mkbtn(label, fn, icon, primary) {
+  const b = document.createElement('button'); if (primary) b.className = 'run';
+  b.innerHTML = (icon ? ic(icon) + ' ' : '') + `<span>${label}</span>`;
+  b.onclick = fn; return b;
+}
 function renderParams(L) {
+  const box = $('params'); box.innerHTML = '';
+  if (!L) { box.innerHTML = '<div class="empty">Select a layer to see its properties.</div>'; return; }
   const info = STAGES[L.type] || { default_params: {} };
   const cur = { ...(info.default_params || {}), ...L.params };
-  const box = $('params'); box.innerHTML = `<div class="muted">${L.id} — ${L.type} · ${L.chunk}</div>`;
+
+  const head = document.createElement('div'); head.className = 'phead';
+  head.innerHTML = `<span class="ico">${ic(CAT_ICON[CATEGORY[L.type]] || 'box')}</span>`
+    + `<span class="pid">${L.id}</span><span class="chip">${L.type}</span>`
+    + `<span class="sp"></span><span class="muted" style="font-size:11px">${L.chunk}</span>`;
+  box.appendChild(head);
+
+  // parameters as a label|control grid
+  const psec = section('Parameters');
+  const grid = document.createElement('div'); grid.className = 'prop';
   for (const [k, v] of Object.entries(cur)) {
-    const lab = document.createElement('label'); lab.textContent = k; box.appendChild(lab);
+    const lab = document.createElement('label'); lab.textContent = k; lab.title = k; grid.appendChild(lab);
     const inp = document.createElement('input'); inp.dataset.k = k;
-    if (typeof v === 'boolean') { inp.type = 'checkbox'; inp.checked = v; }
-    else if (typeof v === 'number') { inp.type = 'number'; inp.value = v; inp.step = 'any'; }
-    else { inp.type = 'text'; inp.value = Array.isArray(v) ? v.join(',') : v; }
-    box.appendChild(inp);
+    if (typeof v === 'boolean') {
+      inp.type = 'checkbox'; inp.checked = v;
+      const cell = document.createElement('div'); cell.className = 'chkcell'; cell.appendChild(inp); grid.appendChild(cell);
+    } else {
+      if (typeof v === 'number') { inp.type = 'number'; inp.value = v; inp.step = 'any'; }
+      else { inp.type = 'text'; inp.value = Array.isArray(v) ? v.join(',') : v; }
+      grid.appendChild(inp);
+    }
   }
-  const btn = document.createElement('button'); btn.textContent = 'Update layer'; btn.style.marginTop = '10px';
-  btn.onclick = () => updateStage(L); box.appendChild(btn);
-  if (viewable(L)) {
-    const vb = document.createElement('button'); vb.textContent = visible.has(L.id) ? 'Hide in view' : 'Show in view';
-    vb.style.margin = '10px 0 0 6px'; vb.onclick = () => setVisible(L, !visible.has(L.id)); box.appendChild(vb);
+  if (!Object.keys(cur).length) grid.innerHTML = '<span class="empty">no parameters</span>';
+  psec.appendChild(grid); box.appendChild(psec);
+
+  const act = document.createElement('div'); act.className = 'actions';
+  act.appendChild(mkbtn('Run', () => runPipeline({ targets: [L.id], force: [L.id] }), 'play', true));
+  act.appendChild(mkbtn('Update', () => updateStage(L), 'edit'));
+  if (viewable(L)) act.appendChild(mkbtn(visible.has(L.id) ? 'Hide' : 'Show', () => setVisible(L, !visible.has(L.id)), 'eye'));
+  box.appendChild(act);
+
+  if (Object.keys(L.metrics || {}).length) {
+    const msec = section('Results');
+    const mg = document.createElement('div'); mg.className = 'metrics';
+    for (const [k, v] of Object.entries(L.metrics)) {
+      const c = document.createElement('div'); c.className = 'metric';
+      c.innerHTML = `<span class="mk">${k}</span><span class="mv" title="${v}">${v}</span>`;
+      mg.appendChild(c);
+    }
+    msec.appendChild(mg); box.appendChild(msec);
   }
   buildExport(box, L);
-  if (Object.keys(L.metrics || {}).length) {
-    const m = document.createElement('div'); m.className = 'muted'; m.style.marginTop = '8px';
-    m.textContent = Object.entries(L.metrics).map(([k, v]) => `${k}=${v}`).join('  ');
-    box.appendChild(m);
-  }
 }
 function buildExport(box, L) {
   const arts = Object.entries(L.artifacts || {}).filter(
     ([, v]) => typeof v === 'string' && /\.(ply|las|tif|tiff|geojson|obj|glb)$/i.test(v));
   if (!arts.length) return;
-  const h = document.createElement('label'); h.textContent = 'Export'; box.appendChild(h);
+  const sec = section('Export');
+  const g = document.createElement('div'); g.className = 'prop';
   const asel = document.createElement('select');
   arts.forEach(([k, v]) => { const o = document.createElement('option'); o.value = v; o.textContent = k; asel.appendChild(o); });
   const fsel = document.createElement('select');
@@ -581,14 +665,16 @@ function buildExport(box, L) {
     const { formats } = await (await fetch('/api/formats?path=' + encodeURIComponent(asel.value))).json();
     (formats || []).forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f; fsel.appendChild(o); });
   };
-  asel.onchange = refresh; box.appendChild(asel); box.appendChild(fsel); refresh();
-  const eb = document.createElement('button'); eb.textContent = 'Export as…'; eb.style.marginTop = '6px';
-  eb.onclick = async () => {
+  asel.onchange = refresh;
+  g.append(Object.assign(document.createElement('label'), { textContent: 'artifact' }), asel,
+           Object.assign(document.createElement('label'), { textContent: 'format' }), fsel);
+  sec.appendChild(g);
+  const eb = mkbtn('Export as…', async () => {
     const j = await (await fetch('/api/export', { method:'POST',
       body: JSON.stringify({ path: asel.value, fmt: fsel.value }) })).json();
-    log(j.out ? `exported -> ${j.out}` : `export error: ${j.error}`);
-  };
-  box.appendChild(eb);
+    log(j.out ? `exported → ${j.out}` : `export error: ${j.error}`, j.out ? 'ok' : 'err');
+  }, 'save');
+  eb.style.marginTop = '8px'; sec.appendChild(eb); box.appendChild(sec); refresh();
 }
 function collectParams(L) {
   const defaults = (STAGES[L.type] || {}).default_params || {};
@@ -652,7 +738,7 @@ async function runPipeline(body = {}) {
     const ev = JSON.parse(e.data);
     if (ev.event === 'log') {
       const cls = ev.level === 'ERROR' ? 'err' : (ev.level === 'WARNING' ? 'warn' : '');
-      log(ev.msg); progLog(ev.msg, cls);
+      log(ev.msg, cls || undefined); progLog(ev.msg, cls);
     } else if (ev.event === 'stage_start') { setDot(ev.id, 'running');
       $('progTitle').textContent = `Processing: ${ev.id} (${ev.type})`; $('progStage').textContent = `running ${ev.id}…`;
       setBar(null); log(`▶ ${ev.id} (${ev.type})`); progLog(`▶ ${ev.id} (${ev.type})`);
@@ -1066,20 +1152,23 @@ function openOp(op) {
     inb.appendChild(w);
   });
   const fb = $('mFields'); fb.innerHTML = '';
+  const fg = document.createElement('div'); fg.className = 'prop'; fb.appendChild(fg);
   op.fields.forEach(f => {
-    const lab = document.createElement('label'); lab.textContent = f.label; fb.appendChild(lab);
-    let inp;
+    const lab = document.createElement('label'); lab.textContent = f.label; lab.title = f.label;
+    let inp, cell;
     if (f.type === 'enum') {
       inp = document.createElement('select');
       Object.keys(f.options).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = k; inp.appendChild(o); });
       inp.value = f.default;
-    } else if (f.type === 'bool') { inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!f.default; }
+    } else if (f.type === 'bool') { inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!f.default;
+      cell = document.createElement('div'); cell.className = 'chkcell'; cell.appendChild(inp); }
     else if (f.type === 'path' || f.type === 'string') {
       inp = document.createElement('input'); inp.type = 'text'; inp.value = f.default;
       if (f.type === 'path') inp.placeholder = 'folder path (e.g. D:\\data\\flight1 or "images")';
     }
     else { inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any'; inp.value = f.default; }
-    inp.dataset.label = f.label; inp.dataset.type = f.type; fb.appendChild(inp);
+    inp.dataset.label = f.label; inp.dataset.type = f.type;
+    fg.append(lab, cell || inp);
   });
   // Add Photos (ingest) gets a file picker that selects specific images across folders
   $('mBrowse').classList.toggle('hidden', op.stage !== 'ingest');
@@ -1214,4 +1303,5 @@ function setupSplitters() {
 
 // ---- boot ----
 (async () => { setupSplitters(); resize(); await loadStages(); await loadWorkflows();
-  await loadProject(); await loadMarkers(); })();
+  await loadProject(); await loadMarkers();
+  log(`OpenReco ready · project "${PROJECT.name}" · ${PROJECT.layers.length} layer(s)`, 'ok'); })();
