@@ -385,6 +385,40 @@ class AppState:
                     pass
         return roots
 
+    def edit_cloud(self, layer_id: str, removed: list[int], chunk: str) -> dict:
+        """Write a copy of a point-cloud layer with `removed` point indices deleted, and add it as an
+        import_cloud layer (non-destructive: the source layer is untouched)."""
+        import numpy as np
+
+        from openreco.io.pointcloud import read_ply, write_ply
+        last = self._last_run()
+        art = last.get(layer_id, {}).get("artifacts", {})
+        ply = art.get("points") or art.get("merged")
+        if not ply or not Path(ply).is_file():
+            raise ValueError(f"layer {layer_id!r} has no point cloud (run it first)")
+        xyz, rgb, normals = read_ply(Path(ply))
+        mask = np.ones(len(xyz), bool)
+        rem = np.asarray([i for i in removed if 0 <= i < len(xyz)], dtype=np.int64)
+        mask[rem] = False
+        xyz, rgb = xyz[mask], (rgb[mask] if rgb is not None else None)
+        normals = normals[mask] if normals is not None else None
+
+        meta = {}
+        mp = art.get("meta")
+        if mp and Path(mp).is_file():
+            meta = json.loads(Path(mp).read_text(encoding="utf-8"))
+        edits = self.project.manifest.project_dir / "edits"
+        edits.mkdir(parents=True, exist_ok=True)
+        ids = {s.id for s in self.project.manifest.stages}
+        new_id = _unique_id(f"{layer_id}_edit", ids)
+        out = edits / f"{new_id}.ply"
+        write_ply(out, xyz, rgb, normals)
+        self.project.add_stage(new_id, "import_cloud", chunk=chunk, params={
+            "path": str(out), "crs_epsg": int(meta.get("crs_epsg") or 0),
+            "origin": meta.get("origin", [0.0, 0.0, 0.0])})
+        self.project.save()
+        return {"ok": True, "id": new_id, "kept": int(mask.sum()), "removed": int((~mask).sum())}
+
     def detect_markers(self, chunk: str | None, dictionary: str) -> dict:
         """Auto-detect coded targets across a chunk's photos -> GCP markers (id -> observations)."""
         import numpy as np
@@ -572,6 +606,12 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 return self._send(200, self.state.detect_markers(body.get("chunk"),
                                   body.get("dictionary", "4x4_50")))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": repr(exc)})
+        if u.path == "/api/edit_cloud":
+            try:
+                return self._send(200, self.state.edit_cloud(body.get("layer", ""),
+                                  body.get("removed", []), body.get("chunk", "Chunk 1")))
             except Exception as exc:  # noqa: BLE001
                 return self._send(400, {"error": repr(exc)})
         if u.path == "/api/use_gcps":

@@ -17,7 +17,7 @@ const objects = new Map();          // layer id -> THREE object (cached once loa
 const CATEGORY = {
   ingest: "Cameras", sfm: "Tie Points", refine: "Tie Points", markers: "Markers",
   mvs: "Dense Cloud", fuse: "Dense Cloud", merge_chunks: "Dense Cloud", classify: "Point Cloud",
-  clean: "Dense Cloud",
+  clean: "Dense Cloud", import_cloud: "Dense Cloud",
   mesh: "3D Model", texture: "3D Model", splat: "3D Model", tiles: "Tiled Model",
   dsm: "DEM", ortho: "Orthomosaic", contours: "Shapes", indices: "Orthomosaic",
   volume: "Shapes", profile: "Shapes", panorama: "Orthomosaic",
@@ -280,6 +280,109 @@ async function setVisible(layer, on) {
   }
   renderWorkspace();
 }
+
+// ---- 3D point-cloud editing: box-select + delete (non-destructive) ---------
+let selMode = false, selLayer = null, selObj = null, selOrig = null;
+let selRemoved = [], selSet = new Set(), selHi = null, selDrag = null;
+function setSelMode(on) {
+  selMode = on; $('selBtn').classList.toggle('on', on);
+  controls.enabled = !on; $('center').classList.toggle('selecting', on);
+  if (on) beginEdit();
+}
+function beginEdit() {
+  let L = PROJECT.layers.find(x => x.id === selected);
+  let obj = L && objects.get(L.id);
+  if (!(obj && obj.isPoints)) {                 // else any visible point cloud
+    for (const [id, o] of objects) if (visible.has(id) && o.isPoints) {
+      obj = o; L = PROJECT.layers.find(x => x.id === id) || { id, chunk: ACTIVE_CHUNK }; break; }
+  }
+  if (!(obj && obj.isPoints)) { log('show a point-cloud layer first, then enable Select', 'warn'); setSelMode(false); return; }
+  if (!selLayer || selLayer.id !== L.id) {       // fresh edit session for this layer
+    selLayer = L; selRemoved = [];
+    const n = obj.geometry.getAttribute('position').count;
+    selOrig = new Int32Array(n); for (let i = 0; i < n; i++) selOrig[i] = i;
+  }
+  selObj = obj;
+  log(`editing ${selLayer.id}: drag a box to select points (shift to add)`);
+}
+function clearSel() { selSet.clear(); updateSelHi(); }
+function updateSelHi() {
+  if (selHi) { scene.remove(selHi); selHi.geometry.dispose(); selHi = null; }
+  if (!selSet.size || !selObj) return;
+  const pos = selObj.geometry.getAttribute('position');
+  const arr = new Float32Array(selSet.size * 3); let k = 0;
+  selSet.forEach(i => { arr[k++] = pos.getX(i); arr[k++] = pos.getY(i); arr[k++] = pos.getZ(i); });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+  selHi = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xff3b30, size: 4, sizeAttenuation: false, depthTest: false }));
+  selHi.applyMatrix4(selObj.matrixWorld); scene.add(selHi);
+}
+function selectInRect(x0, y0, x1, y1, add) {
+  if (!add) selSet.clear();
+  const pos = selObj.geometry.getAttribute('position'); selObj.updateMatrixWorld();
+  const m = selObj.matrixWorld, w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).applyMatrix4(m).project(camera);
+    if (v.z > 1) continue;                       // behind camera / clipped
+    const sx = (v.x * 0.5 + 0.5) * w, sy = (-v.y * 0.5 + 0.5) * h;
+    if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) selSet.add(i);
+  }
+  updateSelHi(); log(`${selSet.size.toLocaleString()} point(s) selected`);
+}
+function deleteSelected() {
+  if (!selObj || !selSet.size) { log('nothing selected', 'warn'); return; }
+  const geo = selObj.geometry, pos = geo.getAttribute('position');
+  const col = geo.getAttribute('color'), nor = geo.getAttribute('normal');
+  selSet.forEach(i => selRemoved.push(selOrig[i]));
+  const keep = []; for (let i = 0; i < pos.count; i++) if (!selSet.has(i)) keep.push(i);
+  const np = new Float32Array(keep.length * 3), nc = col ? new Float32Array(keep.length * 3) : null;
+  const nn = nor ? new Float32Array(keep.length * 3) : null, no = new Int32Array(keep.length);
+  keep.forEach((i, j) => {
+    np[j*3] = pos.getX(i); np[j*3+1] = pos.getY(i); np[j*3+2] = pos.getZ(i);
+    if (nc) { nc[j*3] = col.getX(i); nc[j*3+1] = col.getY(i); nc[j*3+2] = col.getZ(i); }
+    if (nn) { nn[j*3] = nor.getX(i); nn[j*3+1] = nor.getY(i); nn[j*3+2] = nor.getZ(i); }
+    no[j] = selOrig[i];
+  });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(np, 3));
+  if (nc) g.setAttribute('color', new THREE.BufferAttribute(nc, 3));
+  if (nn) g.setAttribute('normal', new THREE.BufferAttribute(nn, 3));
+  const removedNow = pos.count - keep.length;
+  geo.dispose(); selObj.geometry = g; selOrig = no; selSet.clear(); updateSelHi();
+  log(`deleted ${removedNow.toLocaleString()} point(s) — ${selRemoved.length.toLocaleString()} total; Save to persist`);
+}
+async function saveEdits() {
+  if (!selLayer || !selRemoved.length) { log('no edits to save', 'warn'); return; }
+  const j = await (await fetch('/api/edit_cloud', { method:'POST',
+    body: JSON.stringify({ layer: selLayer.id, removed: selRemoved, chunk: selLayer.chunk }) })).json();
+  if (!j.ok) { log('edit save error: ' + (j.error || 'failed'), 'err'); return; }
+  log(`saved edited cloud as ${j.id} (kept ${j.kept.toLocaleString()}, removed ${j.removed.toLocaleString()})`, 'ok');
+  selRemoved = []; selSet.clear(); updateSelHi(); selLayer = null; selObj = null; selOrig = null; setSelMode(false);
+  await loadProject(); await runPipeline({ targets: [j.id] });
+}
+$('selBtn').onclick = () => setSelMode(!selMode);
+$('delSelBtn').onclick = deleteSelected;
+$('clearSelBtn').onclick = clearSel;
+$('saveEditBtn').onclick = saveEdits;
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!selMode || e.button !== 0) return;
+  selDrag = { x0: e.clientX, y0: e.clientY, r: renderer.domElement.getBoundingClientRect(), shift: e.shiftKey };
+  $('selrect').style.display = 'block';
+});
+addEventListener('pointermove', (e) => {
+  if (!selDrag) return; const r = selDrag.r, el = $('selrect');
+  el.style.left = (Math.min(e.clientX, selDrag.x0) - r.left) + 'px';
+  el.style.top = (Math.min(e.clientY, selDrag.y0) - r.top) + 'px';
+  el.style.width = Math.abs(e.clientX - selDrag.x0) + 'px';
+  el.style.height = Math.abs(e.clientY - selDrag.y0) + 'px';
+});
+addEventListener('pointerup', (e) => {
+  if (!selDrag) return; const d = selDrag; selDrag = null; $('selrect').style.display = 'none';
+  if (!selObj) return; const r = d.r;
+  const x0 = Math.min(d.x0, e.clientX) - r.left, x1 = Math.max(d.x0, e.clientX) - r.left;
+  const y0 = Math.min(d.y0, e.clientY) - r.top, y1 = Math.max(d.y0, e.clientY) - r.top;
+  if (x1 - x0 < 3 && y1 - y0 < 3) return;
+  selectInRect(x0, y0, x1, y1, d.shift);
+});
 
 // ---- measurement (distance / area) ----------------------------------------
 let measureMode = null;           // null | 'dist' | 'area'

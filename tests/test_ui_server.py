@@ -204,6 +204,7 @@ def test_frontend_has_workspace_chunks(server):
     assert b"/api/new_project" in appjs and b"/api/save_project" in appjs
     assert b"/api/cameras" in appjs and b"buildCameras" in appjs
     assert b"/api/geo_overlay" in appjs and b"showOnMap" in appjs        # web map overlay
+    assert b"/api/edit_cloud" in appjs and b"setSelMode" in appjs and b"selectInRect" in appjs  # 3D edit
     assert b"setupSplitters" in appjs and b"snapView" in appjs and b"gridline" in appjs  # infinite grid shader
     assert b"runPipeline" in appjs and b"camera.up.set(0, 0, 1)" in appjs   # Z-up world
     assert b"rotateGizmo" in appjs and b"contourView" in appjs               # navcube nav + contour overlay
@@ -326,6 +327,31 @@ def test_images_endpoint_lists_chunk_photos(tmp_path):
         data = json.loads(_get(base + "/api/images?chunk=Chunk 1".replace(" ", "%20"))[1])
         assert [im["name"] for im in data["images"]] == ["DJI_1.JPG"]
         assert data["images"][0]["path"].endswith("DJI_1.JPG")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_edit_cloud_creates_import_layer(tmp_path):
+    import numpy as np
+    from openreco.io.pointcloud import write_ply
+    ply = tmp_path / "cloud.ply"
+    write_ply(ply, np.random.rand(500, 3).astype("float32"), np.full((500, 3), 200, np.uint8))
+    proj = Project.create(tmp_path / "proj", name="ed").add_stage("pc", "import_cloud",
+                                                                  params={"path": str(ply)})
+    proj.run()                                  # materialize the source cloud
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        status, body = _post(base + "/api/edit_cloud",
+                             {"layer": "pc", "removed": list(range(100)), "chunk": "Chunk 1"})
+        assert status == 200 and body["ok"] and body["kept"] == 400 and body["removed"] == 100
+        layers = {L["id"]: L for L in json.loads(_get(base + "/api/project")[1])["layers"]}
+        assert body["id"] in layers and layers[body["id"]]["type"] == "import_cloud"
+        # the edited cloud materializes to the kept count
+        out = proj.run(targets=[body["id"]])
+        assert next(s for s in out.stages if s.id == body["id"]).metrics["num_points"] == 400
     finally:
         httpd.shutdown()
         httpd.server_close()

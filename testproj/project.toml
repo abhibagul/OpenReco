@@ -24,20 +24,6 @@ inputs = ["ingest1", "sfm1"]
 params = { quality = "low", geometric_consistency = false, dense_backend = "auto", planesweep_max_dim = 600 }
 
 [[stage]]
-id = "classify1"
-type = "classify"
-chunk = "abhishek"
-inputs = ["mvs1"]
-params = { cell_m = 5, ground_threshold_m = 0.5 }
-
-[[stage]]
-id = "contours1"
-type = "contours"
-chunk = "abhishek"
-inputs = ["sfm1"]
-params = { interval_m = 10 }
-
-[[stage]]
 id = "dsm1"
 type = "dsm"
 chunk = "abhishek"

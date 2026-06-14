@@ -147,6 +147,7 @@ STAGE_PROVIDES: dict[str, list[str]] = {
     "fuse": ["points", "meta"],
     "classify": ["points", "meta"],
     "clean": ["points", "meta", "mesh"],
+    "import_cloud": ["points", "meta"],
     "mesh": ["mesh"],
     "texture": ["mesh", "glb"],
     "dsm": ["dsm", "meta"],

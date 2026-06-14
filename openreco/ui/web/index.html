@@ -119,6 +119,9 @@
   #mapctl { position:absolute; top:8px; right:8px; z-index:600; background:#000a; color:var(--fg);
             padding:6px 10px; border-radius:8px; font-size:12px; }
   .leaflet-container { background:#0a0810; }
+  #selrect { position:absolute; border:1.5px dashed var(--accent); background:var(--accent-soft);
+             display:none; z-index:7; pointer-events:none; }
+  #center.selecting { cursor:crosshair; }
   #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:650; }
   #vtabs button { background:#2a2330cc; }
   #vtabs button.on { background:var(--accent); color:var(--accent-fg); }
@@ -296,6 +299,7 @@
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></symbol>
   <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14 7a4 4 0 0 0-5 5l-6 6 2 2 6-6a4 4 0 0 0 5-5l-2.5 2.5L11 11l-.5-2.5z"/></symbol>
   <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
+  <symbol id="i-marquee" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1" stroke-dasharray="3 3"/></symbol>
 </defs></svg>
 
 <div id="app">
@@ -319,6 +323,12 @@
       <button class="tgl iconbtn" id="distBtn" title="Measure distance"><svg class="ic"><use href="#i-ruler"/></svg></button>
       <button class="tgl iconbtn" id="areaBtn" title="Measure area"><svg class="ic"><use href="#i-square"/></svg></button>
       <button class="iconbtn" id="clearMeasBtn" title="Clear measurements"><svg class="ic"><use href="#i-eraser"/></svg></button>
+    </div>
+    <div class="tgroup" role="group" aria-label="Edit point cloud">
+      <button class="tgl iconbtn" id="selBtn" title="Select points — drag a box in the 3D view"><svg class="ic"><use href="#i-marquee"/></svg></button>
+      <button class="iconbtn" id="delSelBtn" title="Delete selected points"><svg class="ic"><use href="#i-trash"/></svg></button>
+      <button class="iconbtn" id="clearSelBtn" title="Clear selection"><svg class="ic"><use href="#i-x"/></svg></button>
+      <button class="iconbtn" id="saveEditBtn" title="Save edits as a new cloud layer"><svg class="ic"><use href="#i-save"/></svg></button>
     </div>
     <span class="vsep"></span>
     <span id="status" class="muted"></span>
@@ -378,6 +388,7 @@
       <button data-vtab="photo">Photo</button>
     </div>
     <canvas id="c"></canvas>
+    <div id="selrect"></div>
     <canvas id="gizmo" title="Navigation cube — click a face, edge or corner to snap the view"></canvas>
     <div id="gizmoNav">
       <button class="gn" data-rot="rollL" title="Roll left"><svg class="ic"><use href="#i-rot-ccw"/></svg></button>
