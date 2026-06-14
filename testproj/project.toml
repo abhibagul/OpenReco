@@ -1,0 +1,42 @@
+[project]
+name = "Aerial demo"
+crs = "EPSG:32613"
+
+[[stage]]
+id = "photos"
+type = "ingest"
+params = { image_dir = "D:\\openreco\\aerialdata" }
+
+[[stage]]
+id = "align"
+type = "sfm"
+inputs = ["photos"]
+params = { matcher = "spatial", max_image_size = 1600 }
+
+[[stage]]
+id = "georef"
+type = "georef"
+inputs = ["align"]
+
+[[stage]]
+id = "dense"
+type = "mvs"
+inputs = ["align", "georef"]
+params = { dense_backend = "auto", quality = "low" }
+
+[[stage]]
+id = "model"
+type = "mesh"
+inputs = ["dense"]
+
+[[stage]]
+id = "dsm"
+type = "dsm"
+inputs = ["dense"]
+params = { resolution_m = 1.0 }
+
+[[stage]]
+id = "ortho"
+type = "ortho"
+inputs = ["dense", "georef"]
+params = { resolution_m = 0.5 }

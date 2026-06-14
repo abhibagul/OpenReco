@@ -151,18 +151,18 @@ class Project:
         return target
 
     def _to_toml(self) -> str:
-        lines = ["[project]", f'name = "{self.manifest.name}"']
+        lines = ["[project]", f"name = {_toml_str(self.manifest.name)}"]
         if self.manifest.crs:
-            lines.append(f'crs = "{self.manifest.crs}"')
+            lines.append(f"crs = {_toml_str(self.manifest.crs)}")
         chunks = self.manifest.chunk_names()
         if chunks != ["Chunk 1"]:
-            lines.append("chunks = [" + ", ".join(f'"{c}"' for c in chunks) + "]")
+            lines.append("chunks = [" + ", ".join(_toml_str(c) for c in chunks) + "]")
         for s in self.manifest.stages:
-            lines += ["", "[[stage]]", f'id = "{s.id}"', f'type = "{s.type}"']
+            lines += ["", "[[stage]]", f"id = {_toml_str(s.id)}", f"type = {_toml_str(s.type)}"]
             if s.chunk and s.chunk != "Chunk 1":
-                lines.append(f'chunk = "{s.chunk}"')
+                lines.append(f"chunk = {_toml_str(s.chunk)}")
             if s.inputs:
-                inputs = ", ".join(f'"{i}"' for i in s.inputs)
+                inputs = ", ".join(_toml_str(i) for i in s.inputs)
                 lines.append(f"inputs = [{inputs}]")
             if s.params:
                 lines.append(f"params = {_toml_inline(s.params)}")
@@ -170,6 +170,12 @@ class Project:
 
     def __repr__(self) -> str:
         return f"Project(name={self.manifest.name!r}, stages={[s.id for s in self.manifest.stages]})"
+
+
+def _toml_str(s: Any) -> str:
+    """A TOML basic string with backslashes and quotes escaped (Windows paths, etc.)."""
+    esc = str(s).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{esc}"'
 
 
 def _toml_value(v: Any) -> str:
@@ -181,7 +187,7 @@ def _toml_value(v: Any) -> str:
         return "[" + ", ".join(_toml_value(x) for x in v) + "]"
     if isinstance(v, dict):
         return "{ " + ", ".join(f"{k} = {_toml_value(x)}" for k, x in v.items()) + " }"
-    return f'"{v}"'
+    return _toml_str(v)
 
 
 def _toml_inline(d: dict[str, Any]) -> str:

@@ -71,3 +71,13 @@ def test_save_roundtrip(tmp_path):
     assert [s.id for s in reloaded.stages] == ["gen_a", "gen_b", "total"]
     assert reloaded.stages[0].params == {"n": 5, "start": 0}
     assert reloaded.stages[2].inputs == ["gen_a", "gen_b"]
+
+
+def test_save_roundtrip_windows_path_param(tmp_path):
+    """String params with backslashes (Windows paths) must survive TOML round-trip."""
+    win = r"D:\openreco\aerialdata"
+    proj = Project.create(tmp_path, name=r'site "C:\data"').add_stage(
+        "ing", "dummy_generate", params={"image_dir": win, "n": 1})
+    reloaded = load_manifest(proj.save())
+    assert reloaded.name == r'site "C:\data"'
+    assert reloaded.stages[0].params["image_dir"] == win
