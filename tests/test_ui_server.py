@@ -149,6 +149,54 @@ def test_frontend_has_workspace_chunks(server):
     base, _ = server
     _, appjs = _get(base + "/app.js")
     assert b"renderWorkspace" in appjs and b"ACTIVE_CHUNK" in appjs and b"/api/chunk" in appjs
+    assert b"/api/layer" in appjs and b"showCtx" in appjs       # context menu + layer ops
+
+
+def test_chunk_rename_and_remove(tmp_path):
+    proj = (Project.create(tmp_path, name="cx")
+            .add_stage("a", "dummy_generate", chunk="Old")
+            .add_stage("b", "dummy_generate", chunk="Keep"))
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        assert _post(base + "/api/chunk", {"action": "rename", "name": "Old", "to": "New"})[0] == 200
+        proj_json = json.loads(_get(base + "/api/project")[1])
+        assert "New" in proj_json["chunks"] and "Old" not in proj_json["chunks"]
+        assert next(L for L in proj_json["layers"] if L["id"] == "a")["chunk"] == "New"
+        # remove a chunk -> its layers go too
+        assert _post(base + "/api/chunk", {"action": "remove", "name": "New"})[0] == 200
+        proj_json = json.loads(_get(base + "/api/project")[1])
+        assert "New" not in proj_json["chunks"]
+        assert [L["id"] for L in proj_json["layers"]] == ["b"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_layer_rename_remove_move(tmp_path):
+    proj = (Project.create(tmp_path, name="lx")
+            .add_chunk("Other")
+            .add_stage("gen", "dummy_generate")
+            .add_stage("total", "dummy_sum", inputs=["gen"]))
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        # rename gen -> src, downstream input reference updates
+        assert _post(base + "/api/layer", {"action": "rename", "id": "gen", "to": "src"})[0] == 200
+        layers = {L["id"]: L for L in json.loads(_get(base + "/api/project")[1])["layers"]}
+        assert "src" in layers and layers["total"]["inputs"] == ["src"]
+        # move to another chunk
+        assert _post(base + "/api/layer", {"action": "move", "id": "src", "to": "Other"})[0] == 200
+        assert json.loads(_get(base + "/api/project")[1])
+        # remove -> drops from downstream inputs
+        assert _post(base + "/api/layer", {"action": "remove", "id": "src"})[0] == 200
+        layers = {L["id"]: L for L in json.loads(_get(base + "/api/project")[1])["layers"]}
+        assert "src" not in layers and layers["total"]["inputs"] == []
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
 
 
 def test_set_project_crs(server):

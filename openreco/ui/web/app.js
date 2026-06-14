@@ -169,38 +169,157 @@ async function loadProject() {
   if (!PROJECT.chunks.includes(ACTIVE_CHUNK)) ACTIVE_CHUNK = PROJECT.chunks[0] || "Chunk 1";
   renderWorkspace();
 }
+// industry-standard icons per category / item
+const CAT_ICON = { Cameras:'📷', "Tie Points":'·:·', "Dense Cloud":'☁', "Point Cloud":'⛰',
+  "3D Model":'△', "Tiled Model":'▦', DEM:'▒', Orthomosaic:'🗺', Shapes:'⬡', Markers:'📍', Other:'◇' };
+const collapsed = new Set();           // node ids that are collapsed (everything expanded by default)
+const isOpen = (id) => !collapsed.has(id);
+function toggle(id) { if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id); renderWorkspace(); }
+
+// a short metric badge for a layer item (points / faces / images / area …)
+function layerMetric(L) {
+  const m = L.metrics || {};
+  const num = (x) => Number(x).toLocaleString();
+  if (m.num_points != null) return `${num(m.num_points)} pts`;
+  if (m.total_points != null) return `${num(m.total_points)} pts`;
+  if (m.faces != null) return `${num(m.faces)} faces`;
+  if (m.kept != null) return `${num(m.kept)} imgs`;
+  if (m.total != null) return `${num(m.total)} imgs`;
+  if (m.num_registered != null) return `${num(m.num_registered)} cams`;
+  return '';
+}
+
+function row({ depth, id, hasKids, icon, label, count, cls = '', sel = false,
+              eye = null, dot = null, onClick, onDbl, onCtx }) {
+  const d = document.createElement('div');
+  d.className = 'tnode ' + cls + (sel ? ' sel' : '');
+  d.style.paddingLeft = (depth * 14 + 6) + 'px';
+  const car = hasKids ? (isOpen(id) ? '▾' : '▸') : '';
+  let html = `<span class="car">${car}</span>`;
+  if (eye !== null) html += `<span class="eye ${eye ? 'on' : ''}">${eye === undefined ? '·' : '👁'}</span>`;
+  html += `<span class="ico">${icon || ''}</span><span class="lbl">${label}</span>`;
+  if (dot !== null) html = html.replace('<span class="ico">', `<span class="dot ${dot||''}"></span><span class="ico">`);
+  if (count) html += `<span class="cnt">${count}</span>`;
+  d.innerHTML = html;
+  const caret = d.querySelector('.car');
+  if (hasKids) caret.onclick = (e) => { e.stopPropagation(); toggle(id); };
+  if (onClick) d.onclick = onClick;
+  if (onDbl) d.ondblclick = onDbl;
+  if (onCtx) d.oncontextmenu = (e) => { e.preventDefault(); onCtx(e); };
+  return d;
+}
+
 function renderWorkspace() {
   const el = $('workspace'); el.innerHTML = '';
   $('activeChunk').textContent = `active: ${ACTIVE_CHUNK}`;
   const byChunk = {}; PROJECT.chunks.forEach(c => byChunk[c] = []);
   PROJECT.layers.forEach(L => { (byChunk[L.chunk] = byChunk[L.chunk] || []).push(L); });
+
+  // root: Workspace
+  el.appendChild(row({ depth: 0, id: 'root', hasKids: true, icon: '🗂',
+    label: 'Workspace', count: `${PROJECT.chunks.length} chunk(s)`,
+    onClick: () => toggle('root'),
+    onCtx: (e) => showCtx(e, [{ label: '＋ Add chunk…', fn: addChunk }]) }));
+  if (!isOpen('root')) return;
+
   Object.keys(byChunk).forEach(chunk => {
-    const h = document.createElement('div'); h.className = 'chunk' + (chunk === ACTIVE_CHUNK ? ' active' : '');
-    h.innerHTML = `<span>▸ ${chunk}</span><span class="cnt">${byChunk[chunk].length}</span>`;
-    h.onclick = () => { ACTIVE_CHUNK = chunk; renderWorkspace(); };
-    el.appendChild(h);
-    // group this chunk's layers into industry-standard categories
-    const cats = {}; byChunk[chunk].forEach(L => {
-      const c = CATEGORY[L.type] || "Other"; (cats[c] = cats[c] || []).push(L); });
+    const cid = 'chunk:' + chunk;
+    el.appendChild(row({ depth: 1, id: cid, hasKids: true, cls: 'chunk' + (chunk === ACTIVE_CHUNK ? ' active' : ''),
+      icon: '📦', label: chunk, count: `${byChunk[chunk].length}`,
+      onClick: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); loadPhotos(); },
+      onDbl: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); },
+      onCtx: (e) => showCtx(e, [
+        { label: 'Set as active chunk', fn: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); } },
+        { label: '＋ Add Photos…', fn: () => { ACTIVE_CHUNK = chunk; openBrowse(); } },
+        { sep: true },
+        { label: 'Rename chunk…', fn: () => renameChunk(chunk) },
+        { label: 'Remove chunk', danger: true, fn: () => removeChunk(chunk) },
+      ]) }));
+    if (!isOpen(cid)) return;
+
+    const cats = {}; byChunk[chunk].forEach(L => { const c = CATEGORY[L.type] || 'Other'; (cats[c] = cats[c] || []).push(L); });
     CAT_ORDER.filter(c => cats[c]).forEach(cat => {
-      const ch = document.createElement('div'); ch.className = 'cat'; ch.textContent = cat; el.appendChild(ch);
+      const catId = `cat:${chunk}:${cat}`;
+      el.appendChild(row({ depth: 2, id: catId, hasKids: true, cls: 'cat', icon: CAT_ICON[cat] || '◇',
+        label: cat, count: `${cats[cat].length}` }));
+      if (!isOpen(catId)) return;
       cats[cat].forEach(L => {
-        const d = document.createElement('div'); d.className = 'layer' + (selected === L.id ? ' sel' : '');
         const canView = !!viewable(L);
-        d.innerHTML = `<span class="eye ${visible.has(L.id) ? 'on' : ''}">${canView ? '👁' : '·'}</span>`
-          + `<span class="dot ${L.status||''}"></span><span class="id">${L.id}</span><span class="t">${L.type}</span>`;
-        d.querySelector('.eye').onclick = (e) => { e.stopPropagation(); if (canView) setVisible(L, !visible.has(L.id)); };
-        d.onclick = () => selectLayer(L.id); el.appendChild(d);
+        const badge = layerMetric(L);
+        el.appendChild(row({ depth: 3, id: L.id, hasKids: false, sel: selected === L.id,
+          icon: '', label: `${L.id} <span class="cnt">${L.type}</span>`, count: badge,
+          dot: L.status || '', eye: canView ? true : undefined,
+          onClick: () => selectLayer(L.id),
+          onDbl: () => { if (canView) setVisible(L, !visible.has(L.id)); },
+          onCtx: (e) => showCtx(e, layerCtx(L, canView)) }));
+        // wire the eye toggle (last rendered row)
+        const node = el.lastChild, eyeEl = node.querySelector('.eye');
+        if (eyeEl) { eyeEl.classList.toggle('on', visible.has(L.id));
+          eyeEl.onclick = (ev) => { ev.stopPropagation(); if (canView) setVisible(L, !visible.has(L.id)); }; }
       });
     });
   });
 }
-$('newChunk').onclick = async () => {
-  const name = prompt('New chunk name:', `Chunk ${PROJECT.chunks.length + 1}`);
-  if (!name) return;
-  await fetch('/api/chunk', { method:'POST', body: JSON.stringify({ name }) });
-  ACTIVE_CHUNK = name; await loadProject();
-};
+
+// ---- context menu ----------------------------------------------------------
+function showCtx(e, items) {
+  const m = $('ctxMenu'); m.innerHTML = '';
+  items.forEach(it => {
+    if (it.sep) { m.appendChild(document.createElement('hr')); return; }
+    const d = document.createElement('div'); d.textContent = it.label; if (it.danger) d.className = 'danger';
+    d.onclick = () => { hideCtx(); it.fn(); };
+    m.appendChild(d);
+  });
+  m.style.left = Math.min(e.clientX, innerWidth - 200) + 'px';
+  m.style.top = Math.min(e.clientY, innerHeight - items.length * 30 - 10) + 'px';
+  m.classList.remove('hidden');
+}
+function hideCtx() { $('ctxMenu').classList.add('hidden'); }
+document.addEventListener('click', hideCtx);
+document.addEventListener('contextmenu', (e) => { if (!e.target.closest('.tnode')) hideCtx(); });
+
+function layerCtx(L, canView) {
+  const items = [];
+  if (canView) items.push({ label: visible.has(L.id) ? 'Hide in view' : 'Show in view',
+    fn: () => setVisible(L, !visible.has(L.id)) });
+  items.push({ label: 'Rename layer…', fn: () => renameLayer(L) });
+  PROJECT.chunks.filter(c => c !== L.chunk).forEach(c =>
+    items.push({ label: `Move to "${c}"`, fn: () => layerAction({ action: 'move', id: L.id, to: c }) }));
+  items.push({ sep: true });
+  items.push({ label: 'Remove layer', danger: true, fn: () => {
+    if (confirm(`Remove layer ${L.id}?`)) layerAction({ action: 'remove', id: L.id }); } });
+  return items;
+}
+
+// ---- chunk / layer actions -------------------------------------------------
+async function chunkAction(body) {
+  const r = await fetch('/api/chunk', { method: 'POST', body: JSON.stringify(body) });
+  const j = await r.json(); if (!r.ok) { log('chunk error: ' + j.error); return false; }
+  await loadProject(); return true;
+}
+async function layerAction(body) {
+  const r = await fetch('/api/layer', { method: 'POST', body: JSON.stringify(body) });
+  const j = await r.json(); if (!r.ok) { log('layer error: ' + j.error); return; }
+  if (selected === body.id) selected = body.action === 'rename' ? body.to : null;
+  log(`${body.action} ${body.id}` + (body.to ? ` -> ${body.to}` : '')); await loadProject();
+}
+async function addChunk() {
+  const name = prompt('New chunk name:', `Chunk ${PROJECT.chunks.length + 1}`); if (!name) return;
+  if (await chunkAction({ action: 'add', name })) { ACTIVE_CHUNK = name; renderWorkspace(); }
+}
+async function renameChunk(name) {
+  const to = prompt('Rename chunk:', name); if (!to || to === name) return;
+  if (await chunkAction({ action: 'rename', name, to })) { if (ACTIVE_CHUNK === name) ACTIVE_CHUNK = to; renderWorkspace(); }
+}
+async function removeChunk(name) {
+  if (!confirm(`Remove chunk "${name}" and all its layers?`)) return;
+  if (await chunkAction({ action: 'remove', name })) { if (ACTIVE_CHUNK === name) ACTIVE_CHUNK = PROJECT.chunks[0] || 'Chunk 1'; renderWorkspace(); }
+}
+function renameLayer(L) {
+  const to = prompt('Rename layer:', L.id); if (!to || to === L.id) return;
+  layerAction({ action: 'rename', id: L.id, to });
+}
+$('newChunk').onclick = addChunk;
 function selectLayer(id) {
   selected = id; renderWorkspace();
   const L = PROJECT.layers.find(x => x.id === id);

@@ -22,6 +22,7 @@ script and a command line produce identical, reproducible runs. Two ways in:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +88,49 @@ class Project:
         """Register a (possibly empty) workspace chunk."""
         if name not in self.manifest.chunks:
             self.manifest.chunks.append(name)
+        return self
+
+    def remove_stage(self, id: str) -> "Project":
+        """Delete a layer and drop it from any other layer's inputs."""
+        kept = [s for s in self.manifest.stages if s.id != id]
+        self.manifest.stages = [replace(s, inputs=[i for i in s.inputs if i != id])
+                                if id in s.inputs else s for s in kept]
+        return self
+
+    def rename_stage(self, id: str, new_id: str) -> "Project":
+        """Rename a layer, updating downstream input references."""
+        if id == new_id or not new_id:
+            return self
+        if any(s.id == new_id for s in self.manifest.stages):
+            raise ValueError(f"duplicate stage id: {new_id!r}")
+        out = []
+        for s in self.manifest.stages:
+            inputs = [new_id if i == id else i for i in s.inputs]
+            out.append(replace(s, id=new_id if s.id == id else s.id, inputs=inputs))
+        self.manifest.stages = out
+        return self
+
+    def rename_chunk(self, name: str, new_name: str) -> "Project":
+        """Rename a chunk and re-point its layers."""
+        if name == new_name or not new_name:
+            return self
+        self.manifest.chunks = [new_name if c == name else c for c in self.manifest.chunks]
+        if new_name not in self.manifest.chunks:
+            self.manifest.chunks.append(new_name)
+        self.manifest.stages = [replace(s, chunk=new_name) if s.chunk == name else s
+                                for s in self.manifest.stages]
+        return self
+
+    def remove_chunk(self, name: str) -> "Project":
+        """Delete a chunk and all of its layers."""
+        self.manifest.stages = [s for s in self.manifest.stages if s.chunk != name]
+        self.manifest.chunks = [c for c in self.manifest.chunks if c != name]
+        return self
+
+    def move_stage(self, id: str, chunk: str) -> "Project":
+        """Move a layer to another chunk."""
+        self.manifest.stages = [replace(s, chunk=chunk) if s.id == id else s
+                                for s in self.manifest.stages]
         return self
 
     def add_operation(self, op: str, id: str, inputs: list[str] | None = None,

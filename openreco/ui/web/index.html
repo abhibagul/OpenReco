@@ -62,20 +62,27 @@
   .tabs button.on { color:var(--fg); border-bottom-color:var(--accent); }
   .pad { padding:10px; }
   h3 { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:14px 0 6px; }
-  /* workspace tree */
-  .chunk { padding:5px 6px; font-weight:600; cursor:pointer; border-radius:4px; display:flex; gap:6px; }
-  .chunk:hover { background:#1a2230; } .chunk.active { color:var(--accent); }
-  .chunk .cnt { color:var(--muted); font-weight:400; }
-  .cat { margin-left:12px; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em;
-         padding:4px 6px 1px; }
-  .layer { padding:5px 8px; border-radius:5px; cursor:pointer; display:flex; align-items:center; gap:6px;
-           border:1px solid transparent; margin-left:20px; }
-  .layer:hover { background:#1a2230; } .layer.sel { background:#1d2738; border-color:var(--accent); }
-  .layer .t { color:var(--muted); font-size:11px; } .layer .id { flex:1; }
-  .layer .eye { width:16px; text-align:center; opacity:.5; } .layer .eye.on { opacity:1; }
+  /* workspace tree (industry-standard: Workspace > Chunk > category > item) */
+  .tnode { display:flex; align-items:center; gap:5px; padding:3px 6px; border-radius:4px; cursor:pointer;
+           border:1px solid transparent; white-space:nowrap; }
+  .tnode:hover { background:#1a2230; } .tnode.sel { background:#1d2738; border-color:var(--accent); }
+  .tnode .car { width:12px; flex:0 0 auto; text-align:center; color:var(--muted); font-size:10px; }
+  .tnode .ico { width:15px; flex:0 0 auto; text-align:center; }
+  .tnode .lbl { flex:1; overflow:hidden; text-overflow:ellipsis; }
+  .tnode .cnt { color:var(--muted); font-size:11px; }
+  .tnode.chunk .lbl { font-weight:600; } .tnode.chunk.active .lbl { color:var(--accent); }
+  .tnode.chunk.active .lbl::after { content:" (active)"; color:var(--muted); font-weight:400; font-size:10px; }
+  .tnode.cat .lbl { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
+  .tnode .eye { width:15px; flex:0 0 auto; text-align:center; opacity:.45; } .tnode .eye.on { opacity:1; }
   .dot { width:8px; height:8px; border-radius:50%; background:#444c5c; flex:0 0 auto; }
   .dot.executed,.dot.cached { background:var(--ok); } .dot.failed { background:var(--err); }
   .dot.running { background:var(--warn); }
+  /* right-click context menu */
+  #ctxMenu { position:fixed; z-index:90; background:var(--panel); border:1px solid var(--line);
+             border-radius:6px; padding:4px; min-width:180px; box-shadow:0 8px 24px #0008; }
+  #ctxMenu div { padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px; }
+  #ctxMenu div:hover { background:#1a2230; } #ctxMenu hr { border:0; border-top:1px solid var(--line); margin:4px 6px; }
+  #ctxMenu div.danger { color:var(--err); }
   label { display:block; margin:8px 0 2px; color:var(--muted); font-size:11px; }
   input,select { width:100%; background:#0d121b; color:var(--fg); border:1px solid var(--line);
                  border-radius:4px; padding:5px; font-size:12px; }
@@ -193,6 +200,8 @@
 </div>
 
 <!-- Build dialog (workflow op) -->
+<div id="ctxMenu" class="hidden"></div>
+
 <div id="modal" class="modal hidden"><div class="dialog">
   <h2 id="mTitle"></h2><div id="mDesc" class="muted"></div>
   <label>Layer id</label><input id="mId" />

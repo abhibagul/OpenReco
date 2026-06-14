@@ -15,9 +15,13 @@ in a **layered desktop UI** that surpasses the reference tool's. Pillars, in pri
    our neural 3DGS branch. (See per-phase items below; most geometry/survey items are ✅.)
 3. ◑ **Desktop UI with layers** — **shipped & growing**: `openreco ui` (native window via pywebview,
    else browser) with a **industry-standard layout** — menu bar (File / Workflow / Model / Tools /
-   Help), toolbar, **Workspace/Reference** left tabs, a **Workspace tree** grouping each chunk's
-   layers into familiar categories (Cameras / Tie Points / Dense Cloud / Point Cloud / 3D Model /
-   DEM / Orthomosaic / Shapes) with per-layer **visibility (👁) toggles**, **Model/Photo** viewport
+   Help), toolbar, **Workspace/Reference** left tabs, a **industry-standard Workspace tree**
+   (Workspace → Chunks → category nodes → items) with expand/collapse carets, the active chunk
+   in bold (double-click to activate), data-count badges (points / faces / images), per-layer
+   **visibility (👁) toggles**, and **right-click context menus** — chunks: set-active / add photos /
+   rename / remove; layers: show-hide / rename / move-to-chunk / remove (/api/chunk, /api/layer).
+   Categories: Cameras / Tie Points / Dense Cloud / Point Cloud / 3D Model / DEM / Orthomosaic /
+   Shapes. **Model/Photo** viewport
    tabs, a **Properties** pane, and a **Console / Photos / Jobs** bottom dock. Features: active-chunk
    selector + "＋ Chunk"; **Workflow menu** (Align Photos / Build Dense Cloud / … Build dialogs →
    engine) incl. **Merge Chunks** (ICP align+merge); schema-driven parameter panels; Run with live

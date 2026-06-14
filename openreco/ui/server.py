@@ -15,6 +15,8 @@ Endpoints (JSON unless noted):
   GET  /api/thumb?path=...     -> serve an image file from anywhere (picker previews; image-only)
   POST /api/add_photos         -> create an ingest layer from chosen image paths {paths,chunk,id}
   POST /api/remove_photo       -> drop one image from an ingest layer {layer,name} (select list)
+  POST /api/chunk              -> chunk ops {action: add|rename|remove, name, to}
+  POST /api/layer              -> layer ops {action: remove|rename|move, id, to}
   GET  /api/markers            -> saved GCP/markers (markers.json)
   POST /api/markers            -> save GCP/markers; also writes gcps.csv consumable by the georef stage
   POST /api/use_gcps           -> point a chunk's georef stage(s) at gcps.csv (method=gcp + CRS)
@@ -333,6 +335,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._operation(body)
         if u.path == "/api/chunk":
             return self._add_chunk(body)
+        if u.path == "/api/layer":
+            return self._layer(body)
         if u.path == "/api/export":
             return self._export(body)
         return self._send(404, {"error": "not found"})
@@ -345,12 +349,43 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, p.read_bytes(), _CT.get(p.suffix, "application/octet-stream"))
 
     def _add_chunk(self, body):
-        name = (body.get("name") or "").strip()
-        if not name:
-            return self._send(400, {"error": "chunk name required"})
-        self.state.project.add_chunk(name)
-        self.state.project.save()
-        return self._send(200, {"ok": True})
+        """Chunk operations: add | rename | remove (Workspace context menu)."""
+        action = body.get("action", "add")
+        p = self.state.project
+        try:
+            if action == "add":
+                name = (body.get("name") or "").strip()
+                if not name:
+                    return self._send(400, {"error": "chunk name required"})
+                p.add_chunk(name)
+            elif action == "rename":
+                p.rename_chunk(body["name"], (body.get("to") or "").strip())
+            elif action == "remove":
+                p.remove_chunk(body["name"])
+            else:
+                return self._send(400, {"error": f"unknown action {action!r}"})
+            p.save()
+            return self._send(200, {"ok": True})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
+
+    def _layer(self, body):
+        """Layer operations: remove | rename | move (Workspace context menu)."""
+        action = body.get("action", "")
+        p = self.state.project
+        try:
+            if action == "remove":
+                p.remove_stage(body["id"])
+            elif action == "rename":
+                p.rename_stage(body["id"], (body.get("to") or "").strip())
+            elif action == "move":
+                p.move_stage(body["id"], body["to"])
+            else:
+                return self._send(400, {"error": f"unknown action {action!r}"})
+            p.save()
+            return self._send(200, {"ok": True})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
 
     def _set_project(self, body):
         """Set project-level metadata from the UI (CRS picker)."""
