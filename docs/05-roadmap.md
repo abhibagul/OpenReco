@@ -85,6 +85,10 @@ Goal: real drone photos → georeferenced mesh + DSM + ortho + web view.
   report. (Distributed/network workers still future.)
 - ✅ **Coded-target auto-detection** (`markers`): OpenCV ArUco/AprilTag → per-marker observations +
   GCP-observation CSV for georef. Validated on synthetic multi-view markers.
+- ✅ **Coordinate-system selection + introspection** (PROJ/pyproj): every EPSG CRS supported;
+  `crs_info` (datum/ellipsoid/prime-meridian/units/axes + sub-codes), `search_crs` catalog,
+  `openreco crs` CLI, /api/crs, and output-CRS reprojection (`export --crs`, e.g. DSM→WGS84).
+  Next: vertical/geoid datums (orthometric heights via grids), NTv2 grid shifts, UI CRS picker.
 
 ## Phase 3 — Parity wave 2 + differentiation · ≈6–12 months
 - ✅ **GPU dense MVS** — real COLMAP PatchMatch stereo + fusion via a CUDA-enabled COLMAP binary
