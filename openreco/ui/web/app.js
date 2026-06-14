@@ -302,8 +302,12 @@ async function loadProject() {
   renderWorkspace();
 }
 // industry-standard icons per category / item
-const CAT_ICON = { Cameras:'📷', "Tie Points":'·:·', "Dense Cloud":'☁', "Point Cloud":'⛰',
-  "3D Model":'△', "Tiled Model":'▦', DEM:'▒', Orthomosaic:'🗺', Shapes:'⬡', Markers:'📍', Other:'◇' };
+const ic = (n) => `<svg class="ic"><use href="#i-${n}"/></svg>`;   // line-icon helper
+const CAT_ICON = { Cameras:'camera', "Tie Points":'dots', "Dense Cloud":'cloud', "Point Cloud":'mountain',
+  "3D Model":'triangle', "Tiled Model":'grid', DEM:'layers', Orthomosaic:'map', Shapes:'hex',
+  Markers:'pin', Other:'box' };
+const OP_ICON = { ingest:'image', sfm:'camera', georef:'globe', mvs:'cloud', merge_chunks:'box',
+  mesh:'triangle', texture:'image', dsm:'layers', ortho:'map', classify:'mountain', contours:'hex', tiles:'grid' };
 const collapsed = new Set();           // node ids that are collapsed (everything expanded by default)
 const isOpen = (id) => !collapsed.has(id);
 function toggle(id) { if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id); renderWorkspace(); }
@@ -329,7 +333,7 @@ function row({ depth, id, hasKids, icon, label, count, cls = '', sel = false, di
   const car = hasKids ? (isOpen(id) ? '▾' : '▸') : '';
   let html = `<span class="car">${car}</span>`;
   if (chk !== null) html += `<input type="checkbox" class="en" ${chk.checked ? 'checked' : ''}>`;
-  if (eye !== null) html += `<span class="eye ${eye ? 'on' : ''}">${eye === undefined ? '·' : '👁'}</span>`;
+  if (eye !== null) html += `<span class="eye ${eye ? 'on' : ''}">${eye === undefined ? '' : ic('eye')}</span>`;
   html += `<span class="ico">${icon || ''}</span><span class="lbl">${label}</span>`;
   if (dot !== null) html = html.replace('<span class="ico">', `<span class="dot ${dot||''}"></span><span class="ico">`);
   if (count) html += `<span class="cnt">${count}</span>`;
@@ -358,10 +362,10 @@ function renderWorkspace() {
   PROJECT.layers.forEach(L => { (byChunk[L.chunk] = byChunk[L.chunk] || []).push(L); });
 
   // root: Workspace
-  el.appendChild(row({ depth: 0, id: 'root', hasKids: true, icon: '🗂',
+  el.appendChild(row({ depth: 0, id: 'root', hasKids: true, icon: ic('folders'),
     label: 'Workspace', count: `${PROJECT.chunks.length} chunk(s)`,
     onClick: () => toggle('root'),
-    onCtx: (e) => showCtx(e, [{ label: '＋ Add chunk…', fn: addChunk }]) }));
+    onCtx: (e) => showCtx(e, [{ label: 'Add chunk…', icon: 'folder-plus', fn: addChunk }]) }));
   if (!isOpen('root')) return;
 
   Object.keys(byChunk).forEach(chunk => {
@@ -369,25 +373,25 @@ function renderWorkspace() {
     const layers = byChunk[chunk];
     const chunkOn = layers.length === 0 || layers.some(L => L.enabled !== false);
     el.appendChild(row({ depth: 1, id: cid, hasKids: true, cls: 'chunk' + (chunk === ACTIVE_CHUNK ? ' active' : ''),
-      icon: '📦', label: chunk, count: `${layers.length}`,
+      icon: ic('box'), label: chunk, count: `${layers.length}`,
       chk: { checked: chunkOn, onToggle: (v) => chunkAction({ action: 'set_enabled', name: chunk, enabled: v }) },
       onClick: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); loadPhotos(); },
       onDbl: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); },
       drop: (id) => layerAction({ action: 'move', id, to: chunk }),    // drop a layer onto a chunk
       onCtx: (e) => showCtx(e, [
-        { label: 'Set as active chunk', fn: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); } },
-        { label: `▶ Run chunk "${chunk}"`, fn: () => runPipeline({ targets: layers.map(l => l.id) }) },
-        { label: '＋ Add Photos…', fn: () => { ACTIVE_CHUNK = chunk; openBrowse(); } },
+        { label: 'Set as active chunk', icon: 'box', fn: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); } },
+        { label: `Run chunk "${chunk}"`, icon: 'play', fn: () => runPipeline({ targets: layers.map(l => l.id) }) },
+        { label: 'Add Photos…', icon: 'image', fn: () => { ACTIVE_CHUNK = chunk; openBrowse(); } },
         { sep: true },
-        { label: 'Rename chunk…', fn: () => renameChunk(chunk) },
-        { label: 'Remove chunk', danger: true, fn: () => removeChunk(chunk) },
+        { label: 'Rename chunk…', icon: 'edit', fn: () => renameChunk(chunk) },
+        { label: 'Remove chunk', icon: 'trash', danger: true, fn: () => removeChunk(chunk) },
       ]) }));
     if (!isOpen(cid)) return;
 
     const cats = {}; byChunk[chunk].forEach(L => { const c = CATEGORY[L.type] || 'Other'; (cats[c] = cats[c] || []).push(L); });
     CAT_ORDER.filter(c => cats[c]).forEach(cat => {
       const catId = `cat:${chunk}:${cat}`;
-      el.appendChild(row({ depth: 2, id: catId, hasKids: true, cls: 'cat', icon: CAT_ICON[cat] || '◇',
+      el.appendChild(row({ depth: 2, id: catId, hasKids: true, cls: 'cat', icon: ic(CAT_ICON[cat] || 'box'),
         label: cat, count: `${cats[cat].length}` }));
       if (!isOpen(catId)) return;
       cats[cat].forEach(L => {
@@ -416,7 +420,9 @@ function showCtx(e, items) {
   const m = $('ctxMenu'); m.innerHTML = '';
   items.forEach(it => {
     if (it.sep) { m.appendChild(document.createElement('hr')); return; }
-    const d = document.createElement('div'); d.textContent = it.label; if (it.danger) d.className = 'danger';
+    const d = document.createElement('div'); if (it.danger) d.className = 'danger';
+    if (it.icon) d.innerHTML = ic(it.icon);
+    const sp = document.createElement('span'); sp.textContent = it.label; d.appendChild(sp);
     d.onclick = () => { hideCtx(); it.fn(); };
     m.appendChild(d);
   });
@@ -430,16 +436,16 @@ document.addEventListener('contextmenu', (e) => { if (!e.target.closest('.tnode'
 
 function layerCtx(L, canView) {
   const items = [];
-  items.push({ label: `▶ Run "${L.id}" (recompute)`, fn: () => runPipeline({ targets: [L.id], force: [L.id] }) });
-  items.push({ label: '▶ Run up to here', fn: () => runPipeline({ targets: [L.id] }) });
+  items.push({ label: `Run "${L.id}" (recompute)`, icon: 'play', fn: () => runPipeline({ targets: [L.id], force: [L.id] }) });
+  items.push({ label: 'Run up to here', icon: 'play', fn: () => runPipeline({ targets: [L.id] }) });
   items.push({ sep: true });
-  if (canView) items.push({ label: visible.has(L.id) ? 'Hide in view' : 'Show in view',
+  if (canView) items.push({ label: visible.has(L.id) ? 'Hide in view' : 'Show in view', icon: 'eye',
     fn: () => setVisible(L, !visible.has(L.id)) });
-  items.push({ label: 'Rename layer…', fn: () => renameLayer(L) });
+  items.push({ label: 'Rename layer…', icon: 'edit', fn: () => renameLayer(L) });
   PROJECT.chunks.filter(c => c !== L.chunk).forEach(c =>
-    items.push({ label: `Move to "${c}"`, fn: () => layerAction({ action: 'move', id: L.id, to: c }) }));
+    items.push({ label: `Move to "${c}"`, icon: 'move', fn: () => layerAction({ action: 'move', id: L.id, to: c }) }));
   items.push({ sep: true });
-  items.push({ label: 'Remove layer', danger: true, fn: () => {
+  items.push({ label: 'Remove layer', icon: 'trash', danger: true, fn: () => {
     if (confirm(`Remove layer ${L.id}?`)) layerAction({ action: 'remove', id: L.id }); } });
   return items;
 }
@@ -629,7 +635,7 @@ function progLog(msg, cls) {
 $('progMin').onclick = () => $('progress').classList.toggle('min');
 $('progHead').ondblclick = () => $('progress').classList.toggle('min');
 $('progCancel').onclick = async () => {
-  $('progCancel').textContent = '…';
+  $('progCancel').disabled = true;
   await fetch('/api/cancel', { method:'POST', body:'{}' });
   log('cancel requested'); progLog('cancel requested — stopping after the current stage…', 'warn');
 };
@@ -640,7 +646,7 @@ async function runPipeline(body = {}) {
   const r = await fetch('/api/run', { method:'POST', body: JSON.stringify(body) });
   if (r.status === 409) { log('already running'); return; }
   log('--- run started ---'); $('status').textContent = 'running…';
-  $('progCancel').textContent = '✕'; progShow('Processing…');
+  $('progCancel').disabled = false; progShow('Processing…');
   const es = new EventSource('/api/events');
   es.onmessage = (e) => {
     const ev = JSON.parse(e.data);
@@ -687,9 +693,10 @@ document.querySelectorAll('.mItem').forEach(it => {
     closeMenus(); if (!wasOpen) m.classList.remove('hidden'); };
 });
 document.addEventListener('click', () => { closeMenus(); });
-function menuEntry(menu, label, fn, desc) {
+function menuEntry(menu, label, fn, desc, icon) {
   const d = document.createElement('div');
-  d.innerHTML = desc ? `${label}<div class="t">${desc}</div>` : label;
+  const i = icon ? ic(icon) + ' ' : '';
+  d.innerHTML = `${i}<span>${label}</span>` + (desc ? `<div class="t">${desc}</div>` : '');
   d.onclick = (e) => { e.stopPropagation(); closeMenus(); fn(); };
   $(menu).appendChild(d);
 }
@@ -698,32 +705,32 @@ async function loadWorkflows() {
   WORKFLOWS = await (await fetch('/api/workflows')).json();
   // File menu
   $('m-file').innerHTML = '';
-  menuEntry('m-file', '📄 New project…', newProject);
-  menuEntry('m-file', '💾 Save project', saveProject);
+  menuEntry('m-file', 'New project…', newProject, null, 'file-plus');
+  menuEntry('m-file', 'Save project', saveProject, null, 'save');
   menuSep('m-file');
-  menuEntry('m-file', '＋ New chunk', addChunk);
-  menuEntry('m-file', '🌐 Set coordinate system…', openCrsPicker);
+  menuEntry('m-file', 'New chunk', addChunk, null, 'folder-plus');
+  menuEntry('m-file', 'Set coordinate system…', openCrsPicker, null, 'globe');
   menuSep('m-file');
-  menuEntry('m-file', '📊 Processing report', () => window.open('/api/report', '_blank'));
+  menuEntry('m-file', 'Processing report', () => window.open('/api/report', '_blank'), null, 'chart');
   // Workflow menu = the familiar operations
   $('m-workflow').innerHTML = '';
-  WORKFLOWS.forEach(op => menuEntry('m-workflow', op.op, () => openOp(op), op.desc));
+  WORKFLOWS.forEach(op => menuEntry('m-workflow', op.op, () => openOp(op), op.desc, OP_ICON[op.stage] || 'play'));
   // Model menu = view helpers
   $('m-model').innerHTML = '';
-  menuEntry('m-model', 'Frame all', frameAll);
-  menuEntry('m-model', '▦ Show / hide grid + axes', toggleHelpers);
-  menuEntry('m-model', '📷 Show / hide cameras', () => showCameras(), 'camera positions of the active chunk');
+  menuEntry('m-model', 'Frame all', frameAll, null, 'maximize');
+  menuEntry('m-model', 'Show / hide grid + axes', toggleHelpers, null, 'grid');
+  menuEntry('m-model', 'Show / hide cameras', () => showCameras(), 'camera positions of the active chunk', 'camera');
   menuEntry('m-model', 'Hide all layers', () => { visible.forEach(id => { const o = objects.get(id); if (o) o.visible = false; });
-    visible.clear(); renderWorkspace(); });
+    visible.clear(); renderWorkspace(); }, null, 'eye');
   // Tools menu
   $('m-tools').innerHTML = '';
-  menuEntry('m-tools', '📏 Measure distance', () => setMeasure('dist'));
-  menuEntry('m-tools', '▱ Measure area', () => setMeasure('area'));
+  menuEntry('m-tools', 'Measure distance', () => setMeasure('dist'), null, 'ruler');
+  menuEntry('m-tools', 'Measure area', () => setMeasure('area'), null, 'square');
   menuSep('m-tools');
-  menuEntry('m-tools', '📍 Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); });
+  menuEntry('m-tools', 'Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); }, null, 'pin');
   // Help
   $('m-help').innerHTML = '';
-  menuEntry('m-help', 'About OpenReco', () => log('OpenReco — open, reproducible photogrammetry. Clean-room; permissive OSS.'));
+  menuEntry('m-help', 'About OpenReco', () => log('OpenReco — open, reproducible photogrammetry. Clean-room; permissive OSS.'), null, 'info');
 }
 
 // ---- project: new / save --------------------------------------------------
@@ -844,7 +851,7 @@ async function loadPhotos() {
   PHOTOS.images.forEach(im => {
     const t = document.createElement('div'); t.className = 'th' + (im.excluded ? ' exc' : '');
     const url = `/api/file?path=${encodeURIComponent(im.path)}`;
-    t.innerHTML = `<button class="rm" title="Remove from chunk">✕</button>`
+    t.innerHTML = `<button class="rm" title="Remove from chunk">${ic('x')}</button>`
                 + `<img loading="lazy" src="${url}"><div>${im.name}</div>`;
     t.querySelector('img').onclick = () => openPhoto(im);
     t.querySelector('.rm').onclick = (e) => { e.stopPropagation(); removePhoto(im); };
@@ -1083,7 +1090,8 @@ async function browseTo(path) {
   }
   d.dirs.forEach(p => {
     const row = document.createElement('div'); row.className = 'brdir';
-    row.textContent = '📁 ' + p.split(/[\\/]/).filter(Boolean).pop();
+    row.innerHTML = ic('folders');
+    const s = document.createElement('span'); s.textContent = p.split(/[\\/]/).filter(Boolean).pop(); row.appendChild(s);
     row.onclick = () => browseTo(p); dirs.appendChild(row);
   });
   if (!d.dirs.length) dirs.innerHTML = '<div class="muted" style="padding:6px">no sub-folders</div>';
@@ -1155,7 +1163,7 @@ const PANES = { left: 300, right: 330, dock: 190 };
 function layoutPanes() {
   const app = $('app');
   app.style.gridTemplateColumns = `${PANES.left}px 1fr ${PANES.right}px`;
-  app.style.gridTemplateRows = `26px 34px 1fr ${PANES.dock}px`;
+  app.style.gridTemplateRows = `28px 34px 1fr ${PANES.dock}px`;
   // reposition the drag handles to match
   $('splitL').style.left = (PANES.left - 5) + 'px';
   $('splitR').style.right = (PANES.right - 5) + 'px';

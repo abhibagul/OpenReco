@@ -5,155 +5,229 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>OpenReco</title>
 <style>
-  :root { --bg:#0b0e14; --panel:#11161f; --panel2:#0d121b; --line:#1f2733; --fg:#cdd6f4;
-          --muted:#7f8da3; --accent:#89b4fa; --ok:#a6e3a1; --warn:#f9e2af; --err:#f38ba8; }
+  /* Ubuntu (Yaru aubergine + orange) palette with Office-365 polish */
+  :root { --bg:#211b26; --panel:#2a2330; --panel2:#231d29; --chrome:#2c001e;
+          --fg:#f4eef2; --muted:#b1a3b0; --line:#46394a; --hover:#372f3d;
+          --sel:rgba(233,84,32,.16); --accent:#e95420; --accent-h:#d8481b; --accent-fg:#ffffff;
+          --ok:#26a269; --warn:#e5a50a; --err:#ed5c5c;
+          --console-bg:#300a24; --console-fg:#f3e9ee; --btn:#3a3340; --btn-h:#473e4d;
+          --radius:6px;
+          --left-w:300px; --right-w:330px; --dock-h:190px; --hdr-h:62px;
+          --mono:"Ubuntu Mono","Cascadia Mono",ui-monospace,monospace; }
   * { box-sizing: border-box; }
   html,body { margin:0; height:100%; background:var(--bg); color:var(--fg);
-              font:13px/1.5 system-ui,sans-serif; overflow:hidden; }
-  /* industry-standard layout: menu bar / toolbar / [left | center | right] / bottom dock */
-  :root { --left-w:300px; --right-w:330px; --dock-h:190px; --hdr-h:60px; }
+              font:13px/1.5 "Segoe UI","Ubuntu",system-ui,sans-serif; overflow:hidden; }
+  .ic { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.8;
+        stroke-linecap:round; stroke-linejoin:round; flex:0 0 auto; vertical-align:-3px; }
   #app { display:grid;
          grid-template-columns:var(--left-w) 1fr var(--right-w);
-         grid-template-rows:26px 34px 1fr var(--dock-h);
+         grid-template-rows:28px 34px 1fr var(--dock-h);
          grid-template-areas:"menu menu menu" "tool tool tool" "left center right" "dock dock dock";
          height:100vh; }
-  /* drag handles to resize panes */
+  /* drag handles */
   .split { position:fixed; z-index:50; }
-  .split::after { content:""; position:absolute; background:var(--line); }
+  .split::after { content:""; position:absolute; background:transparent; }
   .split:hover::after, .split.drag::after { background:var(--accent); }
   .split.v { width:11px; top:var(--hdr-h); bottom:var(--dock-h); cursor:col-resize; }
   .split.v::after { top:0; bottom:0; left:4px; width:3px; }
   .split.h { height:11px; left:0; right:0; bottom:calc(var(--dock-h) - 5px); cursor:row-resize; }
   .split.h::after { left:0; right:0; top:4px; height:3px; }
   #splitL { left:calc(var(--left-w) - 5px); } #splitR { right:calc(var(--right-w) - 5px); }
-  /* menu bar */
-  #menubar { grid-area:menu; display:flex; align-items:stretch; background:var(--panel);
-             border-bottom:1px solid var(--line); }
-  #menubar > b { color:var(--accent); padding:0 12px; display:flex; align-items:center; font-size:13px; }
-  .mItem { position:relative; padding:0 10px; display:flex; align-items:center; cursor:pointer; font-size:12px; }
-  .mItem:hover { background:#1a2230; }
-  .mMenu { position:absolute; top:26px; left:0; background:var(--panel); border:1px solid var(--line);
-           border-radius:0 0 6px 6px; z-index:60; min-width:220px; padding:4px; box-shadow:0 8px 24px #0008; }
-  .mMenu div { padding:7px 10px; cursor:pointer; border-radius:4px; }
-  .mMenu div:hover { background:#1a2230; } .mMenu .t { color:var(--muted); font-size:11px; }
-  .mMenu hr { border:0; border-top:1px solid var(--line); margin:4px 6px; }
+  /* menu bar (Ubuntu aubergine) */
+  #menubar { grid-area:menu; display:flex; align-items:stretch; background:var(--chrome); color:#f7eef3; }
+  #menubar > b { color:var(--accent); padding:0 14px; display:flex; align-items:center;
+                 font-size:13px; letter-spacing:.2px; }
+  .mItem { position:relative; padding:0 12px; display:flex; align-items:center; cursor:pointer; font-size:12.5px; }
+  .mItem:hover { background:rgba(255,255,255,.10); }
+  .mMenu { position:absolute; top:28px; left:0; background:var(--panel); border:1px solid var(--line);
+           border-radius:0 0 var(--radius) var(--radius); z-index:60; min-width:230px; padding:5px;
+           box-shadow:0 12px 30px #0009; }
+  .mMenu div { padding:8px 10px; cursor:pointer; border-radius:5px; display:flex; align-items:center; gap:9px; }
+  .mMenu div:hover { background:var(--hover); } .mMenu .t { color:var(--muted); font-size:11px; }
+  .mMenu hr { border:0; border-top:1px solid var(--line); margin:5px 6px; }
+  /* Workflow menu as a 3-column palette */
+  [data-menu="workflow"] > .mMenu { display:grid; grid-template-columns:1fr 1fr 1fr; width:720px; gap:1px; }
+  [data-menu="workflow"] > .mMenu div { display:block; }
+  [data-menu="workflow"] > .mMenu .t { padding-left:0 !important; }
   /* toolbar */
-  #toolbar { grid-area:tool; display:flex; align-items:center; gap:8px; padding:0 10px;
+  #toolbar { grid-area:tool; display:flex; align-items:center; gap:7px; padding:0 12px;
              background:var(--panel2); border-bottom:1px solid var(--line); }
-  #toolbar .sp { flex:1; }
-  button { background:#313a4e; color:var(--fg); border:0; padding:5px 10px; border-radius:5px;
-           cursor:pointer; font-size:12px; } button:hover{ background:#3b4660; }
-  button.run { background:var(--accent); color:#0b0e14; font-weight:600; }
-  button.tgl.on { background:var(--accent); color:#0b0e14; }
+  #toolbar .sp { flex:1; } .vsep { width:1px; height:20px; background:var(--line); margin:0 3px; }
+  button { background:var(--btn); color:var(--fg); border:0; padding:6px 11px; border-radius:var(--radius);
+           cursor:pointer; font-size:12.5px; display:inline-flex; align-items:center; gap:7px;
+           transition:background .12s; } button:hover{ background:var(--btn-h); }
+  button.run { background:var(--accent); color:var(--accent-fg); font-weight:600; }
+  button.run:hover { background:var(--accent-h); }
+  button.tgl.on { background:var(--accent); color:var(--accent-fg); }
+  button:disabled { opacity:.5; cursor:default; }
   /* panes */
   #left,#right { background:var(--panel); overflow:auto; }
   #left { grid-area:left; border-right:1px solid var(--line); }
-  #right { grid-area:right; border-left:1px solid var(--line); padding:10px; }
-  /* min-width/height:0 stops grid items from expanding to their content (canvas) size */
+  #right { grid-area:right; border-left:1px solid var(--line); padding:12px; }
   #left,#right,#center,#dock { min-width:0; min-height:0; }
-  #center { grid-area:center; position:relative; overflow:hidden; background:#0b0e14; }
-  /* canvas is taken out of flow (absolute) so its size never feeds back into the grid layout */
+  #center { grid-area:center; position:relative; overflow:hidden; background:#1a151d; }
   #c { position:absolute; inset:0; width:100%; height:100%; display:block; }
-  #imgview { position:absolute; inset:0; display:none; overflow:auto; background:#05070b; }
+  #imgview { position:absolute; inset:0; display:none; overflow:auto; background:#140f17; }
   #imgview.show { display:block; } #imgwrap { position:relative; display:inline-block; }
-  #orthoview { position:absolute; inset:0; display:none; overflow:hidden; background:#05070b; cursor:grab; }
+  #orthoview { position:absolute; inset:0; display:none; overflow:hidden; background:#140f17; cursor:grab; }
   #orthoview.show { display:block; } #orthoview.drag { cursor:grabbing; }
   #orthoview img, #orthocanvas { position:absolute; top:0; left:0; transform-origin:0 0; image-rendering:pixelated; }
   #orthocanvas { pointer-events:none; }
-  #orthohint { position:absolute; bottom:8px; left:8px; color:var(--muted); font-size:11px; }
+  #orthohint { position:absolute; bottom:8px; left:8px; color:var(--muted); font-size:11px;
+               background:#0009; padding:3px 8px; border-radius:5px; }
   #imgview img { display:block; max-width:none; } #imgview .pin { position:absolute; width:12px; height:12px;
-     margin:-6px 0 0 -6px; border:2px solid var(--warn); border-radius:50%; background:#0008; cursor:pointer; }
-  #imgview .pin span { position:absolute; left:14px; top:-4px; color:var(--warn); font-size:11px; white-space:nowrap; }
-  #gizmo { position:absolute; top:38px; right:10px; width:96px; height:96px; z-index:6; cursor:pointer; }
-  #gizmoNav { position:absolute; top:138px; right:10px; width:96px; z-index:6;
-              display:grid; grid-template-columns:repeat(3,1fr); gap:2px; }
-  #gizmoNav .gn { padding:3px 0; font-size:11px; line-height:1; background:#1a2230cc; border:1px solid var(--line); }
-  #gizmoNav .gn:hover { background:var(--accent); color:#0b0e14; }
+     margin:-6px 0 0 -6px; border:2px solid var(--accent); border-radius:50%; background:#0008; cursor:pointer; }
+  #imgview .pin span { position:absolute; left:14px; top:-4px; color:var(--accent); font-size:11px; white-space:nowrap; }
+  #gizmo { position:absolute; top:40px; right:12px; width:96px; height:96px; z-index:6; cursor:pointer; }
+  #gizmoNav { position:absolute; top:140px; right:12px; width:96px; z-index:6;
+              display:grid; grid-template-columns:repeat(3,1fr); gap:3px; }
+  #gizmoNav .gn { padding:4px 0; justify-content:center; background:#2a2330cc; border:1px solid var(--line); }
+  #gizmoNav .gn:hover { background:var(--accent); color:var(--accent-fg); }
   #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:5; }
-  #vtabs button.on { background:var(--accent); color:#0b0e14; }
-  #measure { position:absolute; top:8px; right:8px; background:#0009; border:1px solid var(--line);
-             border-radius:6px; padding:6px 10px; font-size:12px; display:none; }
+  #vtabs button { background:#2a2330cc; }
+  #vtabs button.on { background:var(--accent); color:var(--accent-fg); }
+  #measure { position:absolute; top:8px; right:8px; background:#000a; border:1px solid var(--line);
+             border-radius:var(--radius); padding:7px 11px; font-size:12px; display:none; }
   #measure.show { display:block; }
-  /* tab strips (left pane + dock) */
+  /* tabs (Office-365 segmented) */
   .tabs { display:flex; background:var(--panel2); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
-  .tabs button { background:none; border:0; border-bottom:2px solid transparent; border-radius:0;
-                 padding:6px 12px; color:var(--muted); }
+  .tabs button { background:none; border:0; border-bottom:2.5px solid transparent; border-radius:0;
+                 padding:8px 14px; color:var(--muted); font-weight:500; }
+  .tabs button:hover { background:var(--hover); color:var(--fg); }
   .tabs button.on { color:var(--fg); border-bottom-color:var(--accent); }
-  .pad { padding:10px; }
-  h3 { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:14px 0 6px; }
-  /* workspace tree (industry-standard: Workspace > Chunk > category > item) */
-  .tnode { display:flex; align-items:center; gap:5px; padding:3px 6px; border-radius:4px; cursor:pointer;
+  .pad { padding:12px; }
+  h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:16px 0 7px;
+       display:flex; align-items:center; gap:6px; }
+  /* workspace tree */
+  .tnode { display:flex; align-items:center; gap:6px; padding:4px 7px; border-radius:5px; cursor:pointer;
            border:1px solid transparent; white-space:nowrap; }
-  .tnode:hover { background:#1a2230; } .tnode.sel { background:#1d2738; border-color:var(--accent); }
-  .tnode .car { width:12px; flex:0 0 auto; text-align:center; color:var(--muted); font-size:10px; }
-  .tnode .ico { width:15px; flex:0 0 auto; text-align:center; }
+  .tnode:hover { background:var(--hover); }
+  .tnode.sel { background:var(--sel); border-color:var(--accent); }
+  .tnode .car { width:13px; flex:0 0 auto; text-align:center; color:var(--muted); font-size:10px; }
+  .tnode .ico { width:17px; flex:0 0 auto; display:flex; justify-content:center; color:var(--muted); }
   .tnode .lbl { flex:1; overflow:hidden; text-overflow:ellipsis; }
   .tnode .cnt { color:var(--muted); font-size:11px; }
   .tnode.chunk .lbl { font-weight:600; } .tnode.chunk.active .lbl { color:var(--accent); }
   .tnode.chunk.active .lbl::after { content:" (active)"; color:var(--muted); font-weight:400; font-size:10px; }
+  .tnode.chunk .ico { color:var(--accent); }
   .tnode.cat .lbl { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
-  .tnode .eye { width:15px; flex:0 0 auto; text-align:center; opacity:.45; } .tnode .eye.on { opacity:1; }
+  .tnode .eye { width:18px; flex:0 0 auto; display:flex; justify-content:center; opacity:.4; color:var(--muted); }
+  .tnode .eye.on { opacity:1; color:var(--accent); }
   .tnode .en { width:auto; margin:0 1px; flex:0 0 auto; accent-color:var(--accent); }
   .tnode.off .lbl, .tnode.off .ico { opacity:.4; }
-  .tnode.dragover { background:#243046; outline:1px dashed var(--accent); }
-  .dot { width:8px; height:8px; border-radius:50%; background:#444c5c; flex:0 0 auto; }
+  .tnode.dragover { background:var(--sel); outline:1px dashed var(--accent); }
+  .dot { width:8px; height:8px; border-radius:50%; background:#5a4f5c; flex:0 0 auto; }
   .dot.executed,.dot.cached { background:var(--ok); } .dot.failed { background:var(--err); }
   .dot.running { background:var(--warn); }
-  /* right-click context menu */
+  /* context menu */
   #ctxMenu { position:fixed; z-index:90; background:var(--panel); border:1px solid var(--line);
-             border-radius:6px; padding:4px; min-width:180px; box-shadow:0 8px 24px #0008; }
-  #ctxMenu div { padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px; }
-  #ctxMenu div:hover { background:#1a2230; } #ctxMenu hr { border:0; border-top:1px solid var(--line); margin:4px 6px; }
+             border-radius:var(--radius); padding:5px; min-width:190px; box-shadow:0 12px 30px #0009; }
+  #ctxMenu div { padding:7px 10px; border-radius:5px; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:8px; }
+  #ctxMenu div:hover { background:var(--hover); } #ctxMenu hr { border:0; border-top:1px solid var(--line); margin:4px 6px; }
   #ctxMenu div.danger { color:var(--err); }
-  /* run progress popup */
-  #progress { position:fixed; right:18px; bottom:18px; width:440px; z-index:85; background:var(--panel);
-              border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 30px #000a; overflow:hidden; }
+  /* progress popup */
+  #progress { position:fixed; right:18px; bottom:18px; width:450px; z-index:85; background:var(--panel);
+              border:1px solid var(--line); border-radius:10px; box-shadow:0 14px 36px #000b; overflow:hidden; }
   #progress.min #progBody { display:none; }
-  #progHead { display:flex; align-items:center; gap:6px; padding:8px 10px; background:#0d121b;
-              border-bottom:1px solid var(--line); cursor:default; }
-  #progHead button { padding:2px 8px; }
-  #progBody { padding:10px; }
-  #progBarOuter { height:10px; background:#0d121b; border:1px solid var(--line); border-radius:6px; overflow:hidden; margin:6px 0; }
+  #progHead { display:flex; align-items:center; gap:6px; padding:10px 12px; background:var(--chrome);
+              color:#f7eef3; cursor:default; }
+  #progHead button { padding:3px 7px; background:rgba(255,255,255,.10); }
+  #progHead button:hover { background:rgba(255,255,255,.20); }
+  #progBody { padding:12px; }
+  #progBarOuter { height:8px; background:var(--panel2); border:1px solid var(--line); border-radius:6px; overflow:hidden; margin:8px 0; }
   #progBar { height:100%; width:0; background:var(--accent); transition:width .2s; }
   #progBar.indet { width:35%; animation:indet 1.1s ease-in-out infinite; }
   @keyframes indet { 0%{margin-left:-35%} 100%{margin-left:100%} }
-  #progLog { font-family:ui-monospace,monospace; font-size:11px; white-space:pre-wrap; color:var(--muted);
+  #progLog { font-family:var(--mono); font-size:11px; white-space:pre-wrap; color:var(--muted);
              max-height:200px; overflow:auto; margin-top:6px; border-top:1px solid var(--line); padding-top:6px; }
   #progLog .err { color:var(--err); } #progLog .warn { color:var(--warn); }
-  label { display:block; margin:8px 0 2px; color:var(--muted); font-size:11px; }
-  input,select { width:100%; background:#0d121b; color:var(--fg); border:1px solid var(--line);
-                 border-radius:4px; padding:5px; font-size:12px; }
-  input[type=checkbox]{ width:auto; }
+  /* form controls */
+  label { display:block; margin:9px 0 3px; color:var(--muted); font-size:11px; }
+  input,select { width:100%; background:var(--panel2); color:var(--fg); border:1px solid var(--line);
+                 border-radius:5px; padding:6px 8px; font-size:12px; }
+  input:focus,select:focus { outline:none; border-color:var(--accent); }
+  input[type=checkbox]{ width:auto; accent-color:var(--accent); }
   .row { display:flex; gap:6px; align-items:center; } .sp { flex:1; } .muted { color:var(--muted); }
-  table { width:100%; border-collapse:collapse; font-size:12px; } td,th { text-align:left; padding:3px 6px; }
-  th { color:var(--muted); font-weight:500; border-bottom:1px solid var(--line); }
-  tr.sel { background:#1d2738; }
-  /* bottom dock */
+  table { width:100%; border-collapse:collapse; font-size:12px; } td,th { text-align:left; padding:4px 6px; }
+  th { color:var(--muted); font-weight:600; border-bottom:1px solid var(--line); }
+  tr.sel { background:var(--sel); }
+  /* bottom dock — Ubuntu terminal console */
   #dock { grid-area:dock; background:var(--panel); border-top:1px solid var(--line); display:flex; flex-direction:column; }
   #dockbody { flex:1; overflow:auto; }
-  #log { font-family:ui-monospace,monospace; font-size:11px; white-space:pre-wrap; color:var(--muted); padding:8px; }
-  #photos { display:flex; gap:6px; flex-wrap:wrap; padding:8px; }
-  #photos .th { position:relative; width:120px; cursor:pointer; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
-  #photos .th.exc { opacity:.4; } #photos .th img { width:100%; height:78px; object-fit:cover; display:block; }
-  #photos .th div { font-size:10px; padding:2px 4px; color:var(--muted); white-space:nowrap; overflow:hidden; }
-  #photos .th .rm { position:absolute; top:2px; right:2px; padding:1px 5px; font-size:11px; line-height:1.2;
-                    background:#0009; color:var(--err); border-radius:4px; opacity:0; }
-  #photos .th:hover .rm { opacity:1; } #photos .th .rm:hover { background:var(--err); color:#0b0e14; }
-  /* dropdown + modal */
-  .hidden { display:none !important; }   /* must beat .modal/.mMenu display rules */
-  .modal { position:fixed; inset:0; background:#0009; display:flex; align-items:center; justify-content:center; z-index:80; }
-  .dialog { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px;
-            width:460px; max-height:84vh; overflow:auto; }
-  .dialog h2 { font-size:15px; margin:0 0 4px; }
-  .chk { display:flex; gap:6px; align-items:center; margin:3px 0; }
-  .crsrow { padding:6px 8px; border-radius:4px; cursor:pointer; } .crsrow:hover { background:#1a2230; }
-  .brdir { padding:5px 8px; border-radius:4px; cursor:pointer; } .brdir:hover { background:#1a2230; }
-  .brth { width:96px; border:2px solid transparent; border-radius:5px; cursor:pointer; overflow:hidden; }
+  #dt-console { height:100%; background:var(--console-bg); }
+  #log { font-family:var(--mono); font-size:12px; line-height:1.45; white-space:pre-wrap;
+         color:var(--console-fg); padding:10px 12px; }
+  #photos { display:flex; gap:8px; flex-wrap:wrap; padding:10px; }
+  #photos .th { position:relative; width:124px; cursor:pointer; border:1px solid var(--line);
+                border-radius:6px; overflow:hidden; background:var(--panel2); }
+  #photos .th.exc { opacity:.4; } #photos .th img { width:100%; height:80px; object-fit:cover; display:block; }
+  #photos .th div { font-size:10px; padding:3px 5px; color:var(--muted); white-space:nowrap; overflow:hidden; }
+  #photos .th .rm { position:absolute; top:3px; right:3px; padding:2px; background:#000a; color:#fff;
+                    border-radius:5px; opacity:0; }
+  #photos .th:hover .rm { opacity:1; } #photos .th .rm:hover { background:var(--err); }
+  /* modal + dropdown */
+  .hidden { display:none !important; }
+  .modal { position:fixed; inset:0; background:#000a; display:flex; align-items:center; justify-content:center; z-index:80; }
+  .dialog { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px;
+            width:470px; max-height:84vh; overflow:auto; box-shadow:0 18px 50px #000b; }
+  .dialog h2 { font-size:16px; margin:0 0 5px; }
+  .chk { display:flex; gap:7px; align-items:center; margin:3px 0; }
+  .crsrow { padding:7px 9px; border-radius:5px; cursor:pointer; } .crsrow:hover { background:var(--hover); }
+  .brdir { padding:6px 9px; border-radius:5px; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .brdir:hover { background:var(--hover); }
+  .brth { width:96px; border:2px solid transparent; border-radius:6px; cursor:pointer; overflow:hidden; background:var(--panel2); }
   .brth.sel { border-color:var(--accent); } .brth img { width:100%; height:64px; object-fit:cover; display:block; }
   .brth div { font-size:10px; padding:2px 3px; color:var(--muted); white-space:nowrap; overflow:hidden; }
 </style>
 </head>
 <body>
+<!-- line-icon sprite (stroke icons, currentColor) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.4 4 5.6 4 9s-1.3 6.6-4 9c-2.7-2.4-4-5.6-4-9s1.3-6.6 4-9z"/></symbol>
+  <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 16.5L16.5 3 21 7.5 7.5 21z"/><path d="M7 11l2 2M11 7l2 2M15 11l2 2"/></symbol>
+  <symbol id="i-square" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/></symbol>
+  <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6.5 16.5L15 8l5 5-6 6H8z"/></symbol>
+  <symbol id="i-file-plus" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v6M9 15h6"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7"/><rect x="8" y="13" width="8" height="6"/></symbol>
+  <symbol id="i-folder-plus" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v6M9 14h6"/></symbol>
+  <symbol id="i-folders" viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h3l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h5L17 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.3"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="6" cy="13" r="1.4"/><circle cx="12" cy="8" r="1.4"/><circle cx="18" cy="14" r="1.4"/><circle cx="11" cy="16" r="1.4"/><circle cx="16" cy="6" r="1.4"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4 4 0 1 1 1-7.9A5 5 0 0 1 18 9a3.5 3.5 0 0 1 0 9z"/></symbol>
+  <symbol id="i-mountain" viewBox="0 0 24 24"><path d="M3 20l6-10 4 6 2.5-3.5L21 20z"/></symbol>
+  <symbol id="i-triangle" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 10h16M4 15h16M10 4v16M15 4v16"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
+  <symbol id="i-hex" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.5 7-11a7 7 0 1 0-14 0c0 4.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-maximize" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18"/><rect x="5" y="11" width="3" height="7"/><rect x="10.5" y="6" width="3" height="12"/><rect x="16" y="14" width="3" height="4"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5-9 8"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+  <symbol id="i-chev-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-rot-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 2.6-6.3"/><path d="M3 4v4h4"/></symbol>
+  <symbol id="i-rot-cw" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 4v4h-4"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-.5 3"/><path d="M20 4v5h-5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14 7a4 4 0 0 0-5 5l-6 6 2 2 6-6a4 4 0 0 0 5-5l-2.5 2.5L11 11l-.5-2.5z"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
+</defs></svg>
+
 <div id="app">
   <!-- menu bar -->
   <div id="menubar">
@@ -167,13 +241,13 @@
   <!-- toolbar -->
   <div id="toolbar">
     <span id="pname" class="muted" style="font-weight:600"></span>
-    <span style="width:1px;height:18px;background:var(--line)"></span>
-    <button class="run" id="runBtn">▶ Run</button>
-    <button id="crsBtn">🌐 <span id="crsLabel">CRS</span></button>
-    <span style="width:1px;height:18px;background:var(--line)"></span>
-    <button class="tgl" id="distBtn" title="Measure distance">📏 Distance</button>
-    <button class="tgl" id="areaBtn" title="Measure area">▱ Area</button>
-    <button id="clearMeasBtn">Clear</button>
+    <span class="vsep"></span>
+    <button class="run" id="runBtn"><svg class="ic"><use href="#i-play"/></svg> Run</button>
+    <button id="crsBtn"><svg class="ic"><use href="#i-globe"/></svg> <span id="crsLabel">CRS</span></button>
+    <span class="vsep"></span>
+    <button class="tgl" id="distBtn" title="Measure distance"><svg class="ic"><use href="#i-ruler"/></svg> Distance</button>
+    <button class="tgl" id="areaBtn" title="Measure area"><svg class="ic"><use href="#i-square"/></svg> Area</button>
+    <button id="clearMeasBtn"><svg class="ic"><use href="#i-eraser"/></svg> Clear</button>
     <span class="sp"></span>
     <span id="status" class="muted"></span>
   </div>
@@ -186,25 +260,25 @@
     <div id="lt-workspace" class="pad">
       <div class="row" style="margin-bottom:6px">
         <span id="activeChunk" class="muted"></span><span class="sp"></span>
-        <button id="newChunk">+ Chunk</button></div>
+        <button id="newChunk"><svg class="ic"><use href="#i-folder-plus"/></svg> Chunk</button></div>
       <div id="workspace"></div>
       <h3>Add layer (advanced)</h3>
       <div class="row"><select id="newType"></select></div>
       <div class="row" style="margin-top:6px"><input id="newId" placeholder="layer id" />
-        <button id="addBtn">Add</button></div>
+        <button id="addBtn"><svg class="ic"><use href="#i-plus"/></svg> Add</button></div>
     </div>
     <div id="lt-reference" class="pad hidden">
       <h3>Coordinate system</h3>
       <div id="refCrs" class="muted"></div>
-      <button id="refCrsBtn" style="margin-top:6px">Set CRS…</button>
+      <button id="refCrsBtn" style="margin-top:6px"><svg class="ic"><use href="#i-globe"/></svg> Set CRS…</button>
       <h3>Markers / GCPs</h3>
       <div id="markerTable"></div>
       <div class="row" style="margin-top:6px">
-        <button id="addMarker">+ Marker</button><span class="sp"></span>
-        <button class="run" id="saveMarkers">Save GCPs</button></div>
-      <button id="useGcps" style="margin-top:6px; width:100%">Use these GCPs for georeferencing</button>
+        <button id="addMarker"><svg class="ic"><use href="#i-pin"/></svg> Marker</button><span class="sp"></span>
+        <button class="run" id="saveMarkers"><svg class="ic"><use href="#i-save"/></svg> Save GCPs</button></div>
+      <button id="useGcps" style="margin-top:6px; width:100%; justify-content:center"><svg class="ic"><use href="#i-target"/></svg> Use these GCPs for georeferencing</button>
       <div class="muted" style="margin-top:6px">Pick: select a marker, open a photo in the Photo tab, click to add an observation. Mark some as <b>check</b> to validate accuracy (held out of the fit). Then Save and "Use these GCPs".</div>
-      <h3>GCP accuracy <button id="refreshAcc" style="float:right; padding:2px 7px">↻</button></h3>
+      <h3>GCP accuracy <span class="sp"></span><button id="refreshAcc" style="padding:2px 6px"><svg class="ic"><use href="#i-refresh"/></svg></button></h3>
       <div id="gcpAccuracy" class="muted">Run Georeference with GCPs to see residuals.</div>
     </div>
   </div>
@@ -218,13 +292,13 @@
     <canvas id="c"></canvas>
     <canvas id="gizmo" title="Navigation cube — click a face, edge or corner to snap the view"></canvas>
     <div id="gizmoNav">
-      <button class="gn" data-rot="rollL" title="Roll left">⟲</button>
-      <button class="gn" data-rot="up" title="Rotate up">▲</button>
-      <button class="gn" data-rot="rollR" title="Roll right">⟳</button>
-      <button class="gn" data-rot="left" title="Rotate left">◄</button>
-      <button class="gn" data-rot="home" title="Home / iso view">⌂</button>
-      <button class="gn" data-rot="right" title="Rotate right">►</button>
-      <button class="gn" data-rot="down" title="Rotate down" style="grid-column:2">▼</button>
+      <button class="gn" data-rot="rollL" title="Roll left"><svg class="ic"><use href="#i-rot-ccw"/></svg></button>
+      <button class="gn" data-rot="up" title="Rotate up"><svg class="ic"><use href="#i-chev-up"/></svg></button>
+      <button class="gn" data-rot="rollR" title="Roll right"><svg class="ic"><use href="#i-rot-cw"/></svg></button>
+      <button class="gn" data-rot="left" title="Rotate left"><svg class="ic"><use href="#i-chev-left"/></svg></button>
+      <button class="gn" data-rot="home" title="Home / iso view"><svg class="ic"><use href="#i-home"/></svg></button>
+      <button class="gn" data-rot="right" title="Rotate right"><svg class="ic"><use href="#i-chev-right"/></svg></button>
+      <button class="gn" data-rot="down" title="Rotate down" style="grid-column:2"><svg class="ic"><use href="#i-chev-down"/></svg></button>
     </div>
     <div id="imgview"><div id="imgwrap"></div></div>
     <div id="orthoview"><img id="orthoimg" alt=""><canvas id="orthocanvas"></canvas><div id="orthohint"></div></div>
@@ -250,13 +324,12 @@
   </div>
 </div>
 
-<!-- Build dialog (workflow op) -->
-<!-- run progress popup (industry-standard, minimizable) -->
+<!-- run progress popup -->
 <div id="progress" class="hidden">
   <div id="progHead">
     <span id="progTitle">Processing…</span><span class="sp"></span>
-    <button id="progMin" title="Minimize">▁</button>
-    <button id="progCancel" title="Cancel">✕</button>
+    <button id="progMin" title="Minimize"><svg class="ic"><use href="#i-minus"/></svg></button>
+    <button id="progCancel" title="Cancel"><svg class="ic"><use href="#i-x"/></svg></button>
   </div>
   <div id="progBody">
     <div id="progStage" class="muted"></div>
@@ -271,22 +344,23 @@
 <div id="splitD" class="split h"></div>
 <div id="ctxMenu" class="hidden"></div>
 
+<!-- Build dialog (workflow op) -->
 <div id="modal" class="modal hidden"><div class="dialog">
   <h2 id="mTitle"></h2><div id="mDesc" class="muted"></div>
   <label>Layer id</label><input id="mId" />
-  <button id="mBrowse" class="hidden" style="margin:8px 0; width:100%">📂 Browse / select images…</button>
+  <button id="mBrowse" class="hidden" style="margin:8px 0; width:100%; justify-content:center"><svg class="ic"><use href="#i-image"/></svg> Browse / select images…</button>
   <h3>Inputs</h3><div id="mInputs"></div>
   <h3>Options</h3><div id="mFields"></div>
-  <div class="row" style="margin-top:14px"><button id="mCancel">Cancel</button><span class="sp"></span>
+  <div class="row" style="margin-top:16px"><button id="mCancel">Cancel</button><span class="sp"></span>
     <button id="mAddOnly">Add only</button>
-    <button class="run" id="mOk">OK &amp; Run</button></div>
+    <button class="run" id="mOk"><svg class="ic"><use href="#i-play"/></svg> OK &amp; Run</button></div>
 </div></div>
 
 <!-- file picker dialog (Add Photos) -->
 <div id="browseModal" class="modal hidden"><div class="dialog" style="width:640px">
   <h2>Select images</h2>
   <div class="row" style="gap:6px; margin:6px 0">
-    <button id="brUp">⬆ Up</button>
+    <button id="brUp"><svg class="ic"><use href="#i-arrow-up"/></svg> Up</button>
     <input id="brPath" placeholder="path…" style="flex:1" />
     <button id="brGo">Go</button>
   </div>
@@ -299,7 +373,7 @@
   <label class="chk" style="margin-top:8px"><input type="checkbox" id="brAlign" checked>
     Also add an Align Photos step wired to these images</label>
   <div class="row" style="margin-top:10px"><button id="brCancel">Cancel</button><span class="sp"></span>
-    <button class="run" id="brAdd">Add selected</button></div>
+    <button class="run" id="brAdd"><svg class="ic"><use href="#i-plus"/></svg> Add selected</button></div>
 </div></div>
 
 <!-- CRS picker dialog -->
@@ -309,7 +383,7 @@
   <input id="crsSearch" placeholder="Search CRS…" style="margin-top:8px" />
   <div id="crsResults" style="margin-top:8px; max-height:46vh; overflow:auto"></div>
   <div id="crsInfo" class="muted" style="margin-top:8px"></div>
-  <div class="row" style="margin-top:14px"><button id="crsCancel">Cancel</button><span class="sp"></span>
+  <div class="row" style="margin-top:16px"><button id="crsCancel">Cancel</button><span class="sp"></span>
     <button class="run" id="crsOk" disabled>Use this CRS</button></div>
 </div></div>
 

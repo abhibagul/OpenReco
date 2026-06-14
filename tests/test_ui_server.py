@@ -514,6 +514,9 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"/api/add_photos" in appjs and b"openBrowse" in appjs and b"/api/browse" in appjs
     assert b"/api/remove_photo" in appjs and b"brAlign" in appjs
     assert b"showGcpAccuracy" in appjs and b"control_rms" in appjs       # GCP control/check accuracy
+    assert b"const ic =" in appjs                                        # line-icon helper
+    _, html2 = _get(base + "/")
+    assert b"#e95420" in html2 and b'id="i-play"' in html2               # Ubuntu accent + icon sprite
 
 
 def test_desktop_mode_resolution(monkeypatch):
