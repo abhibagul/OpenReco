@@ -27,7 +27,10 @@ in a **layered desktop UI** that surpasses the reference tool's. Pillars, in pri
    EXIF-GPS ENU preview before alignment. Panes are **resizable** (draggable splitters, persisted);
    the 3D view has an CAD-style **navigation cube** (click a face to snap the view) plus a
    **grid + axis triad**. Click-built pipelines **auto-wire** inputs (each op declares the artifacts
-   it needs; layers declare what they provide). **Model/Photo** viewport
+   it needs; layers declare what they provide). A **minimizable progress popup** (progress bar +
+   live log + Cancel) and a **streaming Console** (the engine's INFO logs forwarded over SSE,
+   /api/cancel for cooperative cancellation). Cameras render in the sky with drop-lines to a ground
+   plane. **Model/Photo** viewport
    tabs, a **Properties** pane, and a **Console / Photos / Jobs** bottom dock. Features: active-chunk
    selector + "＋ Chunk"; **Workflow menu** (Align Photos / Build Dense Cloud / … Build dialogs →
    engine) incl. **Merge Chunks** (ICP align+merge); schema-driven parameter panels; Run with live

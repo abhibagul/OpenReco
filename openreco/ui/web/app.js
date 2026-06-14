@@ -430,8 +430,17 @@ function buildCameras(cams) {
   const pts = cams.map(c => new THREE.Vector3(c.c[0], c.c[1], c.c[2]));
   grp.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts),
     new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x89dceb })));
-  const diag = new THREE.Box3().setFromPoints(pts).getSize(new THREE.Vector3()).length() || 1;
+  const bb = new THREE.Box3().setFromPoints(pts);
+  const sz = bb.getSize(new THREE.Vector3());
+  const diag = sz.length() || 1;
+  const horiz = Math.max(sz.x, sz.y) || 1;
   const s = Math.max(diag * 0.02, 1e-4);
+  // a ground plane below the cameras + vertical drop-lines (so the capture height is visible)
+  const groundZ = bb.min.z - horiz * 0.35;
+  const drop = [];
+  pts.forEach(C => drop.push(C, new THREE.Vector3(C.x, C.y, groundZ)));
+  grp.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(drop),
+    new THREE.LineBasicMaterial({ color: 0x45506a })));
   const mat = new THREE.LineBasicMaterial({ color: 0x89dceb });
   const segs = [];
   cams.forEach(c => {
@@ -520,24 +529,64 @@ $('addBtn').onclick = async () => {
   if (r.ok) { $('newId').value = ''; log(`added ${id} (${type})`); await loadProject(); selectLayer(id); }
 };
 
+// ---- run progress popup (industry-standard, minimizable) --------------------
+function progShow(title) {
+  $('progTitle').textContent = title || 'Processing…';
+  $('progStage').textContent = ''; $('progPct').textContent = '';
+  $('progLog').textContent = ''; setBar(null);
+  $('progress').classList.remove('hidden', 'min');
+}
+function progHide() { $('progress').classList.add('hidden'); }
+function setBar(frac) {
+  const b = $('progBar');
+  if (frac == null || isNaN(frac)) { b.classList.add('indet'); b.style.width = '35%'; }
+  else { b.classList.remove('indet'); b.style.width = Math.round(frac * 100) + '%'; }
+}
+function progLog(msg, cls) {
+  const el = $('progLog'); const line = document.createElement('div');
+  if (cls) line.className = cls; line.textContent = msg; el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  while (el.childNodes.length > 500) el.removeChild(el.firstChild);
+}
+$('progMin').onclick = () => $('progress').classList.toggle('min');
+$('progHead').ondblclick = () => $('progress').classList.toggle('min');
+$('progCancel').onclick = async () => {
+  $('progCancel').textContent = '…';
+  await fetch('/api/cancel', { method:'POST', body:'{}' });
+  log('cancel requested'); progLog('cancel requested — stopping after the current stage…', 'warn');
+};
+
 // ---- run + live progress (SSE) --------------------------------------------
 $('runBtn').onclick = () => runPipeline();
 async function runPipeline() {
   const r = await fetch('/api/run', { method:'POST', body: '{}' });
   if (r.status === 409) { log('already running'); return; }
-  log('--- run started ---'); $('status').textContent = 'running…'; selectDock('console');
+  log('--- run started ---'); $('status').textContent = 'running…';
+  $('progCancel').textContent = '✕'; progShow('Processing…');
   const es = new EventSource('/api/events');
   es.onmessage = (e) => {
     const ev = JSON.parse(e.data);
-    if (ev.event === 'stage_start') { setDot(ev.id, 'running'); log(`▶ ${ev.id} (${ev.type})`); }
-    else if (ev.event === 'progress') $('status').textContent = `${ev.id}: ${Math.round(ev.frac*100)}% ${ev.message||''}`;
-    else if (ev.event === 'stage_done') { setDot(ev.id, ev.status);
-      log(`${ev.status === 'failed' ? '✗' : '✓'} ${ev.id} [${ev.status}]` + (ev.error ? ` — ${ev.error}` : '')); }
-    else if (ev.event === 'stage_skipped') { setDot(ev.id, 'failed'); log(`⨯ ${ev.id} skipped`); }
-    else if (ev.event === 'run_done') log(`--- run ${ev.ok ? 'OK' : 'FAILED'} ---`);
-    else if (ev.event === 'run_error') log(`error: ${ev.error}`);
+    if (ev.event === 'log') {
+      const cls = ev.level === 'ERROR' ? 'err' : (ev.level === 'WARNING' ? 'warn' : '');
+      log(ev.msg); progLog(ev.msg, cls);
+    } else if (ev.event === 'stage_start') { setDot(ev.id, 'running');
+      $('progTitle').textContent = `Processing: ${ev.id} (${ev.type})`; $('progStage').textContent = `running ${ev.id}…`;
+      setBar(null); log(`▶ ${ev.id} (${ev.type})`); progLog(`▶ ${ev.id} (${ev.type})`);
+    } else if (ev.event === 'progress') {
+      const pct = `${ev.id}: ${Math.round(ev.frac*100)}% ${ev.message||''}`;
+      $('status').textContent = pct; $('progStage').textContent = pct;
+      $('progPct').textContent = `${Math.round(ev.frac*100)}%`; setBar(ev.frac);
+    } else if (ev.event === 'stage_done') { setDot(ev.id, ev.status);
+      const m = `${ev.status === 'failed' ? '✗' : '✓'} ${ev.id} [${ev.status}]` + (ev.error ? ` — ${ev.error}` : '');
+      log(m); progLog(m, ev.status === 'failed' ? 'err' : '');
+    } else if (ev.event === 'stage_skipped') { setDot(ev.id, 'failed'); log(`⨯ ${ev.id} skipped`); progLog(`⨯ ${ev.id} skipped`, 'warn'); }
+    else if (ev.event === 'run_done') { log(`--- run ${ev.ok ? 'OK' : 'FAILED'} ---`);
+      $('progTitle').textContent = ev.ok ? 'Done' : 'Failed'; $('progStage').textContent = ev.ok ? 'completed' : 'failed';
+      setBar(1); progLog(`--- run ${ev.ok ? 'OK' : 'FAILED'} ---`, ev.ok ? '' : 'err'); }
+    else if (ev.event === 'run_error') { log(`error: ${ev.error}`); progLog(`error: ${ev.error}`, 'err'); }
   };
   es.addEventListener('eof', async () => { es.close(); $('status').textContent = 'done';
+    setTimeout(progHide, 1600);
     const reshow = [...visible];
     reshow.forEach(id => { if (objects.has(id)) { scene.remove(objects.get(id)); objects.delete(id); } });
     visible.clear();
@@ -960,29 +1009,37 @@ async function submitOp(op, run) {
 }
 
 // ---- resizable panes (drag the splitters; persisted in localStorage) ------
+const PANES = { left: 300, right: 330, dock: 190 };
+function layoutPanes() {
+  const app = $('app');
+  app.style.gridTemplateColumns = `${PANES.left}px 1fr ${PANES.right}px`;
+  app.style.gridTemplateRows = `26px 34px 1fr ${PANES.dock}px`;
+  // reposition the drag handles to match
+  $('splitL').style.left = (PANES.left - 5) + 'px';
+  $('splitR').style.right = (PANES.right - 5) + 'px';
+  $('splitD').style.bottom = (PANES.dock - 5) + 'px';
+  $('splitL').style.bottom = $('splitR').style.bottom = PANES.dock + 'px';
+  resize();   // keep the 3D canvas in sync
+}
 function setupSplitters() {
-  const root = document.documentElement, css = getComputedStyle(root);
-  // restore saved sizes
-  ['--left-w', '--right-w', '--dock-h'].forEach(v => {
-    const s = localStorage.getItem('ore' + v); if (s) root.style.setProperty(v, s);
-  });
+  const saved = localStorage.getItem('orePanes');
+  if (saved) { try { Object.assign(PANES, JSON.parse(saved)); } catch (_e) { /* ignore */ } }
   const drag = (el, onMove) => {
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault(); el.classList.add('drag'); el.setPointerCapture(e.pointerId);
-      const move = (ev) => { onMove(ev); resize(); };           // live: panes + 3D canvas follow
+      const move = (ev) => { onMove(ev); layoutPanes(); };
       const up = (ev) => { el.classList.remove('drag');
         try { el.releasePointerCapture(ev.pointerId); } catch (_e) { /* already released */ }
         el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up);
-        ['--left-w', '--right-w', '--dock-h'].forEach(v =>
-          localStorage.setItem('ore' + v, css.getPropertyValue(v).trim()));
-        resize();
+        localStorage.setItem('orePanes', JSON.stringify(PANES));
       };
       el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
     });
   };
-  drag($('splitL'), (e) => root.style.setProperty('--left-w', Math.max(160, Math.min(e.clientX, innerWidth - 420)) + 'px'));
-  drag($('splitR'), (e) => root.style.setProperty('--right-w', Math.max(180, Math.min(innerWidth - e.clientX, innerWidth - 420)) + 'px'));
-  drag($('splitD'), (e) => root.style.setProperty('--dock-h', Math.max(60, Math.min(innerHeight - e.clientY, innerHeight - 200)) + 'px'));
+  drag($('splitL'), (e) => { PANES.left = Math.max(160, Math.min(e.clientX, innerWidth - 420)); });
+  drag($('splitR'), (e) => { PANES.right = Math.max(180, Math.min(innerWidth - e.clientX, innerWidth - 420)); });
+  drag($('splitD'), (e) => { PANES.dock = Math.max(60, Math.min(innerHeight - e.clientY, innerHeight - 200)); });
+  layoutPanes();
 }
 
 // ---- boot ----

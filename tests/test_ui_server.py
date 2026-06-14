@@ -180,8 +180,16 @@ def test_frontend_has_workspace_chunks(server):
     assert b"/api/cameras" in appjs and b"buildCameras" in appjs
     assert b"setupSplitters" in appjs and b"snapView" in appjs and b"GridHelper" in appjs
     assert b"runPipeline" in appjs and b"camera.up.set(0, 0, 1)" in appjs   # Z-up world
+    assert b"progShow" in appjs and b"/api/cancel" in appjs and b"event === 'log'" in appjs
     _, html = _get(base + "/")
     assert b'id="gizmo"' in html and b'class="split' in html and b"mAddOnly" in html
+    assert b'id="progress"' in html and b'id="progBar"' in html
+
+
+def test_cancel_when_idle(server):
+    base, _ = server
+    status, body = _post(base + "/api/cancel", {})
+    assert status == 200 and body["cancelling"] is False   # nothing running
 
 
 def test_chunk_rename_and_remove(tmp_path):

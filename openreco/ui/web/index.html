@@ -97,6 +97,21 @@
   #ctxMenu div { padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px; }
   #ctxMenu div:hover { background:#1a2230; } #ctxMenu hr { border:0; border-top:1px solid var(--line); margin:4px 6px; }
   #ctxMenu div.danger { color:var(--err); }
+  /* run progress popup */
+  #progress { position:fixed; right:18px; bottom:18px; width:440px; z-index:85; background:var(--panel);
+              border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 30px #000a; overflow:hidden; }
+  #progress.min #progBody { display:none; }
+  #progHead { display:flex; align-items:center; gap:6px; padding:8px 10px; background:#0d121b;
+              border-bottom:1px solid var(--line); cursor:default; }
+  #progHead button { padding:2px 8px; }
+  #progBody { padding:10px; }
+  #progBarOuter { height:10px; background:#0d121b; border:1px solid var(--line); border-radius:6px; overflow:hidden; margin:6px 0; }
+  #progBar { height:100%; width:0; background:var(--accent); transition:width .2s; }
+  #progBar.indet { width:35%; animation:indet 1.1s ease-in-out infinite; }
+  @keyframes indet { 0%{margin-left:-35%} 100%{margin-left:100%} }
+  #progLog { font-family:ui-monospace,monospace; font-size:11px; white-space:pre-wrap; color:var(--muted);
+             max-height:200px; overflow:auto; margin-top:6px; border-top:1px solid var(--line); padding-top:6px; }
+  #progLog .err { color:var(--err); } #progLog .warn { color:var(--warn); }
   label { display:block; margin:8px 0 2px; color:var(--muted); font-size:11px; }
   input,select { width:100%; background:#0d121b; color:var(--fg); border:1px solid var(--line);
                  border-radius:4px; padding:5px; font-size:12px; }
@@ -217,6 +232,21 @@
 </div>
 
 <!-- Build dialog (workflow op) -->
+<!-- run progress popup (industry-standard, minimizable) -->
+<div id="progress" class="hidden">
+  <div id="progHead">
+    <span id="progTitle">Processing…</span><span class="sp"></span>
+    <button id="progMin" title="Minimize">▁</button>
+    <button id="progCancel" title="Cancel">✕</button>
+  </div>
+  <div id="progBody">
+    <div id="progStage" class="muted"></div>
+    <div id="progBarOuter"><div id="progBar"></div></div>
+    <div id="progPct" class="muted"></div>
+    <div id="progLog"></div>
+  </div>
+</div>
+
 <div id="splitL" class="split v"></div>
 <div id="splitR" class="split v"></div>
 <div id="splitD" class="split h"></div>

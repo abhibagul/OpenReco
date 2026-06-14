@@ -31,6 +31,7 @@ Zero third-party deps; ThreadingHTTPServer + a per-run event queue for SSE.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import threading
@@ -65,6 +66,20 @@ def _cameras_from_gps(imgs: list[dict]) -> list[dict]:
     return out
 
 
+class _QueueLogHandler(logging.Handler):
+    """Forward 'openreco' log records to the SSE queue so the UI Console shows detailed run output."""
+
+    def __init__(self, q: queue.Queue):
+        super().__init__()
+        self.q = q
+
+    def emit(self, record):
+        try:
+            self.q.put({"event": "log", "level": record.levelname, "msg": self.format(record)})
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _unique_id(base: str, taken: set[str]) -> str:
     n = 1
     while f"{base}{n}" in taken:
@@ -79,6 +94,7 @@ class AppState:
         self.project = project
         self.events: queue.Queue = queue.Queue()
         self.running = False
+        self.cancel_requested = False
         self.lock = threading.Lock()
 
     # ---- data for the frontend ----
@@ -325,19 +341,33 @@ class AppState:
             if self.running:
                 return False
             self.running = True
+        self.cancel_requested = False
         self.events = queue.Queue()
 
         def worker():
+            handler = _QueueLogHandler(self.events)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            log = logging.getLogger("openreco")
+            old_level = log.level
+            log.setLevel(logging.INFO)
+            log.addHandler(handler)
             try:
-                self.project.run(force=force, on_event=self.events.put)
+                self.project.run(force=force, on_event=self.events.put,
+                                 cancel=lambda: self.cancel_requested)
             except Exception as exc:  # noqa: BLE001
                 self.events.put({"event": "run_error", "error": repr(exc)})
             finally:
+                log.removeHandler(handler)
+                log.setLevel(old_level)
                 self.events.put({"event": "_eof"})
                 self.running = False
 
         threading.Thread(target=worker, daemon=True).start()
         return True
+
+    def cancel_run(self) -> bool:
+        self.cancel_requested = True
+        return self.running
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -402,6 +432,8 @@ class _Handler(BaseHTTPRequestHandler):
         if u.path == "/api/run":
             started = self.state.start_run(force=body.get("force"))
             return self._send(202 if started else 409, {"started": started})
+        if u.path == "/api/cancel":
+            return self._send(200, {"cancelling": self.state.cancel_run()})
         if u.path == "/api/new_project":
             return self._new_project(body)
         if u.path == "/api/save_project":
