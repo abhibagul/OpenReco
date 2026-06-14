@@ -28,7 +28,7 @@ id = "dsm1"
 type = "dsm"
 chunk = "abhishek"
 inputs = ["mvs1"]
-params = { resolution_m = 0.2 }
+params = { resolution_m = 1.0 }
 
 [[stage]]
 id = "clean1"
@@ -48,3 +48,10 @@ id = "mvs1_edit1_edit1"
 type = "import_cloud"
 chunk = "abhishek"
 params = { path = "D:\\openreco\\testproj\\edits\\mvs1_edit1_edit1.ply", crs_epsg = 0, origin = [0.0, 0.0, 0.0] }
+
+[[stage]]
+id = "ortho1"
+type = "ortho"
+chunk = "abhishek"
+inputs = ["mvs1_edit1_edit1"]
+params = { resolution_m = 0.5 }

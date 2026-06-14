@@ -413,6 +413,24 @@ def test_use_gcps_needs_georef_stage(server):
         assert e.code == 400
 
 
+def test_report_pdf_builds():
+    from openreco.engine.report_pdf import write_report_pdf
+    assert write_report_pdf(None)[:5] == b"%PDF-"            # placeholder
+    data = {"project": "demo", "openreco_version": "0.1", "started": "2026", "ok": True,
+            "platform": {"python": "3.13", "system": "Windows", "machine": "AMD64"},
+            "stages": [{"id": "align", "type": "sfm", "key": "abc", "status": "executed", "seconds": 5.0,
+                        "metrics": {"reg_images": 36, "input_images": 36, "points3D": 5200},
+                        "issues": [{"severity": "info", "message": "ok"}], "params": {"matcher": "exhaustive"},
+                        "artifacts": {}}]}
+    assert write_report_pdf(data)[:5] == b"%PDF-"
+
+
+def test_report_endpoint_serves_pdf(server):
+    base, _ = server
+    status, body = _get(base + "/api/report")
+    assert status == 200 and body[:5] == b"%PDF-"            # PDF even before any run (placeholder)
+
+
 def test_geo_overlay_endpoint(server, tmp_path):
     base, root = server
     import numpy as np

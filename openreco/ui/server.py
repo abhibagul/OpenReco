@@ -842,14 +842,26 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "application/octet-stream"))
 
     def _report(self):
-        """Serve the most recent run's processing report (self-contained HTML)."""
-        runs = self.project.manifest.runs_dir
-        reports = sorted(runs.glob("*/report.html"), key=lambda p: p.stat().st_mtime) if runs.exists() else []
-        if not reports:
-            return self._send(200, "<!doctype html><body style='font:15px system-ui;margin:3rem'>"
-                              "<h2>No processing report yet</h2><p>Run the pipeline first "
-                              "(▶ Run), then open the report again.</p>", "text/html")
-        self._send(200, reports[-1].read_bytes(), "text/html")
+        """Serve the most recent run's processing report as a PDF (built from latest.json)."""
+        from openreco.engine.report_pdf import write_report_pdf
+        latest = self.state.project.manifest.runs_dir / "latest.json"
+        data = None
+        if latest.exists():
+            try:
+                data = json.loads(latest.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                data = None
+        try:
+            pdf = write_report_pdf(data)
+        except Exception as exc:  # noqa: BLE001
+            return self._send(500, {"error": f"report build failed: {exc!r}"})
+        name = (self.state.project.manifest.name or "openreco").replace(" ", "_")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/pdf")
+        self.send_header("Content-Disposition", f'inline; filename="{name}_report.pdf"')
+        self.send_header("Content-Length", str(len(pdf)))
+        self.end_headers()
+        self.wfile.write(pdf)
 
     def _thumb(self, path):
         """Serve an image file from anywhere (image suffixes only) for the Add-Photos picker."""

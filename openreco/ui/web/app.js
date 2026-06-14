@@ -1019,7 +1019,7 @@ async function loadWorkflows() {
   menuEntry('m-file', 'New chunk', addChunk, null, 'folder-plus');
   menuEntry('m-file', 'Set coordinate system…', openCrsPicker, null, 'globe');
   menuSep('m-file');
-  menuEntry('m-file', 'Processing report', () => window.open('/api/report', '_blank'), null, 'chart');
+  menuEntry('m-file', 'Processing report (PDF)', () => window.open('/api/report', '_blank'), null, 'chart');
   // Workflow menu = the familiar operations
   $('m-workflow').innerHTML = '';
   WORKFLOWS.forEach(op => menuEntry('m-workflow', op.op, () => openOp(op), op.desc, OP_ICON[op.stage] || 'play'));
