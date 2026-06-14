@@ -73,6 +73,21 @@ def test_save_roundtrip(tmp_path):
     assert reloaded.stages[2].inputs == ["gen_a", "gen_b"]
 
 
+def test_disabled_stage_excluded_from_run(tmp_path):
+    proj = (Project.create(tmp_path, name="en")
+            .add_stage("gen", "dummy_generate", params={"n": 3})
+            .add_stage("total", "dummy_sum", inputs=["gen"]))
+    proj.set_stage_enabled("gen", False)          # disabling gen should also skip its dependent total
+    out = proj.run()
+    assert [s.id for s in out.stages] == []       # nothing runnable
+    # enabled flag round-trips through TOML
+    reloaded = load_manifest(proj.save())
+    assert reloaded.stages[0].enabled is False and reloaded.stages[1].enabled is True
+    # re-enable -> both run
+    proj.set_stage_enabled("gen", True)
+    assert {s.id for s in proj.run().stages} == {"gen", "total"}
+
+
 def test_save_roundtrip_windows_path_param(tmp_path):
     """String params with backslashes (Windows paths) must survive TOML round-trip."""
     win = r"D:\openreco\aerialdata"

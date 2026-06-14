@@ -74,6 +74,9 @@
   .tnode.chunk.active .lbl::after { content:" (active)"; color:var(--muted); font-weight:400; font-size:10px; }
   .tnode.cat .lbl { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
   .tnode .eye { width:15px; flex:0 0 auto; text-align:center; opacity:.45; } .tnode .eye.on { opacity:1; }
+  .tnode .en { width:auto; margin:0 1px; flex:0 0 auto; accent-color:var(--accent); }
+  .tnode.off .lbl, .tnode.off .ico { opacity:.4; }
+  .tnode.dragover { background:#243046; outline:1px dashed var(--accent); }
   .dot { width:8px; height:8px; border-radius:50%; background:#444c5c; flex:0 0 auto; }
   .dot.executed,.dot.cached { background:var(--ok); } .dot.failed { background:var(--err); }
   .dot.running { background:var(--warn); }

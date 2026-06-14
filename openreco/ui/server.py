@@ -72,6 +72,7 @@ class AppState:
             run = last.get(s.id, {})
             layers.append({
                 "id": s.id, "type": s.type, "inputs": s.inputs, "params": s.params, "chunk": s.chunk,
+                "enabled": s.enabled,
                 "status": run.get("status"), "metrics": run.get("metrics", {}),
                 "artifacts": run.get("artifacts", {}), "key": keys.get(s.id, {}).get("key"),
             })
@@ -362,6 +363,8 @@ class _Handler(BaseHTTPRequestHandler):
                 p.rename_chunk(body["name"], (body.get("to") or "").strip())
             elif action == "remove":
                 p.remove_chunk(body["name"])
+            elif action == "set_enabled":
+                p.set_chunk_enabled(body["name"], bool(body.get("enabled", True)))
             else:
                 return self._send(400, {"error": f"unknown action {action!r}"})
             p.save()
@@ -370,7 +373,7 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(400, {"error": repr(exc)})
 
     def _layer(self, body):
-        """Layer operations: remove | rename | move (Workspace context menu)."""
+        """Layer operations: remove | rename | move | set_enabled (Workspace context menu)."""
         action = body.get("action", "")
         p = self.state.project
         try:
@@ -380,6 +383,8 @@ class _Handler(BaseHTTPRequestHandler):
                 p.rename_stage(body["id"], (body.get("to") or "").strip())
             elif action == "move":
                 p.move_stage(body["id"], body["to"])
+            elif action == "set_enabled":
+                p.set_stage_enabled(body["id"], bool(body.get("enabled", True)))
             else:
                 return self._send(400, {"error": f"unknown action {action!r}"})
             p.save()

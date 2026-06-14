@@ -133,6 +133,30 @@ class Project:
                                 for s in self.manifest.stages]
         return self
 
+    def set_stage_enabled(self, id: str, enabled: bool) -> "Project":
+        """Enable/disable a layer (disabled layers + their dependents are skipped on Run)."""
+        self.manifest.stages = [replace(s, enabled=enabled) if s.id == id else s
+                                for s in self.manifest.stages]
+        return self
+
+    def set_chunk_enabled(self, name: str, enabled: bool) -> "Project":
+        """Enable/disable every layer in a chunk."""
+        self.manifest.stages = [replace(s, enabled=enabled) if s.chunk == name else s
+                                for s in self.manifest.stages]
+        return self
+
+    def _runnable_stages(self) -> list[StageSpec]:
+        """Enabled layers whose entire input closure is also enabled (disabled branches skipped)."""
+        excluded = {s.id for s in self.manifest.stages if not s.enabled}
+        changed = True
+        while changed:
+            changed = False
+            for s in self.manifest.stages:
+                if s.id not in excluded and any(i in excluded for i in s.inputs):
+                    excluded.add(s.id)
+                    changed = True
+        return [s for s in self.manifest.stages if s.id not in excluded]
+
     def add_operation(self, op: str, id: str, inputs: list[str] | None = None,
                       values: dict[str, Any] | None = None, chunk: str = "Chunk 1") -> "Project":
         """Add a stage from a familiar workflow operation (e.g. 'Build Dense Cloud') + field values,
@@ -154,8 +178,13 @@ class Project:
             on_event: Any = None, cancel: Any = None) -> RunOutcome:
         """Execute the pipeline (cache-aware). `force` recomputes named stages; `force_all`
         recomputes everything. `on_event(dict)` receives live run events (stage_start/progress/
-        stage_done/run_done) and `cancel()->bool` enables cooperative cancellation — both for UIs."""
-        return Runner(self.manifest, force=(["*"] if force_all else force),
+        stage_done/run_done) and `cancel()->bool` enables cooperative cancellation — both for UIs.
+        Disabled layers (and any layer depending on one) are excluded from this run."""
+        manifest = self.manifest
+        runnable = self._runnable_stages()
+        if len(runnable) != len(manifest.stages):
+            manifest = replace(manifest, stages=runnable)
+        return Runner(manifest, force=(["*"] if force_all else force),
                       on_event=on_event, cancel=cancel).run()
 
     def resume(self) -> RunOutcome:
@@ -205,6 +234,8 @@ class Project:
             lines += ["", "[[stage]]", f"id = {_toml_str(s.id)}", f"type = {_toml_str(s.type)}"]
             if s.chunk and s.chunk != "Chunk 1":
                 lines.append(f"chunk = {_toml_str(s.chunk)}")
+            if not s.enabled:
+                lines.append("enabled = false")
             if s.inputs:
                 inputs = ", ".join(_toml_str(i) for i in s.inputs)
                 lines.append(f"inputs = [{inputs}]")

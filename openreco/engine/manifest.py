@@ -35,6 +35,7 @@ class StageSpec:
     params: dict[str, Any] = field(default_factory=dict)
     inputs: list[str] = field(default_factory=list)
     chunk: str = "Chunk 1"        # workspace grouping (industry-standard chunks); not part of the cache key
+    enabled: bool = True          # disabled layers (+ their dependents) are excluded from a run; not in cache key
 
 
 @dataclass
@@ -105,6 +106,7 @@ def load_manifest(path: str | Path) -> Manifest:
                 params=dict(entry.get("params", {})),
                 inputs=list(entry.get("inputs", [])),
                 chunk=entry.get("chunk", "Chunk 1"),
+                enabled=bool(entry.get("enabled", True)),
             )
         )
 

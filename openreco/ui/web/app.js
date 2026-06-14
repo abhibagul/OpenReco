@@ -189,13 +189,14 @@ function layerMetric(L) {
   return '';
 }
 
-function row({ depth, id, hasKids, icon, label, count, cls = '', sel = false,
-              eye = null, dot = null, onClick, onDbl, onCtx }) {
+function row({ depth, id, hasKids, icon, label, count, cls = '', sel = false, disabled = false,
+              chk = null, eye = null, dot = null, onClick, onDbl, onCtx, drag = null, drop = null }) {
   const d = document.createElement('div');
-  d.className = 'tnode ' + cls + (sel ? ' sel' : '');
+  d.className = 'tnode ' + cls + (sel ? ' sel' : '') + (disabled ? ' off' : '');
   d.style.paddingLeft = (depth * 14 + 6) + 'px';
   const car = hasKids ? (isOpen(id) ? '▾' : '▸') : '';
   let html = `<span class="car">${car}</span>`;
+  if (chk !== null) html += `<input type="checkbox" class="en" ${chk.checked ? 'checked' : ''}>`;
   if (eye !== null) html += `<span class="eye ${eye ? 'on' : ''}">${eye === undefined ? '·' : '👁'}</span>`;
   html += `<span class="ico">${icon || ''}</span><span class="lbl">${label}</span>`;
   if (dot !== null) html = html.replace('<span class="ico">', `<span class="dot ${dot||''}"></span><span class="ico">`);
@@ -203,9 +204,18 @@ function row({ depth, id, hasKids, icon, label, count, cls = '', sel = false,
   d.innerHTML = html;
   const caret = d.querySelector('.car');
   if (hasKids) caret.onclick = (e) => { e.stopPropagation(); toggle(id); };
+  const cb = d.querySelector('.en');
+  if (cb && chk && chk.onToggle) cb.onclick = (e) => { e.stopPropagation(); chk.onToggle(cb.checked); };
   if (onClick) d.onclick = onClick;
   if (onDbl) d.ondblclick = onDbl;
   if (onCtx) d.oncontextmenu = (e) => { e.preventDefault(); onCtx(e); };
+  if (drag) { d.draggable = true; d.ondragstart = (e) => { e.dataTransfer.setData('text/plain', drag);
+    e.dataTransfer.effectAllowed = 'move'; }; }
+  if (drop) {
+    d.ondragover = (e) => { e.preventDefault(); d.classList.add('dragover'); };
+    d.ondragleave = () => d.classList.remove('dragover');
+    d.ondrop = (e) => { e.preventDefault(); d.classList.remove('dragover'); drop(e.dataTransfer.getData('text/plain')); };
+  }
   return d;
 }
 
@@ -224,10 +234,14 @@ function renderWorkspace() {
 
   Object.keys(byChunk).forEach(chunk => {
     const cid = 'chunk:' + chunk;
+    const layers = byChunk[chunk];
+    const chunkOn = layers.length === 0 || layers.some(L => L.enabled !== false);
     el.appendChild(row({ depth: 1, id: cid, hasKids: true, cls: 'chunk' + (chunk === ACTIVE_CHUNK ? ' active' : ''),
-      icon: '📦', label: chunk, count: `${byChunk[chunk].length}`,
+      icon: '📦', label: chunk, count: `${layers.length}`,
+      chk: { checked: chunkOn, onToggle: (v) => chunkAction({ action: 'set_enabled', name: chunk, enabled: v }) },
       onClick: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); loadPhotos(); },
       onDbl: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); },
+      drop: (id) => layerAction({ action: 'move', id, to: chunk }),    // drop a layer onto a chunk
       onCtx: (e) => showCtx(e, [
         { label: 'Set as active chunk', fn: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); } },
         { label: '＋ Add Photos…', fn: () => { ACTIVE_CHUNK = chunk; openBrowse(); } },
@@ -247,10 +261,13 @@ function renderWorkspace() {
         const canView = !!viewable(L);
         const badge = layerMetric(L);
         el.appendChild(row({ depth: 3, id: L.id, hasKids: false, sel: selected === L.id,
+          disabled: L.enabled === false,
           icon: '', label: `${L.id} <span class="cnt">${L.type}</span>`, count: badge,
           dot: L.status || '', eye: canView ? true : undefined,
+          chk: { checked: L.enabled !== false, onToggle: (v) => layerAction({ action: 'set_enabled', id: L.id, enabled: v }) },
+          drag: L.id,                                   // drag a layer to another chunk
           onClick: () => selectLayer(L.id),
-          onDbl: () => { if (canView) setVisible(L, !visible.has(L.id)); },
+          onDbl: () => openLayer(L),                    // double-click opens in the proper view
           onCtx: (e) => showCtx(e, layerCtx(L, canView)) }));
         // wire the eye toggle (last rendered row)
         const node = el.lastChild, eyeEl = node.querySelector('.eye');
@@ -326,6 +343,15 @@ function selectLayer(id) {
   renderParams(L);
   if (L) rasterView(L);          // raster products (ortho/DSM/index) open in the 2D Ortho view
 }
+// double-click: open a layer in whichever view fits it best
+function openLayer(L) {
+  selected = L.id; renderParams(L);
+  if (rasterArtifact(L)) { rasterView(L); return; }            // ortho / DEM / index -> 2D
+  if (viewable(L)) { setVisible(L, true); selectVtab('model'); frameAll(); return; }  // mesh/cloud -> 3D
+  if (L.type === 'ingest') { showCameras(L); return; }         // cameras -> 3D positions
+  selectDock('console'); log(`${L.id}: nothing to display yet (run it first)`);
+}
+function showCameras(_L) { log('camera positions view: coming next'); }   // implemented with /api/cameras
 
 // ---- properties / params --------------------------------------------------
 function renderParams(L) {

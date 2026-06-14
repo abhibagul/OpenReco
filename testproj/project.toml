@@ -1,66 +1,14 @@
 [project]
 name = "Aerial demo"
 crs = "EPSG:2027"
-chunks = ["Chunk 1", "Chunk 2", "Chunk 3"]
-
-[[stage]]
-id = "photos"
-type = "ingest"
-params = { image_dir = "D:\\openreco\\aerialdata" }
-
-[[stage]]
-id = "align"
-type = "sfm"
-inputs = ["photos"]
-params = { matcher = "spatial", max_image_size = 1600 }
-
-[[stage]]
-id = "georef"
-type = "georef"
-inputs = ["align"]
-
-[[stage]]
-id = "dense"
-type = "mvs"
-inputs = ["align", "georef"]
-params = { dense_backend = "auto", quality = "low" }
-
-[[stage]]
-id = "model"
-type = "mesh"
-inputs = ["dense"]
-
-[[stage]]
-id = "dsm"
-type = "dsm"
-inputs = ["dense"]
-params = { resolution_m = 1.0 }
-
-[[stage]]
-id = "ortho"
-type = "ortho"
-inputs = ["dense", "georef"]
-params = { resolution_m = 0.5 }
-
-[[stage]]
-id = "sfm1"
-type = "sfm"
-inputs = ["photos"]
-params = { max_image_size = 1000, matcher = "exhaustive", max_num_features = 8192, camera_mode = "auto", mapper = "incremental" }
-
-[[stage]]
-id = "sfm2"
-type = "sfm"
-params = { max_image_size = 1600, matcher = "exhaustive", max_num_features = 8192, camera_mode = "auto", mapper = "incremental" }
 
 [[stage]]
 id = "ingest1"
 type = "ingest"
-chunk = "Chunk 3"
-params = { image_dir = "D:\\openreco\\aerialdata", blur_threshold = 0, blur_relative = 0.15, min_images = 3 }
+params = { image_dir = "C:\\Users\\abbyb\\Downloads\\example_building\\images" }
 
 [[stage]]
-id = "sfm3"
+id = "sfm1"
 type = "sfm"
-chunk = "Chunk 3"
+inputs = ["ingest1"]
 params = { max_image_size = 1600, matcher = "exhaustive", max_num_features = 8192, camera_mode = "auto", mapper = "incremental" }

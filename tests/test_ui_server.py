@@ -150,6 +150,7 @@ def test_frontend_has_workspace_chunks(server):
     _, appjs = _get(base + "/app.js")
     assert b"renderWorkspace" in appjs and b"ACTIVE_CHUNK" in appjs and b"/api/chunk" in appjs
     assert b"/api/layer" in appjs and b"showCtx" in appjs       # context menu + layer ops
+    assert b"set_enabled" in appjs and b"openLayer" in appjs and b"ondragstart" in appjs
 
 
 def test_chunk_rename_and_remove(tmp_path):
