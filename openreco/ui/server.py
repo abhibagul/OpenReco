@@ -884,7 +884,7 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True, "bounds": bounds,
                                     "image": "data:image/png;base64," + base64.b64encode(png).decode()})
         except Exception as exc:  # noqa: BLE001
-            return self._send(400, {"error": repr(exc)})
+            return self._send(400, {"error": str(exc)})       # clean message, not repr
 
     def _raster_png(self, path):
         from openreco.io.raster import raster_to_png

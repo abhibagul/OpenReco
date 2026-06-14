@@ -1118,7 +1118,11 @@ async function showOnMap(layer) {
   if (!tif) { log(`${layer.id} has no raster to map — pick an ortho or DEM layer`, 'warn'); return; }
   log(`loading ${layer.id} onto the map…`);
   const j = await (await fetch('/api/geo_overlay?path=' + encodeURIComponent(tif))).json();
-  if (!j.ok) { log(`map overlay error: ${j.error || 'failed'} — georeference the layer first`, 'err'); return; }
+  if (!j.ok) {
+    log(`can't map ${layer.id}: ${j.error || 'failed'}`, 'err');
+    log('add a Georeference step (GPS or GCPs) before the dense cloud, then rebuild the ortho/DEM, and re-open the Map', 'warn');
+    return;
+  }
   if (lover) lmap.removeLayer(lover);
   lover = L.imageOverlay(j.image, j.bounds, { opacity: parseFloat($('mapOpacity').value) }).addTo(lmap);
   lmap.fitBounds(j.bounds);
