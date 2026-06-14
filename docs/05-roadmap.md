@@ -13,11 +13,13 @@ in a **layered desktop UI** that surpasses the reference tool's. Pillars, in pri
 2. **Full processing parity** — alignment, dense, mesh, texture (now multi-image blended), tiled
    models, DSM/DTM/ortho, classification, LiDAR fusion, multispectral/NDVI, panoramas, 4D — plus
    our neural 3DGS branch. (See per-phase items below; most geometry/survey items are ✅.)
-3. ◑ **Desktop UI with layers** — **v1 shipped**: `openreco ui` serves a local web app (stdlib
-   server) with a layer tree (live status), schema-driven parameter panels, add-layer palette, a
-   Run button streaming SSE progress, and a three.js viewport; UI edits save the manifest.
-   Remaining: webview wrapper for a true desktop window, ortho/photo workspaces, GCP picking,
-   richer viewport (splats, measurement, layer visibility), drag-to-reorder DAG. Original plan: a
+3. ◑ **Desktop UI with layers** — **shipped & growing**: `openreco ui` (native window via pywebview,
+   else browser) with a **Workspace tree (Project → chunks → layers)** + active-chunk selector +
+   "＋ Chunk"; a **Workflow menu** (Align Photos / Build Dense Cloud / Build Model / … Build dialogs
+   with familiar fields → engine); schema-driven parameter panels; Run with live SSE progress; a
+   three.js viewport; per-layer **Export as…**; CRS introspection (/api/crs). UI edits save the
+   manifest (undo-via-diff). Remaining: CRS picker widget, GCP/marker picking, viewport layer
+   visibility/measurement/splats, chunk align/merge, drag-to-reorder. Original plan: a
    cross-platform app (evaluated:
    **Tauri + web frontend** for the WebGPU 3D viewport we already have, vs Qt) presenting the
    project as a **layer tree** (chunks, cameras, tie/dense points, mesh, texture, DSM/DTM, ortho,
