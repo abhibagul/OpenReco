@@ -819,6 +819,21 @@ async function loadWorkflows() {
   menuEntry('m-help', 'About OpenReco', () => log('OpenReco — open, reproducible photogrammetry. Clean-room; permissive OSS.'), null, 'info');
 }
 
+// ---- quality / speed presets ----------------------------------------------
+async function loadPresets() {
+  const ps = await (await fetch('/api/presets')).json();
+  const sel = $('presetSel'); sel.innerHTML = '<option value="">Quality preset…</option>';
+  ps.forEach(p => { const o = document.createElement('option'); o.value = p.name;
+    o.textContent = `${p.name} · ${p.speed}`; sel.appendChild(o); });
+  sel.onchange = async () => {
+    if (!sel.value) return;
+    const j = await (await fetch('/api/preset', { method:'POST', body: JSON.stringify({ name: sel.value }) })).json();
+    if (j.ok) { log(`preset "${j.preset}" applied to ${j.updated} layer(s); new layers will use it too`, 'ok');
+      await loadProject(); if (selected) selectLayer(selected); }
+    else log('preset error: ' + j.error, 'err');
+  };
+}
+
 // ---- project: new / save --------------------------------------------------
 async function newProject() {
   const path = prompt('New project folder (full path):', '');
@@ -1302,6 +1317,6 @@ function setupSplitters() {
 }
 
 // ---- boot ----
-(async () => { setupSplitters(); resize(); await loadStages(); await loadWorkflows();
+(async () => { setupSplitters(); resize(); await loadStages(); await loadWorkflows(); await loadPresets();
   await loadProject(); await loadMarkers();
   log(`OpenReco ready · project "${PROJECT.name}" · ${PROJECT.layers.length} layer(s)`, 'ok'); })();

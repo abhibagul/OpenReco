@@ -72,6 +72,7 @@
   #toolbar .sp { flex:1; } .vsep { width:1px; height:18px; background:var(--line); margin:0 5px; }
   #toolbar #pname { font-weight:600; color:var(--fg); font-size:13px; letter-spacing:.2px; }
   .iconbtn { padding:6px; }
+  #presetSel { width:auto; max-width:230px; }
   .tgroup { display:flex; align-items:center; gap:2px; background:var(--btn); border:1px solid var(--line);
             border-radius:var(--r-sm); padding:2px; }
   .tgroup button { border:0; background:transparent; border-radius:6px; }
@@ -306,6 +307,7 @@
     <span class="sp"></span>
     <button class="run" id="runBtn"><svg class="ic"><use href="#i-play"/></svg> Run</button>
     <button id="crsBtn" title="Coordinate system"><svg class="ic"><use href="#i-globe"/></svg> <span id="crsLabel">CRS</span></button>
+    <select id="presetSel" title="Quality / speed preset — sets sensible parameters across all stages"></select>
     <div class="tgroup" role="group" aria-label="Measure">
       <button class="tgl iconbtn" id="distBtn" title="Measure distance"><svg class="ic"><use href="#i-ruler"/></svg></button>
       <button class="tgl iconbtn" id="areaBtn" title="Measure area"><svg class="ic"><use href="#i-square"/></svg></button>

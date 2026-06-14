@@ -155,6 +155,56 @@ for _o in OPERATIONS:
 
 _BY_OP = {o["op"]: o for o in OPERATIONS}
 
+# Quality/speed presets: per-stage-type parameter overrides applied in one click.
+PRESETS: dict[str, dict[str, Any]] = {
+    "Low": {
+        "_speed": "fastest — quick preview",
+        "ingest": {"blur_relative": 0.15},
+        "sfm": {"max_image_size": 1200, "max_num_features": 4096, "matcher": "sequential"},
+        "mvs": {"quality": "low", "geometric_consistency": False, "planesweep_max_dim": 600},
+        "mesh": {"poisson_depth": 9},
+        "texture": {"target_faces": 80000, "atlas_resolution": 1024, "blend_images": 1, "image_max_dim": 1500},
+        "dsm": {"resolution_m": 1.0}, "ortho": {"resolution_m": 0.5},
+    },
+    "Medium": {
+        "_speed": "balanced (default)",
+        "sfm": {"max_image_size": 2000, "max_num_features": 8192, "matcher": "exhaustive"},
+        "mvs": {"quality": "medium", "geometric_consistency": True, "planesweep_max_dim": 700},
+        "mesh": {"poisson_depth": 10},
+        "texture": {"target_faces": 150000, "atlas_resolution": 2048, "blend_images": 3, "image_max_dim": 2000},
+        "dsm": {"resolution_m": 0.5}, "ortho": {"resolution_m": 0.25},
+    },
+    "High": {
+        "_speed": "slow — detailed",
+        "sfm": {"max_image_size": 3200, "max_num_features": 12000, "matcher": "exhaustive"},
+        "mvs": {"quality": "high", "geometric_consistency": True, "planesweep_max_dim": 900},
+        "mesh": {"poisson_depth": 11},
+        "texture": {"target_faces": 300000, "atlas_resolution": 4096, "blend_images": 4, "image_max_dim": 3000},
+        "dsm": {"resolution_m": 0.25}, "ortho": {"resolution_m": 0.1},
+    },
+    "Ultra": {
+        "_speed": "slowest — maximum detail",
+        "sfm": {"max_image_size": 4000, "max_num_features": 16000, "matcher": "exhaustive"},
+        "mvs": {"quality": "high", "geometric_consistency": True, "planesweep_max_dim": 1100},
+        "mesh": {"poisson_depth": 12},
+        "texture": {"target_faces": 500000, "atlas_resolution": 8192, "blend_images": 5, "image_max_dim": 4000},
+        "dsm": {"resolution_m": 0.1}, "ortho": {"resolution_m": 0.05},
+    },
+}
+
+
+def presets() -> list[dict[str, str]]:
+    """Preset names + a short speed/quality hint (for the UI selector)."""
+    return [{"name": n, "speed": p["_speed"]} for n, p in PRESETS.items()]
+
+
+def preset_params(name: str) -> dict[str, dict[str, Any]]:
+    """The per-stage-type parameter overrides for a preset (no metadata keys)."""
+    p = PRESETS.get(name)
+    if p is None:
+        raise KeyError(f"unknown preset {name!r}; choices: {list(PRESETS)}")
+    return {k: dict(v) for k, v in p.items() if not k.startswith("_")}
+
 
 def provides(stage_type: str) -> list[str]:
     """Artifacts a stage type produces (for input auto-wiring in the UI)."""

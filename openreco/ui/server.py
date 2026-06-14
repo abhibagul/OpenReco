@@ -151,7 +151,17 @@ class AppState:
         self.events: queue.Queue = queue.Queue()
         self.running = False
         self.cancel_requested = False
+        self.preset = None          # active quality/speed preset (applied to new layers too)
         self.lock = threading.Lock()
+
+    def apply_preset(self, name: str) -> dict:
+        from openreco.workflow import preset_params
+        pm = preset_params(name)
+        n = sum(1 for s in self.project.manifest.stages if s.type in pm)
+        self.preset = name
+        self.project.apply_preset(pm)
+        self.project.save()
+        return {"ok": True, "preset": name, "updated": n}
 
     # ---- data for the frontend ----
     def new_project(self, path: str, name: str | None, crs: str | None) -> dict:
@@ -469,6 +479,9 @@ class _Handler(BaseHTTPRequestHandler):
         if route == "/api/workflows":
             from openreco.workflow import operations
             return self._send(200, operations())
+        if route == "/api/presets":
+            from openreco.workflow import presets
+            return self._send(200, presets())
         if route == "/api/project":
             return self._send(200, self.state.project_json())
         if route == "/api/events":
@@ -506,6 +519,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(202 if started else 409, {"started": started})
         if u.path == "/api/cancel":
             return self._send(200, {"cancelling": self.state.cancel_run()})
+        if u.path == "/api/preset":
+            try:
+                return self._send(200, self.state.apply_preset(body.get("name", "")))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": repr(exc)})
         if u.path == "/api/new_project":
             return self._new_project(body)
         if u.path == "/api/save_project":
@@ -674,11 +692,15 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _operation(self, body):
         """Add/update a layer from a familiar workflow operation (Workflow menu)."""
-        from openreco.workflow import to_stage
+        from openreco.workflow import preset_params, to_stage
         try:
             spec = to_stage(body["op"], body.get("values"))
+            params = spec["params"]
+            if self.state.preset:           # apply preset defaults under the op's chosen values
+                base = preset_params(self.state.preset).get(spec["stage_type"], {})
+                params = {**base, **params}
             return self._add_stage({"id": body["id"], "type": spec["stage_type"],
-                                    "inputs": body.get("inputs", []), "params": spec["params"],
+                                    "inputs": body.get("inputs", []), "params": params,
                                     "chunk": body.get("chunk", "Chunk 1")})
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})

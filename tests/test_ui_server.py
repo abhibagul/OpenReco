@@ -103,6 +103,30 @@ def test_export_endpoint(server, tmp_path):
     assert Path(body["out"]).exists()
 
 
+def test_presets_apply_to_layers(tmp_path):
+    proj = (Project.create(tmp_path, name="pre")
+            .add_stage("a", "sfm")
+            .add_stage("d", "mvs", inputs=["a"]))
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        names = {p["name"] for p in json.loads(_get(base + "/api/presets")[1])}
+        assert {"Low", "Medium", "High", "Ultra"} <= names
+        status, body = _post(base + "/api/preset", {"name": "Low"})
+        assert status == 200 and body["preset"] == "Low" and body["updated"] == 2
+        layers = {L["id"]: L for L in json.loads(_get(base + "/api/project")[1])["layers"]}
+        assert layers["a"]["params"]["max_image_size"] == 1200      # sfm Low
+        assert layers["d"]["params"]["quality"] == "low"            # mvs Low
+        # new ops built afterwards inherit the active preset's base params
+        _post(base + "/api/operation", {"op": "Build Texture", "id": "tx", "inputs": [], "values": {}})
+        tx = next(L for L in json.loads(_get(base + "/api/project")[1])["layers"] if L["id"] == "tx")
+        assert tx["params"]["target_faces"] == 80000               # texture Low base
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_layer_provides_and_op_needs(server):
     base, _ = server
     # operations declare what they need (for input auto-wiring)
@@ -515,6 +539,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"/api/remove_photo" in appjs and b"brAlign" in appjs
     assert b"showGcpAccuracy" in appjs and b"control_rms" in appjs       # GCP control/check accuracy
     assert b"const ic =" in appjs                                        # line-icon helper
+    assert b"loadPresets" in appjs and b"/api/preset" in appjs           # quality presets
     _, html2 = _get(base + "/")
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"#300a24" in html2                                           # Ubuntu-style console

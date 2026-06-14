@@ -133,6 +133,12 @@ class Project:
                                 for s in self.manifest.stages]
         return self
 
+    def apply_preset(self, mapping: dict[str, dict[str, Any]]) -> "Project":
+        """Merge per-stage-type parameter overrides into every matching layer (quality preset)."""
+        self.manifest.stages = [replace(s, params={**s.params, **mapping[s.type]})
+                                if s.type in mapping else s for s in self.manifest.stages]
+        return self
+
     def set_stage_enabled(self, id: str, enabled: bool) -> "Project":
         """Enable/disable a layer (disabled layers + their dependents are skipped on Run)."""
         self.manifest.stages = [replace(s, enabled=enabled) if s.id == id else s

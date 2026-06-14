@@ -29,3 +29,10 @@ type = "classify"
 chunk = "abhishek"
 inputs = ["mvs1"]
 params = { cell_m = 5, ground_threshold_m = 0.5 }
+
+[[stage]]
+id = "contours1"
+type = "contours"
+chunk = "abhishek"
+inputs = ["sfm1"]
+params = { interval_m = 10 }
