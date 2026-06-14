@@ -122,7 +122,7 @@ STAGE_PROVIDES: dict[str, list[str]] = {
     "sfm": ["model", "sparse_ply", "poses"],
     "refine": ["model"],
     "georef": ["model", "georef", "ply"],
-    "mvs": ["points", "meta", "las"],
+    "mvs": ["points", "meta", "las", "model"],
     "merge_chunks": ["points", "meta", "merged"],
     "fuse": ["points", "meta"],
     "classify": ["points", "meta"],

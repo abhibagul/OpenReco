@@ -31,7 +31,7 @@ _QUALITY = {"low": 1000, "medium": 1600, "high": 2400}  # undistort/patch-match 
 @register_stage
 class Mvs(Stage):
     type = "mvs"
-    version = "3"  # v3: dense cloud keeps COLMAP MVS normals (for robust Poisson meshing)
+    version = "4"  # v4: re-expose the COLMAP model (camera poses) for downstream texturing/splatting
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
@@ -69,7 +69,15 @@ class Mvs(Stage):
             "mode": mode, "num_points": int(len(xyz)),
             "crs": georef.get("crs", "local"), "crs_epsg": crs_epsg, "origin": origin.tolist(),
         })
-        artifacts = {"points": "points.ply", "meta": "points.json"}
+        # re-expose the camera model dense was built from, so texturing/splatting wired to the dense
+        # cloud get poses in the SAME frame as the mesh (no need to also wire sfm/georef)
+        import shutil
+        model_out = ctx.artifact_path("model")
+        if model_out.exists():
+            shutil.rmtree(model_out)
+        shutil.copytree(model_dir, model_out)
+
+        artifacts = {"points": "points.ply", "meta": "points.json", "model": "model"}
         if las_ok:
             artifacts["las"] = "points.las"
         return StageResult(artifacts=artifacts, metrics={"mode": mode, "num_points": int(len(xyz))})

@@ -17,4 +17,16 @@ params = { max_image_size = 1000, matcher = "spatial", max_num_features = 4000, 
 id = "mvs1"
 type = "mvs"
 inputs = ["ingest1", "sfm1"]
-params = { quality = "medium", geometric_consistency = true, dense_backend = "auto" }
+params = { quality = "low", geometric_consistency = true, dense_backend = "auto" }
+
+[[stage]]
+id = "mesh1"
+type = "mesh"
+inputs = ["mvs1"]
+params = { method = "poisson", poisson_depth = 11 }
+
+[[stage]]
+id = "texture1"
+type = "texture"
+inputs = ["ingest1", "sfm1", "mesh1"]
+params = { atlas_resolution = 2048, blend_images = 4, equalize_exposure = true }
