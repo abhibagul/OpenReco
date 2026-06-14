@@ -874,9 +874,37 @@ function selectVtab(name) {
   document.querySelectorAll('[data-vtab]').forEach(b => b.classList.toggle('on', b.dataset.vtab === name));
   $('imgview').classList.toggle('show', name === 'photo');
   $('orthoview').classList.toggle('show', name === 'ortho');
+  $('mapview').classList.toggle('show', name === 'map');
   $('c').style.display = name === 'model' ? 'block' : 'none';
+  // orientation cube only belongs to the 3D view
+  const showGz = name === 'model' ? 'block' : 'none';
+  $('gizmo').style.display = showGz; $('gizmoNav').style.display = showGz;
+  if (name === 'map') showOnMap(mapRaster);
 }
 document.querySelectorAll('[data-vtab]').forEach(b => b.onclick = () => selectVtab(b.dataset.vtab));
+
+// ---- web map: place a georeferenced ortho/DEM on an OpenStreetMap basemap ----
+let lmap = null, lover = null, mapRaster = null;
+function initMap() {
+  if (lmap) return;
+  lmap = L.map('leaflet', { zoomControl: false, attributionControl: false }).setView([0, 0], 2);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(lmap);
+  L.control.zoom({ position: 'bottomright' }).addTo(lmap);
+}
+async function showOnMap(layer) {
+  initMap(); setTimeout(() => lmap.invalidateSize(), 30);
+  if (!layer) { log('select a georeferenced raster (ortho / DEM), then open the Map tab'); return; }
+  const tif = rasterArtifact(layer);
+  if (!tif) { log(`${layer.id} has no raster to map — pick an ortho or DEM layer`, 'warn'); return; }
+  log(`loading ${layer.id} onto the map…`);
+  const j = await (await fetch('/api/geo_overlay?path=' + encodeURIComponent(tif))).json();
+  if (!j.ok) { log(`map overlay error: ${j.error || 'failed'} — georeference the layer first`, 'err'); return; }
+  if (lover) lmap.removeLayer(lover);
+  lover = L.imageOverlay(j.image, j.bounds, { opacity: parseFloat($('mapOpacity').value) }).addTo(lmap);
+  lmap.fitBounds(j.bounds);
+  log(`${layer.id} placed on the map`, 'ok');
+}
+$('mapOpacity').oninput = () => { if (lover) lover.setOpacity(parseFloat($('mapOpacity').value)); };
 
 // ---- Ortho 2D raster view (pan/zoom a server-rendered PNG of any GeoTIFF) --
 // raster products that render as 2D layers: prefer a .tif (ortho/DSM), else an index .tif
@@ -895,6 +923,7 @@ function applyOrtho() {
 }
 function rasterView(layer, tifOverride, onReady) {
   const tif = tifOverride || rasterArtifact(layer); if (!tif) return false;
+  if (rasterArtifact(layer)) mapRaster = layer;   // remember for the Map tab
   selectVtab('ortho');
   const img = $('orthoimg'), cv = $('orthocanvas');
   cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);   // clear any prior overlay

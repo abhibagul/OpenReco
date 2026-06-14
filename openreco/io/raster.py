@@ -108,6 +108,37 @@ def raster_to_png(path: Path, max_dim: int = 2000) -> bytes:
     return buf.getvalue()
 
 
+def raster_to_overlay(src: Path) -> tuple[bytes, list[list[float]]]:
+    """Reproject a georeferenced raster to WGS84 and render it to PNG for a web-map image overlay.
+
+    Returns (png_bytes, bounds) where bounds = [[south, west], [north, east]] in lat/lon (Leaflet
+    order). Raises if the raster has no CRS (georeference it first)."""
+    import os
+    import tempfile
+
+    import rasterio
+
+    src = Path(src)
+    with rasterio.open(src) as s:
+        if s.crs is None:
+            raise ValueError("raster has no CRS — georeference it first")
+        if str(s.crs).upper() in ("EPSG:4326",):       # already WGS84
+            png = raster_to_png(src)
+            b = s.bounds
+            return png, [[b.bottom, b.left], [b.top, b.right]]
+    fd, name = tempfile.mkstemp(suffix=".tif")
+    os.close(fd)                                        # close the handle so Windows can rewrite/delete
+    tmp = Path(name)
+    try:
+        reproject_geotiff(src, tmp, 4326)
+        png = raster_to_png(tmp)
+        with rasterio.open(tmp) as d:
+            b = d.bounds
+        return png, [[b.bottom, b.left], [b.top, b.right]]
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def _stretch(arr: np.ndarray, valid: np.ndarray | None = None) -> np.ndarray:
     """Percentile (2–98) contrast stretch to uint8; per-channel for RGB, single for grayscale."""
     a = arr.astype(np.float32)

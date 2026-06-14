@@ -203,6 +203,7 @@ def test_frontend_has_workspace_chunks(server):
     assert b"targets:" in appjs and b"Run up to here" in appjs       # per-stage run
     assert b"/api/new_project" in appjs and b"/api/save_project" in appjs
     assert b"/api/cameras" in appjs and b"buildCameras" in appjs
+    assert b"/api/geo_overlay" in appjs and b"showOnMap" in appjs        # web map overlay
     assert b"setupSplitters" in appjs and b"snapView" in appjs and b"gridline" in appjs  # infinite grid shader
     assert b"runPipeline" in appjs and b"camera.up.set(0, 0, 1)" in appjs   # Z-up world
     assert b"rotateGizmo" in appjs and b"contourView" in appjs               # navcube nav + contour overlay
@@ -359,6 +360,20 @@ def test_use_gcps_needs_georef_stage(server):
         raise AssertionError("expected 400")
     except urllib.error.HTTPError as e:
         assert e.code == 400
+
+
+def test_geo_overlay_endpoint(server, tmp_path):
+    base, root = server
+    import numpy as np
+    from openreco.io.raster import write_geotiff
+    ortho = root / "ortho.tif"
+    write_geotiff(ortho, (np.random.rand(40, 50, 3) * 255).astype("uint8"),
+                  691000.0, 5334000.0, 0.5, 32632)          # UTM 32N near Munich
+    _, body = _get(base + "/api/geo_overlay?path=" + urllib.request.quote(str(ortho)))
+    data = json.loads(body)
+    assert data["ok"] and data["image"].startswith("data:image/png;base64,")
+    (s, w), (n, e) = data["bounds"]
+    assert 47 < s < 49 and 11 < w < 12 and n > s and e > w   # reprojected to lat/lon
 
 
 def test_raster_png_endpoint(server, tmp_path):

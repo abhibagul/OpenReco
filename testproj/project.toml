@@ -36,3 +36,10 @@ type = "contours"
 chunk = "abhishek"
 inputs = ["sfm1"]
 params = { interval_m = 10 }
+
+[[stage]]
+id = "dsm1"
+type = "dsm"
+chunk = "abhishek"
+inputs = ["mvs1"]
+params = { resolution_m = 0.2 }

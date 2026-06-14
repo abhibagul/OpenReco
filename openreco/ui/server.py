@@ -531,6 +531,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._marker_template(parse_qs(u.query))
         if route == "/api/raster_png":
             return self._raster_png(parse_qs(u.query).get("path", [""])[0])
+        if route == "/api/geo_overlay":
+            return self._geo_overlay(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/browse":
             return self._send(200, self.state.browse(parse_qs(u.query).get("path", [None])[0]))
         if route == "/api/thumb":
@@ -780,6 +782,21 @@ class _Handler(BaseHTTPRequestHandler):
         if not path or not p.is_file() or p.suffix.lower() not in IMAGE_SUFFIXES:
             return self._send(400, {"error": "image file required"})
         self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "image/jpeg"))
+
+    def _geo_overlay(self, path):
+        """Reproject a georeferenced raster to WGS84 -> {bounds, image(data-url)} for the web map."""
+        import base64
+
+        from openreco.io.raster import raster_to_overlay
+        p = Path(path)
+        if not path or not self._in_project(p) or not p.is_file():
+            return self._send(400, {"error": "valid in-project raster path required"})
+        try:
+            png, bounds = raster_to_overlay(p)
+            return self._send(200, {"ok": True, "bounds": bounds,
+                                    "image": "data:image/png;base64," + base64.b64encode(png).decode()})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
 
     def _raster_png(self, path):
         from openreco.io.raster import raster_to_png

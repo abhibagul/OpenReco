@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>OpenReco</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   /* Glassmorphism: flowing dark background, translucent floating panels, soft rounded controls.
      Ubuntu identity kept (aubergine + orange) — the console stays Ubuntu-terminal style. */
@@ -112,7 +114,12 @@
               display:grid; grid-template-columns:repeat(3,1fr); gap:3px; }
   #gizmoNav .gn { padding:4px 0; justify-content:center; background:#2a2330cc; border:1px solid var(--line); }
   #gizmoNav .gn:hover { background:var(--accent); color:var(--accent-fg); }
-  #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:5; }
+  #mapview { position:absolute; inset:0; display:none; }
+  #mapview.show { display:block; } #leaflet { position:absolute; inset:0; background:#0a0810; }
+  #mapctl { position:absolute; top:8px; right:8px; z-index:600; background:#000a; color:var(--fg);
+            padding:6px 10px; border-radius:8px; font-size:12px; }
+  .leaflet-container { background:#0a0810; }
+  #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:650; }
   #vtabs button { background:#2a2330cc; }
   #vtabs button.on { background:var(--accent); color:var(--accent-fg); }
   #measure { position:absolute; top:8px; right:8px; background:#000a; border:1px solid var(--line);
@@ -367,6 +374,7 @@
     <div id="vtabs">
       <button class="on" data-vtab="model">Model</button>
       <button data-vtab="ortho">Ortho</button>
+      <button data-vtab="map">Map</button>
       <button data-vtab="photo">Photo</button>
     </div>
     <canvas id="c"></canvas>
@@ -382,6 +390,9 @@
     </div>
     <div id="imgview"><div id="imgwrap"></div><div id="imghint"></div></div>
     <div id="orthoview"><img id="orthoimg" alt=""><canvas id="orthocanvas"></canvas><div id="orthohint"></div></div>
+    <div id="mapview"><div id="leaflet"></div>
+      <div id="mapctl"><label style="margin:0">overlay <input id="mapOpacity" type="range" min="0" max="1" step="0.05" value="0.85" style="width:90px; vertical-align:middle"></label></div>
+    </div>
     <div id="measure"></div>
   </div>
   <!-- right: properties -->
