@@ -122,6 +122,14 @@ class RunContext:
         raise KeyError(f"no input provides artifact {artifact!r} (have: "
                        f"{[d for d in self.inputs]})")
 
+    def find_input(self, artifact: str) -> str | None:
+        """Like input_with, but returns None instead of raising when no input provides `artifact`
+        (for optional dependencies, e.g. mvs georeferencing)."""
+        for dep, result in self.inputs.items():
+            if artifact in result.artifacts:
+                return dep
+        return None
+
     def write_json(self, name: str, data: Any) -> str:
         path = self.artifact_path(name)
         path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")

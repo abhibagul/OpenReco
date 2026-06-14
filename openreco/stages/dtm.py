@@ -49,7 +49,7 @@ class Dtm(Stage):
     def run(self, ctx: RunContext) -> StageResult:
         import rasterio
 
-        with rasterio.open(ctx.input_artifact("dsm", "dsm")) as ds:
+        with rasterio.open(ctx.input_artifact(ctx.input_with("dsm"), "dsm")) as ds:
             dsm = ds.read(1).astype(np.float64)
             res_x, res_y = ds.res
             crs = ds.crs

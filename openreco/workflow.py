@@ -115,7 +115,50 @@ OPERATIONS: list[dict[str, Any]] = [
     },
 ]
 
+# Which artifact each stage type produces, and which each operation consumes — used by the UI to
+# auto-wire a new layer to existing layers that provide what it needs (so a click-built pipeline runs).
+STAGE_PROVIDES: dict[str, list[str]] = {
+    "ingest": ["images"],
+    "sfm": ["model", "sparse_ply", "poses"],
+    "refine": ["model"],
+    "georef": ["model", "georef", "ply"],
+    "mvs": ["points", "meta", "las"],
+    "merge_chunks": ["points", "meta", "merged"],
+    "fuse": ["points", "meta"],
+    "classify": ["points", "meta"],
+    "mesh": ["mesh"],
+    "texture": ["mesh", "glb"],
+    "dsm": ["dsm", "meta"],
+    "ortho": ["ortho", "meta"],
+    "dtm": ["dtm"],
+    "contours": ["contours"],
+    "tiles": ["tiles"],
+    "indices": ["meta"],
+}
+# artifacts each operation needs wired as input(s)
+OP_NEEDS: dict[str, list[str]] = {
+    "Add Photos": [],
+    "Align Photos": ["images"],
+    "Georeference": ["model", "images"],
+    "Build Dense Cloud": ["model", "images"],
+    "Build Model": ["points"],
+    "Build Texture": ["mesh", "model", "images"],
+    "Build DEM": ["points"],
+    "Build Orthomosaic": ["points"],
+    "Classify Points": ["points"],
+    "Build Tiled Model": ["mesh"],
+    "Build Contours": ["dsm"],
+    "Merge Chunks": ["points"],
+}
+for _o in OPERATIONS:
+    _o["needs"] = OP_NEEDS.get(_o["op"], [])
+
 _BY_OP = {o["op"]: o for o in OPERATIONS}
+
+
+def provides(stage_type: str) -> list[str]:
+    """Artifacts a stage type produces (for input auto-wiring in the UI)."""
+    return STAGE_PROVIDES.get(stage_type, [])
 
 
 def operations() -> list[dict[str, Any]]:

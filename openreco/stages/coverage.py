@@ -30,8 +30,9 @@ class Coverage(Stage):
     def run(self, ctx: RunContext) -> StageResult:
         import pycolmap
 
-        model_dir = ctx.input_artifact("georef", "model")
-        georef = ctx.read_input_json("georef", "georef")
+        gdep = ctx.input_with("georef")
+        model_dir = ctx.input_artifact(gdep, "model")
+        georef = ctx.read_input_json(gdep, "georef")
         origin = np.array(georef.get("origin", [0.0, 0.0, 0.0]))
         epsg = georef.get("crs_epsg")
         rec = pycolmap.Reconstruction(str(model_dir))

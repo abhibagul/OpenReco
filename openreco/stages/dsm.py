@@ -21,10 +21,11 @@ from openreco.io.raster import grid_topdown, write_geotiff
 
 
 def _load(ctx: RunContext):
-    xyz, rgb = read_ply_xyzrgb(ctx.input_artifact("mvs", "points"))
+    dep = ctx.input_with("points")
+    xyz, rgb = read_ply_xyzrgb(ctx.input_artifact(dep, "points"))
     if rgb is None:
         rgb = np.full((len(xyz), 3), 200, np.uint8)
-    meta = ctx.read_input_json("mvs", "meta")
+    meta = ctx.read_input_json(dep, "meta")
     origin = np.array(meta.get("origin", [0.0, 0.0, 0.0]))
     return xyz, rgb, meta.get("crs_epsg"), origin
 

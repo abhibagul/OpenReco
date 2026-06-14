@@ -100,6 +100,7 @@ class AppState:
         return {"ok": True, "path": str(self.project.save())}
 
     def project_json(self) -> dict:
+        from openreco.workflow import provides
         m = self.project.manifest
         keys = compute_keys(m)
         last = self._last_run()
@@ -108,7 +109,7 @@ class AppState:
             run = last.get(s.id, {})
             layers.append({
                 "id": s.id, "type": s.type, "inputs": s.inputs, "params": s.params, "chunk": s.chunk,
-                "enabled": s.enabled,
+                "enabled": s.enabled, "provides": provides(s.type),
                 "status": run.get("status"), "metrics": run.get("metrics", {}),
                 "artifacts": run.get("artifacts", {}), "key": keys.get(s.id, {}).get("key"),
             })

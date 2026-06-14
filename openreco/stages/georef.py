@@ -87,7 +87,10 @@ class Georef(Stage):
         )
 
     def _gps_table(self, ctx: RunContext) -> dict[str, tuple[float, float, float]]:
-        data = ctx.read_input_json(ctx.input_with("images"), "images")
+        dep = ctx.find_input("images")          # optional: no ingest wired -> no GPS (local frame)
+        if dep is None:
+            return {}
+        data = ctx.read_input_json(dep, "images")
         out: dict[str, tuple[float, float, float]] = {}
         for im in data["images"]:
             if im["excluded"]:

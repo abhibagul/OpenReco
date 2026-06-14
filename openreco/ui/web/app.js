@@ -472,7 +472,8 @@ $('runBtn').onclick = async () => {
     const ev = JSON.parse(e.data);
     if (ev.event === 'stage_start') { setDot(ev.id, 'running'); log(`▶ ${ev.id} (${ev.type})`); }
     else if (ev.event === 'progress') $('status').textContent = `${ev.id}: ${Math.round(ev.frac*100)}% ${ev.message||''}`;
-    else if (ev.event === 'stage_done') { setDot(ev.id, ev.status); log(`✓ ${ev.id} [${ev.status}]`); }
+    else if (ev.event === 'stage_done') { setDot(ev.id, ev.status);
+      log(`${ev.status === 'failed' ? '✗' : '✓'} ${ev.id} [${ev.status}]` + (ev.error ? ` — ${ev.error}` : '')); }
     else if (ev.event === 'stage_skipped') { setDot(ev.id, 'failed'); log(`⨯ ${ev.id} skipped`); }
     else if (ev.event === 'run_done') log(`--- run ${ev.ok ? 'OK' : 'FAILED'} ---`);
     else if (ev.event === 'run_error') log(`error: ${ev.error}`);
@@ -768,10 +769,22 @@ function openOp(op) {
   const base = op.stage; let n = 1; const ids = new Set(PROJECT.layers.map(l => l.id));
   while (ids.has(base + n)) n++;
   $('mId').value = base + n;
+  // auto-wire: pick the latest layer (prefer same chunk) that provides each artifact the op needs
+  const needs = op.needs || [];
+  const auto = new Set();
+  needs.forEach(art => {
+    const providers = PROJECT.layers.filter(l => (l.provides || []).includes(art));
+    const pref = providers.filter(l => l.chunk === ACTIVE_CHUNK);
+    const pick = (pref.length ? pref : providers).slice(-1)[0];
+    if (pick) auto.add(pick.id);
+  });
   const inb = $('mInputs'); inb.innerHTML = PROJECT.layers.length ? '' : '<span class="muted">none yet</span>';
+  if (needs.length) { const h = document.createElement('div'); h.className = 'muted';
+    h.style.marginBottom = '4px'; h.textContent = `needs: ${needs.join(', ')} (auto-selected below)`; inb.appendChild(h); }
   PROJECT.layers.forEach(l => {
     const w = document.createElement('label'); w.className = 'chk';
-    w.innerHTML = `<input type="checkbox" value="${l.id}"> ${l.id} <span class="muted">(${l.type})</span>`;
+    const on = auto.has(l.id) ? 'checked' : '';
+    w.innerHTML = `<input type="checkbox" value="${l.id}" ${on}> ${l.id} <span class="muted">(${l.type})</span>`;
     inb.appendChild(w);
   });
   const fb = $('mFields'); fb.innerHTML = '';

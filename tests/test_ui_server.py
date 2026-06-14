@@ -103,6 +103,31 @@ def test_export_endpoint(server, tmp_path):
     assert Path(body["out"]).exists()
 
 
+def test_layer_provides_and_op_needs(server):
+    base, _ = server
+    # operations declare what they need (for input auto-wiring)
+    ops = {o["op"]: o for o in json.loads(_get(base + "/api/workflows")[1])}
+    assert ops["Align Photos"]["needs"] == ["images"]
+    assert "model" in ops["Build Dense Cloud"]["needs"] and "images" in ops["Build Dense Cloud"]["needs"]
+    # layers report what they provide
+    layers = {L["id"]: L for L in json.loads(_get(base + "/api/project")[1])["layers"]}
+    assert "model" not in layers["gen"]["provides"]   # dummy stage -> no provides
+
+
+def test_input_resolution_by_artifact(tmp_path):
+    # a stage referencing inputs by artifact must work regardless of the upstream layer's id
+    from openreco.engine.context import DeviceInfo, RunContext, StageResult
+    import logging
+    res = StageResult(artifacts={"images": "images.json"})
+    ctx = RunContext(stage_id="x", stage_type="sfm", params={}, cache_dir=tmp_path,
+                     inputs={"ingest_custom_id": res},
+                     input_dirs={"ingest_custom_id": tmp_path}, project_dir=tmp_path,
+                     device=DeviceInfo(), logger=logging.getLogger("t"))
+    assert ctx.input_with("images") == "ingest_custom_id"
+    assert ctx.find_input("images") == "ingest_custom_id"
+    assert ctx.find_input("nonexistent") is None
+
+
 def test_workflows_and_operation(server):
     base, _ = server
     _, raw = _get(base + "/api/workflows")

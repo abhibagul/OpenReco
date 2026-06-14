@@ -52,7 +52,8 @@ class Mvs(Stage):
         import pycolmap
 
         model_dir = ctx.input_artifact(ctx.input_with("model"), "model")
-        georef = ctx.read_input_json("georef", "georef")
+        gdep = ctx.find_input("georef")
+        georef = ctx.read_input_json(gdep, "georef") if gdep else {}
         images = ctx.read_input_json(ctx.input_with("images"), "images")
         image_dir = images["image_dir"]
         rec = pycolmap.Reconstruction(str(model_dir))

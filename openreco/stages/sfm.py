@@ -43,7 +43,7 @@ class Sfm(Stage):
     def run(self, ctx: RunContext) -> StageResult:
         import pycolmap
 
-        data = ctx.read_input_json("ingest", "images")
+        data = ctx.read_input_json(ctx.input_with("images"), "images")
         image_dir = Path(data["image_dir"])
         names = [im["name"] for im in data["images"] if not im["excluded"]]
         if len(names) < 3:
