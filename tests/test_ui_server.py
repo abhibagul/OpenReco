@@ -516,7 +516,8 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"showGcpAccuracy" in appjs and b"control_rms" in appjs       # GCP control/check accuracy
     assert b"const ic =" in appjs                                        # line-icon helper
     _, html2 = _get(base + "/")
-    assert b"#e95420" in html2 and b'id="i-play"' in html2               # Ubuntu accent + icon sprite
+    assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
+    assert b"#300a24" in html2                                           # Ubuntu-style console
 
 
 def test_desktop_mode_resolution(monkeypatch):
