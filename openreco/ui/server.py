@@ -119,6 +119,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._file(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/formats":
             return self._formats(parse_qs(u.query).get("path", [""])[0])
+        if route == "/api/crs":
+            return self._crs(parse_qs(u.query))
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -196,6 +198,18 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             export_product(src, fmt, out)
             return self._send(200, {"out": str(out)})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
+
+    def _crs(self, q):
+        from openreco.geo.crs import crs_info, search_crs
+        try:
+            if q.get("search"):
+                return self._send(200, {"results": search_crs(q["search"][0],
+                                        kind=q.get("kind", ["all"])[0])})
+            if q.get("code"):
+                return self._send(200, crs_info(q["code"][0]))
+            return self._send(400, {"error": "pass ?code= or ?search="})
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})
 

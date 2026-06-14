@@ -132,10 +132,12 @@ class Georef(Stage):
             resid.append(float(np.linalg.norm(name_to_center[name] - t)))
         rms = float(np.sqrt(np.mean(np.square(resid)))) if resid else None
 
+        from openreco.geo.crs import crs_info
         return {
             "method": "gps",
             "crs": f"EPSG:{epsg}",
             "crs_epsg": epsg,
+            "crs_info": crs_info(epsg),
             "origin": [float(origin[0]), float(origin[1]), float(origin[2])],
             "num_control": len(names),
             "rms_residual_m": round(rms, 4) if rms is not None else None,
@@ -184,10 +186,12 @@ class Georef(Stage):
         resid = [float(np.linalg.norm((scale * (rot @ lp) + trans) - tg))
                  for lp, tg in zip(local_pts, target)]
         rms = float(np.sqrt(np.mean(np.square(resid)))) if resid else None
+        from openreco.geo.crs import crs_info
         return {
             "method": "gcp",
             "crs": f"EPSG:{epsg}",
             "crs_epsg": epsg,
+            "crs_info": crs_info(epsg),
             "origin": [float(origin[0]), float(origin[1]), float(origin[2])],
             "num_control": len(used),
             "rms_residual_m": round(rms, 4) if rms is not None else None,

@@ -298,7 +298,10 @@ def list_formats(src: str | Path) -> list[str]:
     return sorted(REGISTRY[detect_kind(src)])
 
 
-def export_product(src: str | Path, fmt: str, out: str | Path, kind: str | None = None) -> Path:
+def export_product(src: str | Path, fmt: str, out: str | Path, kind: str | None = None,
+                   crs: int | None = None) -> Path:
+    """Convert `src` to `fmt` at `out`. `crs` (EPSG) reprojects raster products to that output
+    coordinate system first (output-CRS selection)."""
     src, out = Path(src), Path(out)
     fmt = fmt.lower()
     if fmt in UNSUPPORTED:
@@ -307,10 +310,21 @@ def export_product(src: str | Path, fmt: str, out: str | Path, kind: str | None 
     if kind not in REGISTRY or fmt not in REGISTRY[kind]:
         raise ValueError(f"cannot export a {kind} as {fmt!r}; choices: {sorted(REGISTRY[kind])}")
     out.parent.mkdir(parents=True, exist_ok=True)
-    writer = REGISTRY[kind][fmt]
-    if writer is None:                                  # passthrough: same representation, just copy
-        import shutil
-        shutil.copyfile(src, out)
-        return out
-    writer(_LOADERS[kind](src), out)
+
+    tmp = None
+    if crs is not None and kind == "raster":            # output-CRS selection: reproject first
+        from openreco.io.raster import reproject_geotiff
+        tmp = out.with_suffix(".reproj.tif")
+        reproject_geotiff(src, tmp, int(crs))
+        src = tmp
+    try:
+        writer = REGISTRY[kind][fmt]
+        if writer is None:                              # passthrough: same representation, just copy
+            import shutil
+            shutil.copyfile(src, out)
+        else:
+            writer(_LOADERS[kind](src), out)
+    finally:
+        if tmp and tmp.exists():
+            tmp.unlink()
     return out

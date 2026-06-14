@@ -22,4 +22,8 @@ def __getattr__(name: str):
         from openreco import exporters
 
         return getattr(exporters, name)
+    if name in ("crs_info", "search_crs"):
+        from openreco.geo import crs
+
+        return getattr(crs, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -55,6 +55,24 @@ def _fill_holes(dsm: np.ndarray, ortho: np.ndarray) -> None:
         ortho[~valid, c] = griddata(pts, ch[valid], holes, method="nearest")
 
 
+def reproject_geotiff(src: Path, dst: Path, dst_epsg: int) -> None:
+    """Reproject a GeoTIFF to another CRS (output-CRS selection). Uses rasterio.warp."""
+    import rasterio
+    from rasterio.warp import Resampling, calculate_default_transform, reproject
+
+    with rasterio.open(src) as s:
+        dst_crs = f"EPSG:{dst_epsg}"
+        transform, w, h = calculate_default_transform(s.crs, dst_crs, s.width, s.height, *s.bounds)
+        profile = s.profile.copy()
+        profile.update(crs=dst_crs, transform=transform, width=w, height=h)
+        with rasterio.open(dst, "w", **profile) as d:
+            for b in range(1, s.count + 1):
+                reproject(source=rasterio.band(s, b), destination=rasterio.band(d, b),
+                          src_transform=s.transform, src_crs=s.crs,
+                          dst_transform=transform, dst_crs=dst_crs,
+                          resampling=Resampling.bilinear)
+
+
 def write_geotiff(path: Path, array: np.ndarray, west: float, north: float, res: float,
                   crs_epsg: int | None, nodata=None) -> None:
     import rasterio

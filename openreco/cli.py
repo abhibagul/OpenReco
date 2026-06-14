@@ -131,8 +131,9 @@ def cmd_export(args: argparse.Namespace) -> int:
     if args.to.lower() not in avail:
         print(f"cannot export as {args.to!r}; choices: {', '.join(avail)}", file=sys.stderr)
         return 1
-    out = export_product(args.src, args.to, args.out or f"{Path(args.src).stem}.{args.to}")
-    print(f"wrote {out}")
+    crs = int(args.crs) if args.crs else None
+    out = export_product(args.src, args.to, args.out or f"{Path(args.src).stem}.{args.to}", crs=crs)
+    print(f"wrote {out}" + (f" (reprojected to EPSG:{crs})" if crs else ""))
     return 0
 
 
@@ -143,6 +144,28 @@ def cmd_ui(args: argparse.Namespace) -> int:
     proj = Project.open(args.project) if Path(args.project).exists() else Project.create(args.project)
     mode = "browser" if args.browser else "window" if args.window else "auto"
     launch(proj, host=args.host, port=args.port, mode=mode, open_browser=not args.no_browser)
+    return 0
+
+
+def cmd_crs(args: argparse.Namespace) -> int:
+    from openreco.geo.crs import crs_info, search_crs
+
+    if args.search:
+        for r in search_crs(args.search, kind=args.kind):
+            print(f"  {r['code']:14s} {r['name']}  [{r['kind']}]")
+        return 0
+    if not args.code:
+        print("specify a CRS (e.g. `openreco crs 4326`) or --search <text>", file=sys.stderr)
+        return 1
+    i = crs_info(args.code)
+    print(f"{i['code']}  {i['name']}  ({i['kind']})")
+    for key in ("datum", "ellipsoid", "prime_meridian", "unit", "base_crs"):
+        v = i.get(key)
+        if v:
+            print(f"  {key:15s} {v.get('name', '')}  {v.get('code') or ''}".rstrip())
+    if i.get("projection"):
+        print(f"  {'projection':15s} {i['projection']}")
+    print(f"  {'axes':15s} " + ", ".join(f"{a['abbrev']}({a['unit']})" for a in i["axes"]))
     return 0
 
 
@@ -220,6 +243,12 @@ def build_parser() -> argparse.ArgumentParser:
     pst = sub.add_parser("stages", help="list registered stage types")
     pst.set_defaults(func=cmd_stages)
 
+    pc = sub.add_parser("crs", help="inspect or search coordinate reference systems")
+    pc.add_argument("code", nargs="?", help="EPSG code / WKT / PROJ / name to describe")
+    pc.add_argument("--search", help="search the EPSG catalog by name or code")
+    pc.add_argument("--kind", default="all", choices=["all", "geographic", "projected"])
+    pc.set_defaults(func=cmd_crs)
+
     pb = sub.add_parser("batch", help="run all projects under a directory")
     pb.add_argument("root", help="directory containing project.toml manifests (recursively)")
     pb.add_argument("--jobs", type=int, default=1, help="parallel processes (default 1)")
@@ -229,6 +258,7 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("src", help="source product file (e.g. output/mesh.ply, output/dsm.tif)")
     pe.add_argument("--to", help="target format (omit to list available formats)")
     pe.add_argument("--out", help="output path (default: <src stem>.<fmt>)")
+    pe.add_argument("--crs", help="reproject raster output to this EPSG (output-CRS selection)")
     pe.set_defaults(func=cmd_export)
 
     pu = sub.add_parser("ui", help="launch the UI (native window if pywebview present, else browser)")
