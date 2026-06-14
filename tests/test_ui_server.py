@@ -484,6 +484,29 @@ def test_add_photos_multi_folder_stages_copies(tmp_path):
         httpd.server_close()
 
 
+def test_marker_template_and_autodetect(tmp_path):
+    from openreco.markers import marker_sheet_png
+    imgs = tmp_path / "imgs"
+    imgs.mkdir()
+    (imgs / "sheet.png").write_bytes(marker_sheet_png("4x4_50", count=6))   # a photo of targets
+    proj = Project.create(tmp_path / "proj", name="mk").add_stage(
+        "photos", "ingest", params={"image_dir": str(imgs)})
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        status, png = _get(base + "/api/marker_template?dictionary=4x4_50&count=6")
+        assert status == 200 and png[:4] == b"\x89PNG"
+        status, body = _post(base + "/api/detect_markers", {"chunk": "Chunk 1", "dictionary": "4x4_50"})
+        assert status == 200 and body["ok"] and len(body["markers"]) == 6
+        m0 = body["markers"][0]
+        assert m0["name"].startswith("marker_") and m0["type"] == "control"
+        assert m0["observations"][0]["image"] == "sheet.png" and "u" in m0["observations"][0]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_cameras_gps_fallback(tmp_path):
     proj = Project.create(tmp_path, name="cam").add_stage("ing", "ingest",
                                                           params={"image_dir": "images"})
@@ -538,6 +561,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"/api/add_photos" in appjs and b"openBrowse" in appjs and b"/api/browse" in appjs
     assert b"/api/remove_photo" in appjs and b"brAlign" in appjs
     assert b"showGcpAccuracy" in appjs and b"control_rms" in appjs       # GCP control/check accuracy
+    assert b"/api/detect_markers" in appjs and b"/api/marker_template" in appjs  # auto markers
     assert b"const ic =" in appjs                                        # line-icon helper
     assert b"loadPresets" in appjs and b"/api/preset" in appjs           # quality presets
     _, html2 = _get(base + "/")

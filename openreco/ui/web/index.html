@@ -341,6 +341,11 @@
       <div class="row" style="margin-top:6px">
         <button id="addMarker"><svg class="ic"><use href="#i-pin"/></svg> Marker</button><span class="sp"></span>
         <button class="run" id="saveMarkers"><svg class="ic"><use href="#i-save"/></svg> Save GCPs</button></div>
+      <div class="row" style="margin-top:6px">
+        <select id="mkDict" title="Coded-target dictionary" style="width:auto"></select>
+        <button id="detectMarkers" title="Auto-detect coded targets in this chunk's photos"><svg class="ic"><use href="#i-target"/></svg> Detect</button>
+        <button id="markerSheet" title="Printable coded-target sheet"><svg class="ic"><use href="#i-image"/></svg> Sheet</button>
+      </div>
       <button id="useGcps" style="margin-top:6px; width:100%; justify-content:center"><svg class="ic"><use href="#i-target"/></svg> Use these GCPs for georeferencing</button>
       <div class="muted" style="margin-top:6px">Pick: select a marker, open a photo in the Photo tab, click to add an observation. Mark some as <b>check</b> to validate accuracy (held out of the fit). Then Save and "Use these GCPs".</div>
       <h3>GCP accuracy <span class="sp"></span><button id="refreshAcc" style="padding:2px 6px"><svg class="ic"><use href="#i-refresh"/></svg></button></h3>

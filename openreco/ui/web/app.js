@@ -1094,6 +1094,26 @@ $('useGcps').onclick = async () => {
 };
 $('refCrsBtn').onclick = openCrsPicker;
 
+// auto coded-target (ArUco) detection + printable template
+['4x4_50', '5x5_100', '6x6_250', 'apriltag_36h11', 'aruco_original'].forEach(dn => {
+  const o = document.createElement('option'); o.value = dn; o.textContent = dn; $('mkDict').appendChild(o);
+});
+$('markerSheet').onclick = () => window.open(`/api/marker_template?dictionary=${$('mkDict').value}&count=24`, '_blank');
+$('detectMarkers').onclick = async () => {
+  log(`detecting coded targets (${$('mkDict').value}) in ${ACTIVE_CHUNK}…`);
+  const j = await (await fetch('/api/detect_markers', { method:'POST',
+    body: JSON.stringify({ chunk: ACTIVE_CHUNK, dictionary: $('mkDict').value }) })).json();
+  if (!j.ok) { log('detect error: ' + (j.error || 'failed'), 'err'); return; }
+  j.markers.forEach(nm => {                          // merge: update observations, keep any world coords
+    const ex = MARKERS.find(m => m.name === nm.name);
+    if (ex) ex.observations = nm.observations; else MARKERS.push({ ...nm });
+  });
+  if (MARKERS.length && activeMarker == null) activeMarker = 0;
+  renderMarkers();
+  log(`detected ${j.markers.length} marker(s), ${j.detections} observation(s) across ${j.images_scanned} photo(s) — enter their world X/Y/Z, then Save`,
+      j.markers.length ? 'ok' : 'warn');
+};
+
 // GCP accuracy: read the chunk's georef.json (per-GCP residuals + control/check RMSE)
 async function showGcpAccuracy() {
   const box = $('gcpAccuracy');

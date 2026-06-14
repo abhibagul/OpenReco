@@ -385,6 +385,36 @@ class AppState:
                     pass
         return roots
 
+    def detect_markers(self, chunk: str | None, dictionary: str) -> dict:
+        """Auto-detect coded targets across a chunk's photos -> GCP markers (id -> observations)."""
+        import numpy as np
+        from PIL import Image
+
+        from openreco.markers import detect_markers as _detect
+        imgs = self.images_for_chunk(chunk)["images"]
+        if not imgs:
+            return {"ok": False, "error": "no photos in this chunk (add/ingest photos first)"}
+        per: dict[int, list] = {}
+        scanned = 0
+        for im in imgs:
+            p = Path(im["path"])
+            if not p.is_file():
+                continue
+            pil = Image.open(p).convert("L")
+            w, h = pil.size
+            s = min(1.0, 2400 / max(w, h))
+            if s < 1.0:
+                pil = pil.resize((int(w * s), int(h * s)))
+            for det in _detect(np.asarray(pil), dictionary):
+                per.setdefault(det["id"], []).append(
+                    {"image": im["name"], "u": round(det["center"][0] / s, 1),
+                     "v": round(det["center"][1] / s, 1)})
+            scanned += 1
+        markers = [{"name": f"marker_{mid}", "world": None, "type": "control", "observations": obs}
+                   for mid, obs in sorted(per.items())]
+        return {"ok": True, "markers": markers, "images_scanned": scanned,
+                "detections": sum(len(o) for o in per.values())}
+
     def markers_path(self) -> Path:
         return self.project.manifest.project_dir / "markers.json"
 
@@ -497,6 +527,8 @@ class _Handler(BaseHTTPRequestHandler):
                 parse_qs(u.query).get("chunk", [None])[0]))
         if route == "/api/markers":
             return self._send(200, self.state.load_markers())
+        if route == "/api/marker_template":
+            return self._marker_template(parse_qs(u.query))
         if route == "/api/raster_png":
             return self._raster_png(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/browse":
@@ -534,6 +566,12 @@ class _Handler(BaseHTTPRequestHandler):
             return self._add_stage(body)
         if u.path == "/api/markers":
             return self._set_markers(body)
+        if u.path == "/api/detect_markers":
+            try:
+                return self._send(200, self.state.detect_markers(body.get("chunk"),
+                                  body.get("dictionary", "4x4_50")))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": repr(exc)})
         if u.path == "/api/use_gcps":
             return self._use_gcps(body)
         if u.path == "/api/add_photos":
@@ -616,6 +654,15 @@ class _Handler(BaseHTTPRequestHandler):
             m.crs = (body["crs"] or "").strip() or None
         self.state.project.save()
         return self._send(200, {"ok": True, "crs": m.crs})
+
+    def _marker_template(self, q):
+        from openreco.markers import marker_sheet_png
+        try:
+            png = marker_sheet_png(q.get("dictionary", ["4x4_50"])[0],
+                                   count=int(q.get("count", ["24"])[0]))
+            return self._send(200, png, "image/png")
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
 
     def _set_markers(self, body):
         markers = body.get("markers", [])
