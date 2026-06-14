@@ -239,6 +239,29 @@ def test_raster_png_endpoint(server, tmp_path):
     assert status == 200 and png[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_images_scan_before_run_and_serve_external(tmp_path):
+    # source photos live OUTSIDE the project dir (common for drone sets)
+    ext = tmp_path / "flight"
+    ext.mkdir()
+    (ext / "DJI_1.JPG").write_bytes(b"\xff\xd8\xff\xe0fakejpeg")
+    (ext / "DJI_2.JPG").write_bytes(b"\xff\xd8\xff\xe0fakejpeg")
+    proj = Project.create(tmp_path / "proj", name="scan").add_stage(
+        "photos", "ingest", params={"image_dir": str(ext)})
+    httpd = serve(proj, port=0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}"
+        data = json.loads(_get(base + "/api/images?chunk=Chunk%201")[1])
+        names = sorted(im["name"] for im in data["images"])
+        assert names == ["DJI_1.JPG", "DJI_2.JPG"]          # listed before any run
+        # the external photo is serveable (sandbox widened to ingest folders)
+        status, body = _get(base + "/api/file?path=" + urllib.request.quote(data["images"][0]["path"]))
+        assert status == 200 and body.startswith(b"\xff\xd8")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_frontend_has_crs_and_marker_ui(server):
     base, _ = server
     _, appjs = _get(base + "/app.js")

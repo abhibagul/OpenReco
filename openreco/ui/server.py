@@ -65,23 +65,52 @@ class AppState:
                 "chunks": m.chunk_names(), "layers": layers}
 
     def images_for_chunk(self, chunk: str | None) -> dict:
-        """Source images of a chunk's ingest layer(s) — for the Photos pane + GCP picking."""
+        """Source images of a chunk's ingest layer(s) — for the Photos pane + GCP picking.
+
+        Uses the ingest output (with GPS/cull flags) once it has run; before that, scans the
+        configured image folder directly so photos appear as soon as they're added."""
+        from openreco.io.images import list_images
+
         last = self._last_run()
         out: list[dict] = []
         image_dir = ""
+        proj_dir = self.project.manifest.project_dir
         for s in self.project.manifest.stages:
             if s.type != "ingest" or (chunk and s.chunk != chunk):
                 continue
             art = last.get(s.id, {}).get("artifacts", {}).get("images")
-            if not art or not Path(art).is_file():
+            if art and Path(art).is_file():
+                data = json.loads(Path(art).read_text(encoding="utf-8"))
+                image_dir = data.get("image_dir", "")
+                for im in data.get("images", []):
+                    out.append({"name": im["name"], "path": str(Path(image_dir) / im["name"]),
+                                "lat": im.get("lat"), "lon": im.get("lon"),
+                                "excluded": im.get("excluded", False), "layer": s.id})
                 continue
-            data = json.loads(Path(art).read_text(encoding="utf-8"))
-            image_dir = data.get("image_dir", "")
-            for im in data.get("images", []):
-                out.append({"name": im["name"], "path": str(Path(image_dir) / im["name"]),
-                            "lat": im.get("lat"), "lon": im.get("lon"),
-                            "excluded": im.get("excluded", False), "layer": s.id})
+            # not run yet: scan the configured folder so the user sees the photos immediately
+            idir = s.params.get("image_dir", "images")
+            p = Path(idir) if Path(idir).is_absolute() else (proj_dir / idir)
+            if p.is_dir():
+                image_dir = str(p)
+                for f in list_images(p):
+                    out.append({"name": f.name, "path": str(f), "lat": None, "lon": None,
+                                "excluded": False, "layer": s.id})
         return {"image_dir": image_dir, "images": out}
+
+    def allowed_roots(self) -> list[Path]:
+        """Dirs the viewer may read from: the project dir + each chunk's ingest image folder
+        (source photos commonly live outside the project)."""
+        roots = [self.project.manifest.project_dir.resolve()]
+        proj_dir = self.project.manifest.project_dir
+        for s in self.project.manifest.stages:
+            if s.type == "ingest":
+                idir = s.params.get("image_dir", "images")
+                p = Path(idir) if Path(idir).is_absolute() else (proj_dir / idir)
+                try:
+                    roots.append(p.resolve())
+                except OSError:
+                    pass
+        return roots
 
     def markers_path(self) -> Path:
         return self.project.manifest.project_dir / "markers.json"
@@ -300,8 +329,8 @@ class _Handler(BaseHTTPRequestHandler):
         if not path:
             return self._send(400, {"error": "path required"})
         p = Path(path).resolve()
-        root = self.state.project.manifest.project_dir.resolve()
-        if root not in p.parents and p != root:         # sandbox to the project dir
+        # sandbox: the project dir or any registered ingest image folder
+        if not any(r == p or r in p.parents for r in self.state.allowed_roots()):
             return self._send(403, {"error": "outside project"})
         if not p.is_file():
             return self._send(404, {"error": "not found"})

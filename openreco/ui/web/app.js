@@ -566,6 +566,10 @@ function openOp(op) {
       Object.keys(f.options).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = k; inp.appendChild(o); });
       inp.value = f.default;
     } else if (f.type === 'bool') { inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!f.default; }
+    else if (f.type === 'path' || f.type === 'string') {
+      inp = document.createElement('input'); inp.type = 'text'; inp.value = f.default;
+      if (f.type === 'path') inp.placeholder = 'folder path (e.g. D:\\data\\flight1 or "images")';
+    }
     else { inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any'; inp.value = f.default; }
     inp.dataset.label = f.label; inp.dataset.type = f.type; fb.appendChild(inp);
   });
@@ -578,8 +582,9 @@ async function submitOp(op) {
   const inputs = [...$('mInputs').querySelectorAll('input:checked')].map(c => c.value);
   const values = {};
   $('mFields').querySelectorAll('[data-label]').forEach(inp => {
-    values[inp.dataset.label] = inp.dataset.type === 'bool' ? inp.checked
-      : inp.dataset.type === 'enum' ? inp.value : parseFloat(inp.value);
+    const t = inp.dataset.type;
+    values[inp.dataset.label] = t === 'bool' ? inp.checked
+      : (t === 'enum' || t === 'path' || t === 'string') ? inp.value : parseFloat(inp.value);
   });
   const r = await fetch('/api/operation', { method:'POST',
     body: JSON.stringify({ op: op.op, id, inputs, values, chunk: ACTIVE_CHUNK }) });

@@ -15,6 +15,15 @@ from typing import Any
 # An "enum" field maps a friendly choice -> the underlying parameter value.
 OPERATIONS: list[dict[str, Any]] = [
     {
+        "op": "Add Photos", "stage": "ingest",
+        "desc": "Add a folder of images to this chunk (ingest + QC). The first step of any project.",
+        "fields": [
+            {"label": "Image folder", "param": "image_dir", "type": "path", "default": "images"},
+            {"label": "Blur culling", "param": "blur_relative", "type": "enum", "default": "Mild",
+             "options": {"Off": 0.0, "Mild": 0.15, "Moderate": 0.3, "Aggressive": 0.5}},
+        ],
+    },
+    {
         "op": "Align Photos", "stage": "sfm",
         "desc": "Detect features, match, and solve camera poses (sparse cloud).",
         "fields": [
