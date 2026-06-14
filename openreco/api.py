@@ -175,13 +175,27 @@ class Project:
 
     # ---- execution ---------------------------------------------------------------------
     def run(self, force: list[str] | None = None, force_all: bool = False,
-            on_event: Any = None, cancel: Any = None) -> RunOutcome:
+            on_event: Any = None, cancel: Any = None,
+            targets: list[str] | None = None) -> RunOutcome:
         """Execute the pipeline (cache-aware). `force` recomputes named stages; `force_all`
-        recomputes everything. `on_event(dict)` receives live run events (stage_start/progress/
-        stage_done/run_done) and `cancel()->bool` enables cooperative cancellation — both for UIs.
-        Disabled layers (and any layer depending on one) are excluded from this run."""
+        recomputes everything. `targets` limits the run to those stages + their ancestors (e.g. run
+        a single layer and only what it needs). `on_event(dict)` receives live run events and
+        `cancel()->bool` enables cancellation. Disabled layers (and their dependents) are excluded."""
         manifest = self.manifest
         runnable = self._runnable_stages()
+        if targets:
+            byid = {s.id: s for s in runnable}
+            keep: set[str] = set()
+
+            def _add(sid: str) -> None:
+                if sid in keep or sid not in byid:
+                    return
+                keep.add(sid)
+                for dep in byid[sid].inputs:
+                    _add(dep)
+            for t in targets:
+                _add(t)
+            runnable = [s for s in runnable if s.id in keep]
         if len(runnable) != len(manifest.stages):
             manifest = replace(manifest, stages=runnable)
         return Runner(manifest, force=(["*"] if force_all else force),

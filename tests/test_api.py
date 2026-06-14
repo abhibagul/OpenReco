@@ -73,6 +73,20 @@ def test_save_roundtrip(tmp_path):
     assert reloaded.stages[2].inputs == ["gen_a", "gen_b"]
 
 
+def test_run_targets_limits_to_ancestors(tmp_path):
+    proj = (Project.create(tmp_path, name="tg")
+            .add_stage("a", "dummy_generate", params={"n": 2})
+            .add_stage("b", "dummy_sum", inputs=["a"])
+            .add_stage("c", "dummy_sum", inputs=["b"]))
+    # run only up to "b": a + b run, c is not in this run
+    out = proj.run(targets=["b"])
+    assert {s.id for s in out.stages} == {"a", "b"}
+    # re-running target "b" with force recomputes b but reuses cached a
+    out2 = proj.run(targets=["b"], force=["b"])
+    statuses = {s.id: str(s.status).split(".")[-1] for s in out2.stages}
+    assert statuses == {"a": "CACHED", "b": "EXECUTED"}
+
+
 def test_disabled_stage_excluded_from_run(tmp_path):
     proj = (Project.create(tmp_path, name="en")
             .add_stage("gen", "dummy_generate", params={"n": 3})

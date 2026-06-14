@@ -392,7 +392,7 @@ class AppState:
         return {s["id"]: s for s in data.get("stages", [])}
 
     # ---- run control ----
-    def start_run(self, force=None) -> bool:
+    def start_run(self, force=None, targets=None) -> bool:
         with self.lock:
             if self.running:
                 return False
@@ -409,7 +409,7 @@ class AppState:
             log.addHandler(handler)
             try:
                 with _StderrCapture(self.events):       # surface COLMAP/glog native output too
-                    self.project.run(force=force, on_event=self.events.put,
+                    self.project.run(force=force, targets=targets, on_event=self.events.put,
                                      cancel=lambda: self.cancel_requested)
             except Exception as exc:  # noqa: BLE001
                 self.events.put({"event": "run_error", "error": repr(exc)})
@@ -487,7 +487,7 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length) or b"{}")
         if u.path == "/api/run":
-            started = self.state.start_run(force=body.get("force"))
+            started = self.state.start_run(force=body.get("force"), targets=body.get("targets"))
             return self._send(202 if started else 409, {"started": started})
         if u.path == "/api/cancel":
             return self._send(200, {"cancelling": self.state.cancel_run()})

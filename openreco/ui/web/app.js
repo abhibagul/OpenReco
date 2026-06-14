@@ -314,6 +314,7 @@ function renderWorkspace() {
       drop: (id) => layerAction({ action: 'move', id, to: chunk }),    // drop a layer onto a chunk
       onCtx: (e) => showCtx(e, [
         { label: 'Set as active chunk', fn: () => { ACTIVE_CHUNK = chunk; renderWorkspace(); } },
+        { label: `▶ Run chunk "${chunk}"`, fn: () => runPipeline({ targets: layers.map(l => l.id) }) },
         { label: '＋ Add Photos…', fn: () => { ACTIVE_CHUNK = chunk; openBrowse(); } },
         { sep: true },
         { label: 'Rename chunk…', fn: () => renameChunk(chunk) },
@@ -367,6 +368,9 @@ document.addEventListener('contextmenu', (e) => { if (!e.target.closest('.tnode'
 
 function layerCtx(L, canView) {
   const items = [];
+  items.push({ label: `▶ Run "${L.id}" (recompute)`, fn: () => runPipeline({ targets: [L.id], force: [L.id] }) });
+  items.push({ label: '▶ Run up to here', fn: () => runPipeline({ targets: [L.id] }) });
+  items.push({ sep: true });
   if (canView) items.push({ label: visible.has(L.id) ? 'Hide in view' : 'Show in view',
     fn: () => setVisible(L, !visible.has(L.id)) });
   items.push({ label: 'Rename layer…', fn: () => renameLayer(L) });
@@ -568,8 +572,8 @@ $('progCancel').onclick = async () => {
 
 // ---- run + live progress (SSE) --------------------------------------------
 $('runBtn').onclick = () => runPipeline();
-async function runPipeline() {
-  const r = await fetch('/api/run', { method:'POST', body: '{}' });
+async function runPipeline(body = {}) {
+  const r = await fetch('/api/run', { method:'POST', body: JSON.stringify(body) });
   if (r.status === 409) { log('already running'); return; }
   log('--- run started ---'); $('status').textContent = 'running…';
   $('progCancel').textContent = '✕'; progShow('Processing…');

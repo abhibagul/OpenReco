@@ -176,6 +176,7 @@ def test_frontend_has_workspace_chunks(server):
     assert b"renderWorkspace" in appjs and b"ACTIVE_CHUNK" in appjs and b"/api/chunk" in appjs
     assert b"/api/layer" in appjs and b"showCtx" in appjs       # context menu + layer ops
     assert b"set_enabled" in appjs and b"openLayer" in appjs and b"ondragstart" in appjs
+    assert b"targets:" in appjs and b"Run up to here" in appjs       # per-stage run
     assert b"/api/new_project" in appjs and b"/api/save_project" in appjs
     assert b"/api/cameras" in appjs and b"buildCameras" in appjs
     assert b"setupSplitters" in appjs and b"snapView" in appjs and b"GridHelper" in appjs
