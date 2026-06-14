@@ -867,40 +867,60 @@ async function removePhoto(im) {
   else log('remove error: ' + j.error);
 }
 let curPhoto = null;
+const iz = { s: 1, tx: 0, ty: 0 };       // photo view pan/zoom
+function applyImg() { $('imgwrap').style.transform = `translate(${iz.tx}px,${iz.ty}px) scale(${iz.s})`; }
 function openPhoto(im) {
   curPhoto = im; selectVtab('photo');
   const wrap = $('imgwrap'); wrap.innerHTML = '';
   const img = document.createElement('img'); img.src = `/api/file?path=${encodeURIComponent(im.path)}`;
-  img.onload = () => { drawPins(); };
-  wrap.appendChild(img);
-  wrap.onclick = (e) => {
-    if (e.target.classList.contains('pin')) return;
-    if (activeMarker == null) { log('select a marker in Reference > Markers first'); return; }
-    const r = img.getBoundingClientRect();
-    const u = Math.round((e.clientX - r.left) * (im.width || img.naturalWidth) / r.width || (e.clientX - r.left));
-    const v = Math.round((e.clientY - r.top) * (im.height || img.naturalHeight) / r.height || (e.clientY - r.top));
-    // store in natural image pixels
-    const uu = Math.round((e.clientX - r.left) / r.width * img.naturalWidth);
-    const vv = Math.round((e.clientY - r.top) / r.height * img.naturalHeight);
-    MARKERS[activeMarker].observations = MARKERS[activeMarker].observations.filter(o => o.image !== im.name);
-    MARKERS[activeMarker].observations.push({ image: im.name, u: uu, v: vv });
-    log(`marker ${MARKERS[activeMarker].name}: observed in ${im.name} @ (${uu},${vv})`);
-    renderMarkers(); drawPins();
+  img.onload = () => {                    // fit to viewport
+    const w = $('center').clientWidth, h = $('center').clientHeight;
+    iz.s = Math.min(w / img.naturalWidth, h / img.naturalHeight) * 0.96;
+    iz.tx = (w - img.naturalWidth * iz.s) / 2; iz.ty = (h - img.naturalHeight * iz.s) / 2;
+    applyImg(); drawPins();
   };
+  wrap.appendChild(img);
+  $('imghint').textContent = `${im.name} · scroll to zoom, drag to pan, click to place the selected marker`;
 }
 function drawPins() {
   const wrap = $('imgwrap'); const img = wrap.querySelector('img'); if (!img) return;
   [...wrap.querySelectorAll('.pin')].forEach(p => p.remove());
-  const r = img.getBoundingClientRect(), wrapR = wrap.getBoundingClientRect();
   MARKERS.forEach(mk => mk.observations.forEach(o => {
     if (!curPhoto || o.image !== curPhoto.name) return;
     const pin = document.createElement('div'); pin.className = 'pin';
-    pin.style.left = (o.u / img.naturalWidth * img.clientWidth) + 'px';
-    pin.style.top = (o.v / img.naturalHeight * img.clientHeight) + 'px';
+    pin.style.left = o.u + 'px'; pin.style.top = o.v + 'px';   // natural-pixel coords (wrap is scaled)
+    pin.style.transform = `scale(${1 / iz.s})`; pin.style.transformOrigin = '0 0';   // keep pin size constant
     pin.innerHTML = `<span>${mk.name}</span>`;
     wrap.appendChild(pin);
   }));
 }
+function placeObservation(e) {
+  const img = $('imgwrap').querySelector('img'); if (!img || !curPhoto) return;
+  if (activeMarker == null) { log('select a marker in Reference ▸ Markers first'); return; }
+  const r = img.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+  const uu = Math.round((e.clientX - r.left) / r.width * img.naturalWidth);
+  const vv = Math.round((e.clientY - r.top) / r.height * img.naturalHeight);
+  MARKERS[activeMarker].observations = MARKERS[activeMarker].observations.filter(o => o.image !== curPhoto.name);
+  MARKERS[activeMarker].observations.push({ image: curPhoto.name, u: uu, v: vv });
+  log(`marker ${MARKERS[activeMarker].name}: observed in ${curPhoto.name} @ (${uu},${vv})`);
+  renderMarkers(); drawPins();
+}
+(function photoNav() {
+  const view = $('imgview'); let drag = null, moved = false;
+  view.addEventListener('wheel', (e) => { e.preventDefault();
+    const r = view.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    iz.tx = mx - (mx - iz.tx) * f; iz.ty = my - (my - iz.ty) * f; iz.s *= f; applyImg(); drawPins();
+  }, { passive: false });
+  view.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, tx: iz.tx, ty: iz.ty };
+    moved = false; view.classList.add('drag'); view.setPointerCapture(e.pointerId); });
+  view.addEventListener('pointermove', (e) => { if (!drag) return;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) moved = true;
+    iz.tx = drag.tx + (e.clientX - drag.x); iz.ty = drag.ty + (e.clientY - drag.y); applyImg(); });
+  view.addEventListener('pointerup', (e) => { view.classList.remove('drag'); const wasDrag = moved; drag = null;
+    if (!wasDrag) placeObservation(e); });
+})();
 
 // ---- markers / GCP reference table ----------------------------------------
 let MARKERS = [];           // [{name, world:[x,y,z]|null, observations:[{image,u,v}]}]
