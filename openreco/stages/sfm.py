@@ -27,7 +27,7 @@ from openreco.engine.stage import Stage, register_stage
 @register_stage
 class Sfm(Stage):
     type = "sfm"
-    version = "2"  # v2: adds mapper option (incremental | global/GLOMAP)
+    version = "3"  # v3: orient sparse model upright/metric via camera GPS (orient_with_gps)
     deterministic = False
 
     def default_params(self) -> dict[str, Any]:
@@ -38,6 +38,8 @@ class Sfm(Stage):
             "max_image_size": 2000,    # downscale long edge for feature extraction
             "max_num_features": 8192,
             "use_gpu": "auto",         # auto | cpu | cuda
+            "orient_with_gps": True,   # rotate/scale the sparse model upright + metric from camera GPS
+            "ransac_max_error_m": 3.0, # RANSAC inlier threshold for the GPS orientation fit
         }
 
     def run(self, ctx: RunContext) -> StageResult:
@@ -79,6 +81,10 @@ class Sfm(Stage):
 
         best_idx = max(recons, key=lambda i: recons[i].num_reg_images())
         rec = recons[best_idx]
+        # orient the sparse model upright + metric using camera GPS (so Tie Points aren't in the
+        # arbitrary SfM gauge — matches the reference tool's "aligned" view). Georef later sets the exact CRS.
+        if ctx.params.get("orient_with_gps", True):
+            self._orient_with_gps(pycolmap, rec, data, ctx)
         # canonical single-model location for downstream stages
         model_dir = ctx.artifact_path("reconstruction") / "model"
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -175,6 +181,35 @@ class Sfm(Stage):
             pycolmap.match_spatial(database_path=db_path, device=device)
         else:
             raise ValueError(f"unknown matcher {matcher!r}")
+
+    def _orient_with_gps(self, pycolmap, rec, data, ctx) -> None:
+        """Rotate/scale the reconstruction into a local ENU frame from camera GPS, so the sparse
+        cloud is upright and metric (not in COLMAP's arbitrary gauge). No-op without enough GPS."""
+        import numpy as np
+
+        from openreco.geo.crs import geodetic_to_crs, utm_epsg_for
+        reg = {rec.image(i).name for i in rec.reg_image_ids()}
+        names, lat, lon, alt = [], [], [], []
+        for im in data["images"]:
+            if im["name"] in reg and im.get("lat") is not None and im.get("lon") is not None:
+                names.append(im["name"])
+                lat.append(im["lat"])
+                lon.append(im["lon"])
+                alt.append(im["alt"] if im.get("alt") is not None else 0.0)
+        if len(names) < 3:
+            ctx.logger.info("orient_with_gps: <3 GPS-tagged registered images; leaving SfM gauge")
+            return
+        epsg = utm_epsg_for(float(np.median(lat)), float(np.median(lon)))
+        world = geodetic_to_crs(np.array(lat), np.array(lon), np.array(alt), epsg)
+        target = world - world.mean(axis=0)          # local ENU, centered for stability
+        ransac = pycolmap.RANSACOptions(max_error=float(ctx.params["ransac_max_error_m"])
+                                        if "ransac_max_error_m" in ctx.params else 3.0)
+        sim3d = pycolmap.align_reconstruction_to_locations(rec, names, target, 3, ransac)
+        if sim3d is None:
+            ctx.logger.warning("orient_with_gps: GPS alignment failed; leaving SfM gauge")
+            return
+        rec.transform(sim3d)
+        ctx.logger.info("oriented sparse model to local ENU via %d GPS cameras (EPSG:%d)", len(names), epsg)
 
     def _export_poses(self, rec) -> dict[str, Any]:
         images = []

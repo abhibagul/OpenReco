@@ -6,9 +6,3 @@ crs = "EPSG:32613"
 id = "ingest1"
 type = "ingest"
 params = { image_dir = "C:\\Users\\abbyb\\Downloads\\example_building\\images" }
-
-[[stage]]
-id = "sfm1"
-type = "sfm"
-inputs = ["ingest1"]
-params = { max_image_size = 1600, matcher = "spatial", max_num_features = 8192, camera_mode = "auto", mapper = "incremental" }
