@@ -103,6 +103,29 @@ def test_export_endpoint(server, tmp_path):
     assert Path(body["out"]).exists()
 
 
+def test_workflows_and_operation(server):
+    base, _ = server
+    _, raw = _get(base + "/api/workflows")
+    ops = {o["op"] for o in json.loads(raw)}
+    assert {"Align Photos", "Build Dense Cloud", "Build Model"} <= ops
+    # build a layer via a familiar operation -> creates an mvs stage with translated params
+    status, body = _post(base + "/api/operation",
+                         {"op": "Build Dense Cloud", "id": "dense1", "inputs": [],
+                          "values": {"Backend": "Portable (any GPU/CPU)"}})
+    assert status == 200 and body["ok"]
+    _, praw = _get(base + "/api/project")
+    layer = next(layer for layer in json.loads(praw)["layers"] if layer["id"] == "dense1")
+    assert layer["type"] == "mvs" and layer["params"]["dense_backend"] == "planesweep"
+
+
+def test_frontend_has_workflow_ui(server):
+    base, _ = server
+    _, appjs = _get(base + "/app.js")
+    assert b"loadWorkflows" in appjs and b"/api/operation" in appjs
+    _, html = _get(base + "/")
+    assert b"Workflow" in html and b"modal" in html
+
+
 def test_desktop_mode_resolution(monkeypatch):
     from openreco.ui import desktop
     monkeypatch.setattr(desktop, "_have_webview", lambda: True)

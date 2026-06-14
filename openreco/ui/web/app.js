@@ -174,5 +174,71 @@ function setDot(id, cls) {
   const L = PROJECT.layers.find(x => x.id === id); if (L) L.status = cls; renderLayers();
 }
 
+// ---- workflow menu + build dialog -----------------------------------------
+let WORKFLOWS = [];
+async function loadWorkflows() {
+  WORKFLOWS = await (await fetch('/api/workflows')).json();
+  const drop = $('wfDrop'); drop.innerHTML = '';
+  WORKFLOWS.forEach(op => {
+    const d = document.createElement('div');
+    d.innerHTML = `${op.op}<div class="t">${op.desc}</div>`;
+    d.onclick = () => { drop.classList.add('hidden'); openOp(op); };
+    drop.appendChild(d);
+  });
+}
+$('wfBtn').onclick = () => $('wfDrop').classList.toggle('hidden');
+document.addEventListener('click', e => {
+  if (!e.target.closest('.menu')) $('wfDrop').classList.add('hidden');
+});
+
+function openOp(op) {
+  $('mTitle').textContent = op.op; $('mDesc').textContent = op.desc;
+  // default id: <stagetype><n>
+  const base = op.stage; let n = 1;
+  const ids = new Set(PROJECT.layers.map(l => l.id));
+  while (ids.has(base + n)) n++;
+  $('mId').value = base + n;
+  // inputs: checkboxes of existing layers
+  const inb = $('mInputs'); inb.innerHTML = PROJECT.layers.length ? '' : '<span class="muted">none yet</span>';
+  PROJECT.layers.forEach(l => {
+    const w = document.createElement('label'); w.className = 'chk';
+    w.innerHTML = `<input type="checkbox" value="${l.id}"> ${l.id} <span class="muted">(${l.type})</span>`;
+    inb.appendChild(w);
+  });
+  // fields
+  const fb = $('mFields'); fb.innerHTML = '';
+  op.fields.forEach(f => {
+    const lab = document.createElement('label'); lab.textContent = f.label; fb.appendChild(lab);
+    let inp;
+    if (f.type === 'enum') {
+      inp = document.createElement('select');
+      Object.keys(f.options).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = k; inp.appendChild(o); });
+      inp.value = f.default;
+    } else if (f.type === 'bool') {
+      inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!f.default;
+    } else { inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any'; inp.value = f.default; }
+    inp.dataset.label = f.label; inp.dataset.type = f.type; fb.appendChild(inp);
+  });
+  $('mOk').onclick = () => submitOp(op);
+  $('modal').classList.remove('hidden');
+}
+$('mCancel').onclick = () => $('modal').classList.add('hidden');
+
+async function submitOp(op) {
+  const id = $('mId').value.trim(); if (!id) return;
+  const inputs = [...$('mInputs').querySelectorAll('input:checked')].map(c => c.value);
+  const values = {};
+  $('mFields').querySelectorAll('[data-label]').forEach(inp => {
+    values[inp.dataset.label] = inp.dataset.type === 'bool' ? inp.checked
+      : inp.dataset.type === 'enum' ? inp.value : parseFloat(inp.value);
+  });
+  const r = await fetch('/api/operation', { method:'POST',
+    body: JSON.stringify({ op: op.op, id, inputs, values }) });
+  const j = await r.json();
+  if (r.ok) { $('modal').classList.add('hidden'); log(`built ${id} (${op.op})`);
+    await loadProject(); selectLayer(id); }
+  else log(`build error: ${j.error}`);
+}
+
 // ---- boot ----
-(async () => { resize(); await loadStages(); await loadProject(); })();
+(async () => { resize(); await loadStages(); await loadWorkflows(); await loadProject(); })();

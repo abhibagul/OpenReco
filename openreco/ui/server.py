@@ -135,6 +135,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(202 if started else 409, {"started": started})
         if u.path == "/api/stage":
             return self._add_stage(body)
+        if u.path == "/api/operation":
+            return self._operation(body)
         if u.path == "/api/export":
             return self._export(body)
         return self._send(404, {"error": "not found"})
@@ -162,6 +164,16 @@ class _Handler(BaseHTTPRequestHandler):
                                              inputs=body.get("inputs"), params=body.get("params"))
             self.state.project.save()
             return self._send(200, {"ok": True})
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": repr(exc)})
+
+    def _operation(self, body):
+        """Add/update a layer from a familiar workflow operation (Workflow menu)."""
+        from openreco.workflow import to_stage
+        try:
+            spec = to_stage(body["op"], body.get("values"))
+            return self._add_stage({"id": body["id"], "type": spec["stage_type"],
+                                    "inputs": body.get("inputs", []), "params": spec["params"]})
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})
 

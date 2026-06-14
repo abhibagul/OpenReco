@@ -37,14 +37,27 @@
   input[type=checkbox]{ width:auto; }
   #log { font-family:ui-monospace,monospace; font-size:11px; white-space:pre-wrap; color:var(--muted);
          margin-top:8px; max-height:30vh; overflow:auto; border-top:1px solid var(--line); padding-top:6px; }
-  .row { display:flex; gap:6px; align-items:center; }
+  .row { display:flex; gap:6px; align-items:center; } .sp { flex:1; }
   .muted { color:var(--muted); }
+  .menu { position:relative; }
+  .dropdown { position:absolute; top:32px; left:0; background:var(--panel); border:1px solid var(--line);
+              border-radius:6px; z-index:30; min-width:210px; padding:4px; box-shadow:0 8px 24px #0007; }
+  .dropdown div { padding:7px 10px; cursor:pointer; border-radius:4px; }
+  .dropdown div:hover { background:#1a2230; } .dropdown .t { color:var(--muted); font-size:11px; }
+  .hidden { display:none; }
+  .modal { position:fixed; inset:0; background:#0009; display:flex; align-items:center;
+           justify-content:center; z-index:50; }
+  .dialog { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px;
+            width:400px; max-height:82vh; overflow:auto; }
+  .dialog h2 { font-size:15px; margin:0 0 4px; } .chk { display:flex; gap:6px; align-items:center; margin:3px 0; }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="top">
     <b>OpenReco</b> <span id="pname" class="muted"></span>
+    <div class="menu"><button id="wfBtn">＋ Workflow ▾</button>
+      <div id="wfDrop" class="dropdown hidden"></div></div>
     <span class="sp"></span>
     <span id="status" class="muted"></span>
     <button class="run" id="runBtn">▶ Run pipeline</button>
@@ -65,6 +78,14 @@
     <div id="log"></div>
   </div>
 </div>
+<div id="modal" class="modal hidden"><div class="dialog">
+  <h2 id="mTitle"></h2><div id="mDesc" class="muted"></div>
+  <label>Layer id</label><input id="mId" />
+  <h3>Inputs</h3><div id="mInputs"></div>
+  <h3>Options</h3><div id="mFields"></div>
+  <div class="row" style="margin-top:14px"><button id="mCancel">Cancel</button><span class="sp"></span>
+    <button class="run" id="mOk">Build</button></div>
+</div></div>
 <script type="importmap">
 { "imports": {
   "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
