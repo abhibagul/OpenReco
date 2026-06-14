@@ -62,7 +62,13 @@ CPU-only, so dense MVS is driven by a CUDA-enabled COLMAP binary. Point `OPENREC
 `mvs` stage then runs real dense reconstruction automatically and falls back to the sparse cloud
 when no GPU is present.
 
+**Desktop UI:** `openreco ui [project]` launches a local web app — a **layer tree** (the DAG's
+stages with live status), **schema-driven parameter panels**, an **Add-layer** palette, a **Run**
+button with live progress, and a **3D viewport** (three.js). Editing edits the manifest; the
+content-addressed cache gives undo-via-diff + cheap re-runs.
+
 **CLI:** `run` · `resume` · `diff a.toml b.toml` (predict recompute) · `report` · `stages` ·
+`batch <dir>` · `export <product> --to <fmt>` · `ui` ·
 `volume <dsm.tif> --base min|mean|<elev>` · `profile <dsm.tif> --from X,Y --to X,Y`.
 
 **Python API** (mirrors the CLI 1:1):
