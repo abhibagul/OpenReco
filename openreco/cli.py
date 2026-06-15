@@ -147,6 +147,94 @@ def cmd_ui(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(_args: argparse.Namespace) -> int:
+    """Print the compute capability probe + dependency status (install diagnostics)."""
+    import importlib
+    import platform
+
+    from openreco import __version__, compute
+    print(f"openreco {__version__}  ·  python {platform.python_version()}  ·  "
+          f"{platform.system()} {platform.machine()}")
+
+    def mark(ok: bool) -> str:
+        return "[ok]" if ok else "[--]"
+
+    d = compute.describe()
+    print("\nCompute")
+    gpu = d["gpu_name"]
+    extra = (f"  ·  CUDA {d['cuda_version']}  ·  {d['vram_mb'] / 1024:.1f} GB"
+             if gpu and d.get("vram_mb") else "")
+    print(f"  {mark(bool(gpu))} GPU: {gpu or 'none detected'}{extra}")
+    print(f"  {mark(d['colmap_cuda'])} dense MVS: CUDA COLMAP "
+          + (f"({d['colmap']})" if d['colmap'] else "binary not found"))
+    print(f"  {mark(bool(d['pycolmap_version']))} SfM / matching: pycolmap {d['pycolmap_version'] or '(missing)'}")
+    print(f"  {mark(d['torch_device'] is not None)} torch {d['torch_version'] or '(missing)'} "
+          f"· device {d['torch_device'] or '-'}")
+    print(f"     CPU: {d['cpu_count']} cores  ·  auto dense backend: {d['auto_dense_backend']}")
+
+    print("\nDependencies (the 'slice' extra)")
+    mods = ["pycolmap", "pyproj", "rasterio", "scipy", "laspy", "numpy", "PIL",
+            "xatlas", "fast_simplification", "skimage"]
+    missing = []
+    for m in mods:
+        try:
+            importlib.import_module(m)
+            ok = True
+        except Exception:  # noqa: BLE001
+            ok = False
+            missing.append(m)
+        print(f"  {mark(ok)} {m}")
+    try:
+        importlib.import_module("webview")
+        print("  [ok] pywebview (native desktop window)")
+    except Exception:  # noqa: BLE001
+        print("  [--] pywebview (optional — the UI falls back to a browser)")
+
+    if missing:
+        print(f"\n{len(missing)} reconstruction dep(s) missing — install with:  "
+              "pip install 'openreco[slice]'")
+    else:
+        print("\nall reconstruction dependencies present.")
+    return 0
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    """Scaffold a new project. With --images, wires the full (validated) photogrammetry chain so
+    `openreco run` / `openreco ui` work out of the box; otherwise creates an empty project."""
+    from openreco.api import Project
+    from openreco.workflow import validate_pipeline
+
+    p = Path(args.project)
+    if (p / "project.toml").exists() and not args.force:
+        print(f"project already exists at {p} (use --force to overwrite)", file=sys.stderr)
+        return 1
+    epsg = 0
+    if args.crs and str(args.crs).upper().startswith("EPSG:"):
+        try:
+            epsg = int(str(args.crs).split(":", 1)[1])
+        except ValueError:
+            epsg = 0
+    proj = Project.create(p, name=args.name or p.name, crs=args.crs)
+    if args.images:
+        (proj.add_stage("ingest", "ingest", params={"image_dir": args.images})
+             .add_stage("sfm", "sfm", inputs=["ingest"])
+             .add_stage("georef", "georef", inputs=["sfm", "ingest"], params={"crs_epsg": epsg})
+             .add_stage("mvs", "mvs", inputs=["ingest", "georef"])
+             .add_stage("mesh", "mesh", inputs=["mvs"])
+             .add_stage("texture", "texture", inputs=["mesh", "georef", "ingest"])
+             .add_stage("dsm", "dsm", inputs=["mvs"])
+             .add_stage("ortho", "ortho", inputs=["mvs"]))
+    proj.save()
+    issues = [i for i in validate_pipeline(proj.manifest.stages) if i["severity"] == "error"]
+    print(f"created project at {p / 'project.toml'}"
+          + (f" with a {len(proj.manifest.stages)}-stage pipeline" if args.images else " (empty)"))
+    if issues:
+        print(f"warning: {len(issues)} wiring issue(s) — run `openreco ui` and check", file=sys.stderr)
+    print(f"next:  openreco {'run' if args.images else 'ui'} {p}"
+          + ("" if args.images else "    # then Add Photos in the UI"))
+    return 0
+
+
 def cmd_crs(args: argparse.Namespace) -> int:
     from openreco.geo.crs import crs_info, search_crs
 
@@ -260,6 +348,17 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--out", help="output path (default: <src stem>.<fmt>)")
     pe.add_argument("--crs", help="reproject raster output to this EPSG (output-CRS selection)")
     pe.set_defaults(func=cmd_export)
+
+    pdoc = sub.add_parser("doctor", help="print compute (GPU/COLMAP/torch) + dependency status")
+    pdoc.set_defaults(func=cmd_doctor)
+
+    pin = sub.add_parser("init", help="scaffold a new project (optionally a full pipeline)")
+    pin.add_argument("project", help="directory to create the project in")
+    pin.add_argument("--name", help="project name (default: directory name)")
+    pin.add_argument("--crs", help="coordinate system, e.g. EPSG:32613")
+    pin.add_argument("--images", help="image folder — wires the full photogrammetry pipeline")
+    pin.add_argument("--force", action="store_true", help="overwrite an existing project.toml")
+    pin.set_defaults(func=cmd_init)
 
     pu = sub.add_parser("ui", help="launch the UI (native window if pywebview present, else browser)")
     pu.add_argument("project", nargs="?", default=".", help="project dir/toml (created if absent)")

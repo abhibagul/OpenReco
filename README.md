@@ -48,13 +48,24 @@ reproducible and auditable). Same engine drives the **CLI** and the **Python API
 
 ```bash
 pip install -e ".[slice]"            # permissive deps: pycolmap, pyproj, rasterio, scipy, laspy, pillow
+openreco doctor                      # check GPU / CUDA-COLMAP / torch / deps are all present
 python scripts/fetch_sample.py       # 11-image Sceaux Castle sample (~13 MB)
 openreco run samples/sceaux          # photos -> shareable bundle in samples/sceaux/output/
 cd samples/sceaux/output && python serve.py   # then open http://localhost:8000/
 ```
 
-For a georeferenced UAV run, point a `project.toml` at a folder of GPS-tagged images (see
-[aerialdata/project.toml](aerialdata/project.toml)) and `openreco run <dir>`.
+**Start your own project** — `openreco init` scaffolds a correctly-wired, validation-clean
+pipeline (ingest → sfm → georef → mvs → mesh → texture → dsm → ortho):
+
+```bash
+openreco init myproject --images /path/to/photos --crs EPSG:32613
+openreco run myproject               # headless, or:
+openreco ui  myproject               # interactive desktop/web UI
+```
+
+`openreco doctor` prints the same compute probe shown in the UI's **Preferences ▸ Compute**, and
+the **Run** button (and `init`) validate the stage wiring up front, so mis-wirings are reported
+with fixes instead of failing mid-run.
 
 **GPU dense reconstruction (NVIDIA):** PatchMatch stereo is CUDA-only and the PyPI pycolmap is
 CPU-only, so dense MVS is driven by a CUDA-enabled COLMAP binary. Point `OPENRECO_COLMAP` at a
