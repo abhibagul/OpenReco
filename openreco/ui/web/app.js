@@ -1019,6 +1019,47 @@ $('prefsCancel').onclick = () => $('prefsModal').classList.add('hidden');
 $('prefsReset').onclick = () => { PREFS = { ...PREFS_DEFAULTS }; openPrefs(); };
 function savePrefs() { try { localStorage.setItem('openreco.prefs', JSON.stringify(PREFS)); } catch (e) { /* ignore */ } }
 
+// ---- about + credits ------------------------------------------------------
+function showAbout() {
+  $('aboutVer').textContent = 'version ' + ((PROJECT && PROJECT.version) || '');
+  $('aboutModal').classList.remove('hidden');
+}
+$('aboutClose').onclick = () => $('aboutModal').classList.add('hidden');
+$('aboutCredits').onclick = () => { $('aboutModal').classList.add('hidden'); showCredits(); };
+$('creditsClose').onclick = () => $('creditsModal').classList.add('hidden');
+// the open-source projects OpenReco bundles / builds on (name, license, what-for, url)
+const CREDITS = [
+  ['COLMAP', 'BSD', 'Structure-from-Motion & dense MVS', 'https://colmap.github.io'],
+  ['pycolmap', 'BSD', 'COLMAP Python bindings', 'https://github.com/colmap/colmap'],
+  ['three.js', 'MIT', '3D viewport / WebGL rendering', 'https://threejs.org'],
+  ['Leaflet', 'BSD-2', 'Web map view', 'https://leafletjs.com'],
+  ['CesiumJS', 'Apache-2.0', '3D Tiles streaming', 'https://cesium.com/cesiumjs'],
+  ['OpenStreetMap', 'ODbL', 'Map basemap tiles — © OpenStreetMap contributors', 'https://www.openstreetmap.org/copyright'],
+  ['PROJ', 'MIT', 'Coordinate transforms', 'https://proj.org'],
+  ['pyproj', 'MIT', 'PROJ Python bindings', 'https://pyproj4.github.io/pyproj'],
+  ['GDAL', 'MIT/X11', 'Geospatial raster I/O', 'https://gdal.org'],
+  ['rasterio', 'BSD-3', 'GeoTIFF / DSM / ortho I/O', 'https://rasterio.readthedocs.io'],
+  ['NumPy', 'BSD', 'Numerical arrays', 'https://numpy.org'],
+  ['SciPy', 'BSD', 'Spatial / linear algebra', 'https://scipy.org'],
+  ['scikit-image', 'BSD', 'Image processing (panorama)', 'https://scikit-image.org'],
+  ['Pillow', 'HPND', 'Image & EXIF reading', 'https://python-pillow.org'],
+  ['laspy', 'BSD-2', 'LAS/LAZ point-cloud I/O', 'https://laspy.readthedocs.io'],
+  ['xatlas', 'MIT', 'UV unwrapping (texturing)', 'https://github.com/jpcy/xatlas'],
+  ['fast-simplification', 'MIT', 'Mesh decimation', 'https://github.com/pyvista/fast-simplification'],
+  ['pywebview', 'BSD-3', 'Native desktop window', 'https://pywebview.flowrl.com'],
+  ['PyInstaller', 'GPL + bootloader exception', 'Standalone executable build', 'https://pyinstaller.org'],
+];
+function showCredits() {
+  const el = $('creditsList'); el.innerHTML = '';
+  CREDITS.forEach(([name, lic, what, url]) => {
+    const row = document.createElement('div'); row.className = 'credit';
+    row.innerHTML = `<a href="${url}" target="_blank" rel="noopener">${name}</a>`
+      + `<span class="lic">${lic}</span><span class="what">${what}</span>`;
+    el.appendChild(row);
+  });
+  $('creditsModal').classList.remove('hidden');
+}
+
 // ---- data + workspace tree ------------------------------------------------
 async function loadStages() {
   STAGES = {}; for (const s of await (await fetch('/api/stages')).json()) STAGES[s.type] = s;
@@ -1495,7 +1536,7 @@ async function loadWorkflows() {
   WORKFLOWS = await (await fetch('/api/workflows')).json();
   // File menu
   $('m-file').innerHTML = '';
-  menuEntry('m-file', 'New project…', newProject, null, 'file-plus');
+  menuEntry('m-file', 'Open / new project…', newProject, 'browse to a project folder (opens it, or creates one there)', 'folder-plus');
   menuEntry('m-file', 'Save project', saveProject, null, 'save');
   menuSep('m-file');
   menuEntry('m-file', 'New chunk', addChunk, null, 'folder-plus');
@@ -1532,7 +1573,9 @@ async function loadWorkflows() {
   menuEntry('m-tools', 'Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); }, null, 'pin');
   // Help
   $('m-help').innerHTML = '';
-  menuEntry('m-help', 'About OpenReco', () => log('OpenReco — open, reproducible photogrammetry. Clean-room; permissive OSS.'), null, 'info');
+  menuEntry('m-help', 'About OpenReco', showAbout, null, 'info');
+  menuEntry('m-help', 'Credits & licenses', showCredits, 'open-source projects OpenReco is built on', 'layers');
+  menuEntry('m-help', 'System / compute info', () => { openPrefs(); }, 'GPU, COLMAP & dependency status', 'wrench');
 }
 
 // ---- quality / speed presets ----------------------------------------------
@@ -1551,19 +1594,19 @@ async function loadPresets() {
 }
 
 // ---- project: new / save --------------------------------------------------
-async function newProject() {
-  const path = prompt('New project folder (full path):', '');
-  if (!path) return;
-  const name = prompt('Project name:', path.split(/[\\/]/).filter(Boolean).pop()) || undefined;
-  const r = await fetch('/api/new_project', { method:'POST', body: JSON.stringify({ path, name }) });
+function newProject() {                   // browse to a folder; new_project opens it or creates one there
+  pickFolder(path => openProjectAt(path));
+}
+async function openProjectAt(path) {
+  const r = await fetch('/api/new_project', { method: 'POST', body: JSON.stringify({ path }) });
   const j = await r.json();
-  if (!r.ok) { log('new project error: ' + j.error); return; }
+  if (!r.ok) { log('open project error: ' + j.error, 'err'); return; }
   // reset all client state for the freshly loaded project
   objects.forEach(o => scene.remove(o)); objects.clear(); visible.clear(); selected = null;
   ACTIVE_CHUNK = 'Chunk 1'; MARKERS = []; activeMarker = null;
-  await loadProject(); await loadMarkers(); await loadPhotos();
+  await loadProject(); await loadMarkers(); await loadPhotos(); await loadGeo(); await loadMeasurements();
   $('pname') && ($('pname').textContent = j.name);
-  log(`new project: ${j.name} @ ${j.project_dir}`);
+  log(`opened project: ${j.name} @ ${j.project_dir}`, 'ok');
 }
 async function saveProject() {
   const j = await (await fetch('/api/save_project', { method:'POST', body: '{}' })).json();
@@ -2241,12 +2284,32 @@ $('mCancel').onclick = () => $('modal').classList.add('hidden');
 // ---- file picker (Add Photos: navigate folders, multi-select images) ------
 let brSelected = new Map();    // path -> name
 let brCurrent = null;
-async function openBrowse(layerId) {
+let folderPickCb = null;                 // set while the browser is in "pick a folder" mode
+function setBrowseMode(folder) {
+  folderPickCb = folder ? folderPickCb : null;
+  $('browseModal').querySelector('h2').textContent = folder ? 'Select a project folder' : 'Select images';
+  $('brUseFolder').style.display = folder ? '' : 'none';
+  $('brAdd').style.display = folder ? 'none' : '';
+  ['brSelRow', 'brImages', 'brAlignRow'].forEach(id => { $(id).style.display = folder ? 'none' : ''; });
+}
+async function openBrowse(layerId) {     // Add Photos: pick image files
   $('browseModal').dataset.layerId = layerId || '';
   brSelected = new Map();
+  setBrowseMode(false);
   $('browseModal').classList.remove('hidden');
   await browseTo(brCurrent);             // resume last dir, or drives/root
 }
+function pickFolder(cb) {                 // open the browser to choose a single folder
+  folderPickCb = cb;
+  setBrowseMode(true);
+  $('browseModal').classList.remove('hidden');
+  browseTo(brCurrent);
+}
+$('brUseFolder').onclick = () => {
+  const cb = folderPickCb; const dir = brCurrent;
+  $('browseModal').classList.add('hidden'); setBrowseMode(false);
+  if (cb && dir) cb(dir);
+};
 async function browseTo(path) {
   const url = '/api/browse' + (path ? '?path=' + encodeURIComponent(path) : '');
   const d = await (await fetch(url)).json();

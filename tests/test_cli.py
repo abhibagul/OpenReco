@@ -72,6 +72,19 @@ def test_bootstrap_noop_when_all_present(monkeypatch, capsys):
     assert "already installed" in capsys.readouterr().out
 
 
+def test_no_args_launches_ui(monkeypatch):
+    # double-click / no command -> open the GUI (cmd_ui), not an argparse error
+    import openreco.cli as cli
+    called = {}
+
+    def fake_ui(args):
+        called["ran"] = True
+        return 0
+    monkeypatch.setattr(cli, "cmd_ui", fake_ui)
+    assert cli.main([]) == 0
+    assert called.get("ran")
+
+
 def test_ui_creates_project_when_manifest_absent(tmp_path, monkeypatch):
     # `openreco ui <dir>` on a folder without project.toml must create it, not crash
     import openreco.ui.desktop as desktop

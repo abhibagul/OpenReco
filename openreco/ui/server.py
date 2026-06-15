@@ -222,8 +222,9 @@ class AppState:
                 "status": run.get("status"), "metrics": run.get("metrics", {}),
                 "artifacts": run.get("artifacts", {}), "key": keys.get(s.id, {}).get("key"),
             })
+        from openreco import __version__
         return {"name": m.name, "crs": m.crs, "project_dir": str(m.project_dir),
-                "chunks": m.chunk_names(), "layers": layers}
+                "chunks": m.chunk_names(), "layers": layers, "version": __version__}
 
     def images_for_chunk(self, chunk: str | None) -> dict:
         """Source images of a chunk's ingest layer(s) — for the Photos pane + GCP picking.

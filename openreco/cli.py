@@ -159,10 +159,12 @@ def cmd_ui(args: argparse.Namespace) -> int:
 
     _register_stages()
 
+    # no project given (e.g. double-clicked the app) -> a friendly default workspace in the home dir
+    project = args.project or str(Path.home() / "OpenReco")
     # open an existing project (a dir with project.toml, or the toml itself), else create a new one
-    path = Path(args.project)
+    path = Path(project)
     manifest = path if path.suffix == ".toml" else path / "project.toml"
-    proj = Project.open(args.project) if manifest.is_file() else Project.create(args.project)
+    proj = Project.open(project) if manifest.is_file() else Project.create(project)
     mode = "browser" if args.browser else "window" if args.window else "auto"
     launch(proj, host=args.host, port=args.port, mode=mode, open_browser=not args.no_browser)
     return 0
@@ -409,7 +411,8 @@ def build_parser() -> argparse.ArgumentParser:
     pin.set_defaults(func=cmd_init)
 
     pu = sub.add_parser("ui", help="launch the UI (native window if pywebview present, else browser)")
-    pu.add_argument("project", nargs="?", default=".", help="project dir/toml (created if absent)")
+    pu.add_argument("project", nargs="?", default=None,
+                    help="project dir/toml (created if absent; defaults to ~/OpenReco)")
     pu.add_argument("--host", default="127.0.0.1")
     pu.add_argument("--port", type=int, default=8000)
     pu.add_argument("--window", action="store_true", help="force a native desktop window")
@@ -434,7 +437,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    raw = list(argv) if argv is not None else sys.argv[1:]
+    if not raw:                       # double-clicked / launched with no command -> open the GUI
+        raw = ["ui"]
+    args = parser.parse_args(raw)
     _setup_logging(getattr(args, "verbose", False))
     return args.func(args)
 

@@ -696,9 +696,12 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"togglePhoto" in appjs and b"movePhoto" in appjs and b"estimateQuality" in appjs  # photo cluster
     assert b"/api/compute" in appjs and b"renderCompute" in appjs        # compute/GPU status panel
     assert b"/api/validate" in appjs and b"checkPipeline" in appjs        # pre-run pipeline validation
+    assert b"showCredits" in appjs and b"pickFolder" in appjs            # credits + folder-pick
     _, html2 = _get(base + "/")
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"#300a24" in html2                                           # Ubuntu-style console
+    assert b"abhibagul" in html2 and b"Abhishek Bagul" in html2          # About: developer credit
+    assert b"brUseFolder" in html2                                       # folder-pick for open/new project
 
 
 def test_desktop_mode_resolution(monkeypatch):
