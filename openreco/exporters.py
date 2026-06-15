@@ -260,10 +260,16 @@ def _vector_dxf(g, out):
             lines.extend(["10", f"{c[0]:.6f}", "20", f"{c[1]:.6f}"])
             if len(c) > 2:
                 lines.extend(["38", f"{c[2]:.6f}"])       # elevation
+    def point(c):
+        lines.extend(["0", "POINT", "8", "0", "10", f"{c[0]:.6f}", "20", f"{c[1]:.6f}"])
+        if len(c) > 2:
+            lines.extend(["30", f"{c[2]:.6f}"])
     for feat in g.get("features", []):
         geom = feat.get("geometry", {})
         t = geom.get("type")
-        if t == "LineString":
+        if t == "Point":
+            point(geom["coordinates"])
+        elif t == "LineString":
             poly(geom["coordinates"], False)
         elif t == "MultiLineString":
             for ls in geom["coordinates"]:

@@ -734,17 +734,19 @@ def test_measurements_export_formats(server):
     base, _ = server
     ms = [{"id": "a", "type": "area", "name": "Pad", "color": 2, "chunk": "Chunk 1",
            "points": [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
-           "result": {"area_m2": 100.0, "perimeter_m": 40.0}}]
+           "result": {"area_m2": 100.0, "perimeter_m": 40.0}},
+          {"id": "n", "type": "note", "name": "inlet pipe", "color": 3, "chunk": "Chunk 1",
+           "points": [[5, 5, 2]], "result": {}}]
     _post(base + "/api/measurements", {"measurements": ms})
     _, raw = _get(base + "/api/measurements_export?fmt=geojson")
     gj = json.loads(raw)
     assert gj["type"] == "FeatureCollection"
-    assert gj["features"][0]["geometry"]["type"] == "Polygon"
-    assert gj["features"][0]["properties"]["area_m2"] == 100.0
+    geoms = {f["properties"]["name"]: f["geometry"]["type"] for f in gj["features"]}
+    assert geoms["Pad"] == "Polygon" and geoms["inlet pipe"] == "Point"
     _, raw = _get(base + "/api/measurements_export?fmt=csv")
-    assert b"area_m2" in raw and b"Pad" in raw
+    assert b"area_m2" in raw and b"Pad" in raw and b"inlet pipe" in raw
     _, raw = _get(base + "/api/measurements_export?fmt=dxf")
-    assert b"LWPOLYLINE" in raw
+    assert b"LWPOLYLINE" in raw and b"POINT" in raw
 
 
 def test_measure_volume_missing_layer_errors(server):

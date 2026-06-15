@@ -42,13 +42,18 @@ def measurements_to_geojson(measurements: list[dict], epsg: int | None = None,
     feats = []
     for m in measurements:
         pts = m.get("points") or []
-        if len(pts) < 2:
+        t = m.get("type")
+        if t == "note":
+            if not pts:
+                continue
+            geom = {"type": "Point", "coordinates": _coords([pts[0]], epsg, origin)[0]}
+        elif len(pts) < 2:
             continue
-        coords = _coords(pts, epsg, origin)
-        if m.get("type") in ("area", "vol"):
+        elif t in ("area", "vol"):
+            coords = _coords(pts, epsg, origin)
             geom = {"type": "Polygon", "coordinates": [coords + [coords[0]]]}
         else:
-            geom = {"type": "LineString", "coordinates": coords}
+            geom = {"type": "LineString", "coordinates": _coords(pts, epsg, origin)}
         props = {"name": m.get("name"), "type": m.get("type")}
         for k, v in (m.get("result") or {}).items():
             if isinstance(v, (int, float, str)):

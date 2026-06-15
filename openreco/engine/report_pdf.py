@@ -190,10 +190,13 @@ def _measure_value(m: dict) -> str:
         return f"net {r.get('net_m3', '?')} m³  ·  cut {r.get('cut_m3', '?')} / fill {r.get('fill_m3', '?')}"
     if t == "prof":
         return f"{r.get('length_m', '?')} m  ·  Δ {r.get('relief_m', '?')} m  ·  {r.get('slope_pct', '?')}%"
+    if t == "note":
+        return "annotation"
     return "—"
 
 
-_MEASURE_LABEL = {"dist": "distance", "area": "area", "vol": "volume", "prof": "profile"}
+_MEASURE_LABEL = {"dist": "distance", "area": "area", "vol": "volume", "prof": "profile",
+                  "note": "note"}
 
 
 def _measurements_section(doc: _Doc, measurements):

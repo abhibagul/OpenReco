@@ -601,7 +601,7 @@ const MCOLORS = [0x5694ff, 0xf9e2af, 0xa6e3a1, 0xf38ba8, 0xcba6f7, 0xfab387, 0x9
 let measurements = [];            // committed measurements (each: id,type,name,color,pts,group,visible,result,value)
 let draft = null;                 // measurement currently being drawn
 let measureMode = null;           // null | 'dist' | 'area' | 'vol' (active tool)
-const mSeq = { dist: 0, area: 0, vol: 0, prof: 0 };
+const mSeq = { dist: 0, area: 0, vol: 0, prof: 0, note: 0 };
 const raycaster = new THREE.Raycaster(); raycaster.params.Points.threshold = 0.5;
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 const fmt = (n, d = 2) => Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
@@ -637,6 +637,12 @@ function buildMeasure(m, isDraft) {
   m.group.clear();
   const col = m.color, pts = m.pts, closed = m.type === 'area' || m.type === 'vol';
   if (!pts.length) return;
+  if (m.type === 'note') {                                                         // annotation: pin + text
+    m.group.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints([pts[0]]),
+      new THREE.PointsMaterial({ size: 11, sizeAttenuation: false, color: col })));
+    const lbl = mkLabel(m.name, 'note', col); lbl.position.copy(pts[0]); m.group.add(lbl);
+    return;
+  }
   m.group.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts),     // vertex handles
     new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, color: col })));
   if (pts.length >= 2) {                                                           // connecting line
@@ -682,9 +688,10 @@ function setTool(type) {
   $('areaBtn').classList.toggle('on', type === 'area');
   $('volBtn').classList.toggle('on', type === 'vol');
   $('profBtn').classList.toggle('on', type === 'prof');
+  $('noteBtn').classList.toggle('on', type === 'note');
   $('volBase').style.display = type === 'vol' ? '' : 'none';
 }
-function defName(type) { mSeq[type]++; return { dist: 'Distance', area: 'Area', vol: 'Volume', prof: 'Profile' }[type] + ' ' + mSeq[type]; }
+function defName(type) { mSeq[type]++; return { dist: 'Distance', area: 'Area', vol: 'Volume', prof: 'Profile', note: 'Note' }[type] + ' ' + mSeq[type]; }
 function startMeasure(type) {
   if (draft) cancelDraft();
   if (measureMode === type) { setTool(null); $('measure').classList.remove('show'); return; }   // toggle off
@@ -696,9 +703,10 @@ function startMeasure(type) {
 }
 function hint() {
   if (!draft) { $('measure').classList.remove('show'); return; }
-  const n = draft.pts.length, need = (draft.type === 'dist' || draft.type === 'prof') ? 2 : 3;
+  const n = draft.pts.length, need = draft.type === 'note' ? 1 : (draft.type === 'dist' || draft.type === 'prof') ? 2 : 3;
   let t;
-  if (draft.type === 'dist') t = n < 1 ? 'Click points to measure distance' : `${fmt(polylineLen(draft.pts))} m — double-click / Enter to finish`;
+  if (draft.type === 'note') t = 'Click a point on the model to drop an annotation';
+  else if (draft.type === 'dist') t = n < 1 ? 'Click points to measure distance' : `${fmt(polylineLen(draft.pts))} m — double-click / Enter to finish`;
   else if (draft.type === 'prof') t = n < 2 ? 'Click points along the section line (≥2)' : `${fmt(polylineLen(draft.pts))} m path — double-click / Enter to draw profile`;
   else t = n < need ? `Outline the ${draft.type === 'vol' ? 'footprint' : 'area'} (${n} pt) — Esc cancels` : `${fmt(polygonArea(draft.pts))} m² — double-click / Enter to finish`;
   if (n) t += `   ·   ${enLabel(draft.pts.at(-1))}`;     // live geo coordinate of the last point
@@ -711,7 +719,7 @@ function cancelDraft() {
 }
 async function finishDraft() {
   if (!draft) return;
-  const need = (draft.type === 'dist' || draft.type === 'prof') ? 2 : 3;
+  const need = draft.type === 'note' ? 1 : (draft.type === 'dist' || draft.type === 'prof') ? 2 : 3;
   // the finishing double-click's 2nd press adds a duplicate vertex — drop coincident trailing points
   while (draft.pts.length > need && draft.pts.at(-1).distanceToSquared(draft.pts.at(-2)) < 1e-4) draft.pts.pop();
   if (draft.pts.length < need) { log(`measurement needs at least ${need} points`, 'warn'); return; }
@@ -753,6 +761,7 @@ $('distBtn').onclick = () => startMeasure('dist');
 $('areaBtn').onclick = () => startMeasure('area');
 $('volBtn').onclick = () => startMeasure('vol');
 $('profBtn').onclick = () => startMeasure('prof');
+$('noteBtn').onclick = () => startMeasure('note');
 $('volBase').onchange = () => { if (draft) draft.volBase = $('volBase').value; };
 $('clearMeasBtn').onclick = () => clearAllMeasures();
 renderer.domElement.addEventListener('pointerdown', (e) => {
@@ -761,6 +770,11 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!hit) return;
   if (draft.type === 'vol' || draft.type === 'prof') draft.layerId = layerIdForObject(hit.object) || draft.layerId;
   draft.pts.push(hit.point.clone()); buildMeasure(draft, true); hint();
+  if (draft.type === 'note') {                       // a note is one point + text, committed at once
+    const text = prompt('Annotation text:', '');
+    if (text === null || !text.trim()) { cancelDraft(); return; }
+    draft.name = text.trim(); finishDraft();
+  }
 });
 renderer.domElement.addEventListener('dblclick', (e) => { if (draft) { e.preventDefault(); finishDraft(); } });
 addEventListener('keydown', (e) => {
@@ -806,8 +820,9 @@ function showProfile(m) {
                 + `<path d="${line}" fill="none" stroke="${col}" stroke-width="1.6"/>${g}`;
   panel.classList.remove('hidden');
 }
-function mIcon(t) { return t === 'dist' ? 'ruler' : t === 'area' ? 'square' : t === 'prof' ? 'chart' : 'box'; }
+function mIcon(t) { return t === 'dist' ? 'ruler' : t === 'area' ? 'square' : t === 'prof' ? 'chart' : t === 'note' ? 'pin' : 'box'; }
 function mValue(m) {
+  if (m.type === 'note') return 'note';
   if (m.type === 'dist' || m.type === 'prof') return `${fmt(m.value ?? polylineLen(m.pts))} m`;
   if (m.type === 'area') return `${fmt(m.value ?? polygonArea(m.pts))} m²`;
   if (m.result) return `${fmt(m.result.net_m3)} m³`;
@@ -853,6 +868,7 @@ function renderMPanel() {
     else if (m.type === 'area') row.title = `perimeter ${fmt(perimeter(m.pts))} m · ${m.pts.length} vertices`;
     else if (m.type === 'dist') row.title = `${m.pts.length} points · ${m.pts.length - 1} segments`;
     else if (m.type === 'prof' && m.result) row.title = `relief ${fmt(m.result.relief_m)} m · slope ${fmt(m.result.slope_pct)}% · click to view chart`;
+    else if (m.type === 'note' && m.pts[0]) row.title = `${m.name}\n${enLabel(m.pts[0])}`;
     row.innerHTML =
       `<span class="msw" style="background:${hex(m.color)}"></span>`
       + `<svg class="ic mt"><use href="#i-${mIcon(m.type)}"/></svg>`
@@ -1414,6 +1430,8 @@ async function loadWorkflows() {
     'outline a footprint on the model, double-click to compute cut/fill', 'box');
   menuEntry('m-tools', 'Cross-section profile', () => startMeasure('prof'),
     'click the start & end of a line to chart elevation along it', 'chart');
+  menuEntry('m-tools', 'Annotation / note', () => startMeasure('note'),
+    'click a point on the model to drop a labeled text note', 'pin');
   menuEntry('m-tools', 'Measurements panel', () => { openMPanel(); renderMPanel(); }, null, 'layers');
   menuSep('m-tools');
   menuEntry('m-tools', 'Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); }, null, 'pin');

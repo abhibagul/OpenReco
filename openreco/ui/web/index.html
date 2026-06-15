@@ -146,6 +146,8 @@
             box-shadow:0 2px 8px #0007; transform:translate(-50%,-50%); }
   .mlabel.seg { font-weight:500; color:var(--muted); padding:1px 5px; font-size:10px;
                 background:#0d0f14cc; border-color:var(--line); }
+  .mlabel.note { transform:translate(-50%,-115%); max-width:240px; white-space:normal;
+                 border-width:1px 1px 1px 3px; }
   /* measurements list panel (floating, top-right of the viewport) */
   #mpanel { position:absolute; top:8px; right:8px; width:268px; z-index:9; display:flex; flex-direction:column;
             max-height:calc(100% - 70px); background:var(--panel); backdrop-filter:var(--blur);
@@ -378,6 +380,7 @@
       <button class="tgl iconbtn" id="areaBtn" title="Measure area"><svg class="ic"><use href="#i-square"/></svg></button>
       <button class="tgl iconbtn" id="volBtn" title="Measure volume — outline a footprint, double-click to compute"><svg class="ic"><use href="#i-box"/></svg></button>
       <button class="tgl iconbtn" id="profBtn" title="Cross-section profile — click start &amp; end of a line"><svg class="ic"><use href="#i-chart"/></svg></button>
+      <button class="tgl iconbtn" id="noteBtn" title="Annotation — click a point to drop a text note"><svg class="ic"><use href="#i-pin"/></svg></button>
       <select id="volBase" title="Volume base surface" style="display:none">
         <option value="plane">Base: best-fit plane</option>
         <option value="min">Base: lowest point</option>
