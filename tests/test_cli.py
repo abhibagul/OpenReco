@@ -44,6 +44,34 @@ def test_init_refuses_overwrite(tmp_path, capsys):
     assert main(["init", str(d), "--force"]) == 0      # --force overwrites
 
 
+def test_bootstrap_module_detection():
+    from openreco import bootstrap
+    # mapping is import-name -> pip-name; PIL/skimage are the classic mismatches
+    assert bootstrap.SLICE_DEPS["PIL"] == "pillow"
+    assert bootstrap.SLICE_DEPS["skimage"] == "scikit-image"
+    assert bootstrap.install([]) == 0                   # no-op, never shells out
+    assert isinstance(bootstrap.missing_deps(), list)
+
+
+def test_bootstrap_installs_only_missing(monkeypatch):
+    import openreco.bootstrap as bs
+    calls = {}
+    monkeypatch.setattr(bs, "missing_deps", lambda: ["rasterio", "scipy"])
+    def fake_install(pkgs, upgrade=False):
+        calls["pkgs"] = pkgs
+        return 0
+    monkeypatch.setattr(bs, "install", fake_install)
+    assert main(["bootstrap", "--yes"]) == 0
+    assert calls["pkgs"] == ["rasterio", "scipy"]       # only the missing ones, with -y (no prompt)
+
+
+def test_bootstrap_noop_when_all_present(monkeypatch, capsys):
+    import openreco.bootstrap as bs
+    monkeypatch.setattr(bs, "missing_deps", lambda: [])
+    assert main(["bootstrap"]) == 0
+    assert "already installed" in capsys.readouterr().out
+
+
 def test_lightweight_commands_dont_need_stage_deps(tmp_path, monkeypatch):
     # simulate a bare install (reconstruction deps absent): registering stages would fail.
     import openreco.cli as cli

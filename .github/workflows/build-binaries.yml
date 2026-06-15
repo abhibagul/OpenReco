@@ -1,0 +1,53 @@
+name: build-binaries
+
+# Build a single self-contained `openreco` executable for Windows, macOS and Linux.
+# A host can only build its own OS (PyInstaller is not a cross-compiler), so this fans out
+# across three runners and uploads one artifact each. Triggers on a version tag or manually.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: openreco-windows
+            binary: dist/openreco.exe
+          - os: macos-latest
+            artifact: openreco-macos
+            binary: dist/openreco
+          - os: ubuntu-latest
+            artifact: openreco-linux
+            binary: dist/openreco
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install OpenReco + reconstruction deps + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[slice]"
+          pip install pyinstaller
+
+      - name: Build single-file executable
+        run: pyinstaller packaging/openreco.spec
+
+      - name: Smoke-test the binary
+        run: |
+          "${{ matrix.binary }}" --version
+          "${{ matrix.binary }}" doctor
+        shell: bash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.binary }}
+          if-no-files-found: error

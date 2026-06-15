@@ -33,6 +33,7 @@ def _register_stages() -> None:
     except ImportError as e:
         raise SystemExit(
             f"missing reconstruction dependency ({e.name}). Install the runtime extras with:\n"
+            "    openreco bootstrap          # detect & pip-install them, or\n"
             "    pip install 'openreco[slice]'\n"
             "(run `openreco doctor` to see exactly what's available)") from None
 
@@ -166,7 +167,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
 
 def cmd_doctor(_args: argparse.Namespace) -> int:
     """Print the compute capability probe + dependency status (install diagnostics)."""
-    import importlib
+    import importlib.util
     import platform
 
     from openreco import __version__, compute
@@ -179,9 +180,14 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     d = compute.describe()
     print("\nCompute")
     gpu = d["gpu_name"]
-    extra = (f"  ·  CUDA {d['cuda_version']}  ·  {d['vram_mb'] / 1024:.1f} GB"
-             if gpu and d.get("vram_mb") else "")
-    print(f"  {mark(bool(gpu))} GPU: {gpu or 'none detected'}{extra}")
+    if gpu:
+        extra = (f"  ·  CUDA {d['cuda_version']}  ·  {d['vram_mb'] / 1024:.1f} GB"
+                 if d.get("vram_mb") else "")
+        print(f"  {mark(True)} GPU: {gpu}{extra}")
+    elif d["nvidia_gpu"]:
+        print("  [ok] GPU: NVIDIA GPU present (install torch for name/VRAM)")
+    else:
+        print("  [--] GPU: none detected — CPU / sparse fallback")
     print(f"  {mark(d['colmap_cuda'])} dense MVS: CUDA COLMAP "
           + (f"({d['colmap']})" if d['colmap'] else "binary not found"))
     print(f"  {mark(bool(d['pycolmap_version']))} SfM / matching: pycolmap {d['pycolmap_version'] or '(missing)'}")
@@ -189,29 +195,45 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
           f"· device {d['torch_device'] or '-'}")
     print(f"     CPU: {d['cpu_count']} cores  ·  auto dense backend: {d['auto_dense_backend']}")
 
+    from openreco.bootstrap import SLICE_DEPS, missing_deps
     print("\nDependencies (the 'slice' extra)")
-    mods = ["pycolmap", "pyproj", "rasterio", "scipy", "laspy", "numpy", "PIL",
-            "xatlas", "fast_simplification", "skimage"]
-    missing = []
-    for m in mods:
-        try:
-            importlib.import_module(m)
-            ok = True
-        except Exception:  # noqa: BLE001
-            ok = False
-            missing.append(m)
-        print(f"  {mark(ok)} {m}")
-    try:
-        importlib.import_module("webview")
-        print("  [ok] pywebview (native desktop window)")
-    except Exception:  # noqa: BLE001
-        print("  [--] pywebview (optional — the UI falls back to a browser)")
+    for imp in SLICE_DEPS:
+        print(f"  {mark(importlib.util.find_spec(imp) is not None)} {imp}")
+    print(f"  {mark(importlib.util.find_spec('webview') is not None)} pywebview "
+          "(optional — the UI falls back to a browser)")
 
+    missing = missing_deps()
     if missing:
-        print(f"\n{len(missing)} reconstruction dep(s) missing — install with:  "
-              "pip install 'openreco[slice]'")
+        print(f"\n{len(missing)} reconstruction dep(s) missing — install with:  openreco bootstrap")
     else:
         print("\nall reconstruction dependencies present.")
+    return 0
+
+
+def cmd_bootstrap(args: argparse.Namespace) -> int:
+    """Detect missing reconstruction deps (the 'slice' extra) and pip-install them."""
+    from openreco.bootstrap import SLICE_DEPS, install, missing_deps
+    missing = missing_deps()
+    if not missing and not args.upgrade:
+        print("all reconstruction dependencies already installed. (run `openreco doctor` to confirm)")
+        return 0
+    targets = sorted(set(SLICE_DEPS.values())) if args.upgrade else missing
+    print(("upgrading: " if args.upgrade else "missing, will install: ") + ", ".join(targets))
+    print(f"target interpreter: {sys.executable}")
+    if not args.yes:
+        try:
+            ans = input("proceed with pip install? [y/N] ")
+        except EOFError:
+            ans = ""
+        if ans.strip().lower() not in ("y", "yes"):
+            print("cancelled.")
+            return 1
+    rc = install(targets, upgrade=args.upgrade)
+    if rc != 0:
+        print(f"pip exited with {rc}", file=sys.stderr)
+        return rc
+    still = missing_deps()
+    print("done — all dependencies present." if not still else f"still missing: {', '.join(still)}")
     return 0
 
 
@@ -369,6 +391,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     pdoc = sub.add_parser("doctor", help="print compute (GPU/COLMAP/torch) + dependency status")
     pdoc.set_defaults(func=cmd_doctor)
+
+    pboot = sub.add_parser("bootstrap", help="detect & pip-install the reconstruction deps (slice extra)")
+    pboot.add_argument("-y", "--yes", action="store_true", help="install without confirmation")
+    pboot.add_argument("--upgrade", action="store_true", help="reinstall/upgrade all slice deps")
+    pboot.set_defaults(func=cmd_bootstrap)
 
     pin = sub.add_parser("init", help="scaffold a new project (optionally a full pipeline)")
     pin.add_argument("project", help="directory to create the project in")

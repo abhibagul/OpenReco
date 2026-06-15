@@ -17,10 +17,13 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from functools import lru_cache
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+# in a PyInstaller bundle, data/binaries live under sys._MEIPASS (the temp extract dir)
+_BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", _REPO_ROOT))
 
 
 @lru_cache(maxsize=1)
@@ -42,12 +45,13 @@ def find_colmap() -> Path | None:
     if env and Path(env).exists():
         return Path(env)
     names = ("colmap.exe", "colmap.bat", "colmap")
-    tools = _REPO_ROOT / "tools"
-    if tools.is_dir():
-        for name in names:
-            hits = sorted(tools.rglob(name))
-            if hits:
-                return hits[0]
+    for root in (_BUNDLE_ROOT, _REPO_ROOT):           # frozen bundle first, then the source tree
+        tools = root / "tools"
+        if tools.is_dir():
+            for name in names:
+                hits = sorted(tools.rglob(name))
+                if hits:
+                    return hits[0]
     found = shutil.which("colmap")
     return Path(found) if found else None
 

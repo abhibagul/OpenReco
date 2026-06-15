@@ -994,6 +994,7 @@ async function renderCompute() {
     const ok = (b) => b ? '<span style="color:var(--ok,#a6e3a1)">✓</span>' : '<span style="color:var(--muted)">—</span>';
     const rows = [];
     if (d.gpu_name) rows.push(`<b>GPU</b> ${d.gpu_name}${d.cuda_version ? ` · CUDA ${d.cuda_version}` : ''}${d.vram_mb ? ` · ${(d.vram_mb / 1024).toFixed(1)} GB` : ''}`);
+    else if (d.nvidia_gpu) rows.push(`<b>GPU</b> NVIDIA GPU present (install torch for name/VRAM)`);
     else rows.push(`<b>GPU</b> none detected — CPU / plane-sweep fallback`);
     rows.push(`${ok(d.colmap_cuda)} Dense MVS: CUDA COLMAP${d.colmap_bundled ? ' (bundled)' : d.colmap ? ' (system)' : ''}`);
     rows.push(`${ok(!!d.pycolmap_version)} SfM / matching: pycolmap ${d.pycolmap_version || ''}`);

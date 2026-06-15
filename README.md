@@ -44,7 +44,32 @@ reproducible and auditable). Same engine drives the **CLI** and the **Python API
   GPS RMS **2.74 m**, GCP RMS **0.04 m**; true-elevation DSM (mean 1902 m); 38 contour levels;
   21.3 M m³ volume over 6.4 ha. GeoTIFFs open correctly georeferenced in QGIS.
 
-## Quickstart
+## Install options
+
+**1. Standalone executable (no Python needed).** A single self-contained `openreco` binary per OS
+(built with PyInstaller — `packaging/openreco.spec`). Download from CI/releases, then:
+
+```bash
+./openreco doctor                    # GPU / COLMAP / dep status
+./openreco init myproject --images /photos --crs EPSG:32613
+./openreco ui myproject              # or:  ./openreco run myproject
+```
+
+Each OS's binary is built on its own runner (PyInstaller can't cross-compile) by the
+`build-binaries` GitHub Actions workflow. `torch` is excluded to keep the size down — NVIDIA dense
+runs via the bundled CUDA COLMAP, CPU sparse always works. (GPU acceleration still needs the
+machine's own NVIDIA driver — that can't be bundled.)
+
+**2. From Python.** If you already run Python, `openreco bootstrap` detects and pip-installs the
+reconstruction deps for you:
+
+```bash
+pip install openreco            # base package (stdlib only)
+openreco bootstrap              # detect & install the 'slice' deps (pycolmap, rasterio, …)
+openreco doctor                 # confirm
+```
+
+## Quickstart (from source)
 
 ```bash
 pip install -e ".[slice]"            # permissive deps: pycolmap, pyproj, rasterio, scipy, laspy, pillow
