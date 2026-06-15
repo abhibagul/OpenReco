@@ -801,6 +801,9 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, compute.describe())
             except Exception as exc:  # noqa: BLE001
                 return self._send(400, {"error": str(exc)})
+        if route == "/api/validate":
+            from openreco.workflow import validate_pipeline
+            return self._send(200, {"issues": validate_pipeline(self.state.project.manifest.stages)})
         if route == "/api/estimate_quality":
             try:
                 return self._send(200, self.state.estimate_quality(parse_qs(u.query).get("chunk", [None])[0]))

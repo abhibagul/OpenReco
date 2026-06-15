@@ -180,6 +180,65 @@ for _o in OPERATIONS:
 
 _BY_OP = {o["op"]: o for o in OPERATIONS}
 
+# Required upstream artifacts per stage type (for static pipeline validation). A stage's inputs
+# must collectively provide these, else it errors at run time with a cryptic KeyError. Stages not
+# listed (markers, panorama, splat, import_*) read from params/paths and need no upstream artifact.
+STAGE_NEEDS: dict[str, list[str]] = {
+    "sfm": ["images"],
+    "refine": ["model"],
+    "georef": ["model"],          # GPS (images) / GCP source is checked separately (warning)
+    "mvs": ["model", "images"],
+    "mesh": ["points"],
+    "texture": ["mesh", "model", "images"],
+    "dsm": ["points"],
+    "ortho": ["points"],
+    "dtm": ["points"],
+    "contours": ["dsm"],
+    "classify": ["points"],
+    "merge_chunks": ["points"],
+    "fuse": ["points"],
+    "tiles": ["mesh"],
+    "indices": ["ortho"],
+}
+
+
+def validate_pipeline(stages) -> list[dict[str, Any]]:
+    """Static checks on a DAG before running: missing/unknown inputs and the silent traps the
+    end-to-end validation surfaced (georef falling back to a local frame; texture missing 'model').
+    Returns a list of {stage, severity, message, hint} (severity: 'error' | 'warning')."""
+    by_id = {s.id: s for s in stages}
+    issues: list[dict[str, Any]] = []
+
+    def provides_of(sid: str) -> set:
+        s = by_id.get(sid)
+        return set(STAGE_PROVIDES.get(s.type, [])) if s else set()
+
+    for s in stages:
+        avail: set = set()
+        for inp in (s.inputs or []):
+            if inp not in by_id:
+                issues.append({"stage": s.id, "severity": "error",
+                               "message": f"input {inp!r} does not exist",
+                               "hint": "fix or remove this input"})
+            else:
+                avail |= provides_of(inp)
+        for art in STAGE_NEEDS.get(s.type, []):
+            if art not in avail:
+                providers = [t for t, p in STAGE_PROVIDES.items() if art in p]
+                issues.append({"stage": s.id, "severity": "error",
+                               "message": f"{s.type} '{s.id}' needs a {art!r} input but none of its inputs provide it",
+                               "hint": f"add an input from: {', '.join(sorted(providers))}"})
+        if s.type == "georef" and "images" not in avail and not s.params.get("gcp_file"):
+            issues.append({"stage": s.id, "severity": "warning",
+                           "message": f"georef '{s.id}' has no GPS (ingest) or GCP source — it will "
+                                      "produce a local, ungeoreferenced frame",
+                           "hint": "wire the chunk's ingest layer as an input (for GPS), or set GCPs"})
+        if s.type == "clean" and "points" not in avail and "mesh" not in avail:
+            issues.append({"stage": s.id, "severity": "error",
+                           "message": f"clean '{s.id}' needs a point-cloud or mesh input",
+                           "hint": "add an mvs / mesh input"})
+    return issues
+
 # Quality/speed presets: per-stage-type parameter overrides applied in one click.
 PRESETS: dict[str, dict[str, Any]] = {
     "Low": {

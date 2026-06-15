@@ -1414,7 +1414,24 @@ $('progCancel').onclick = async () => {
 
 // ---- run + live progress (SSE) --------------------------------------------
 $('runBtn').onclick = () => runPipeline();
+// static pre-run checks: catch mis-wirings (missing inputs, georef->local, texture needs model)
+async function checkPipeline(announce) {
+  let issues = [];
+  try { issues = (await (await fetch('/api/validate')).json()).issues || []; } catch (e) { return []; }
+  if (announce && !issues.length) log('pipeline check: no issues ✓', 'ok');
+  issues.forEach(it => log(`${it.stage}: ${it.message}${it.hint ? ` — ${it.hint}` : ''}`,
+    it.severity === 'error' ? 'err' : 'warn'));
+  return issues;
+}
 async function runPipeline(body = {}) {
+  const issues = await checkPipeline(false);
+  const errors = issues.filter(i => i.severity === 'error');
+  if (errors.length) {
+    const msg = errors.slice(0, 6).map(e => `• ${e.stage}: ${e.message}`).join('\n');
+    if (!confirm(`Pipeline has ${errors.length} error(s):\n\n${msg}\n\nRun anyway?`)) {
+      log(`run cancelled — ${errors.length} pipeline error(s); see console`, 'warn'); selectDock('console'); return;
+    }
+  }
   const r = await fetch('/api/run', { method:'POST', body: JSON.stringify(body) });
   if (r.status === 409) { log('already running'); return; }
   log('--- run started ---'); $('status').textContent = 'running…';
@@ -1507,6 +1524,9 @@ async function loadWorkflows() {
   menuEntry('m-tools', 'Annotation / note', () => startMeasure('note'),
     'click a point on the model to drop a labeled text note', 'pin');
   menuEntry('m-tools', 'Measurements panel', () => { openMPanel(); renderMPanel(); }, null, 'layers');
+  menuSep('m-tools');
+  menuEntry('m-tools', 'Check pipeline', () => { selectDock('console'); checkPipeline(true); },
+    'validate stage wiring before running', 'info');
   menuSep('m-tools');
   menuEntry('m-tools', 'Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); }, null, 'pin');
   // Help

@@ -695,6 +695,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"drawMapMeasures" in appjs and b"/api/to_world" in appjs and b"onMapClick" in appjs  # map measuring
     assert b"togglePhoto" in appjs and b"movePhoto" in appjs and b"estimateQuality" in appjs  # photo cluster
     assert b"/api/compute" in appjs and b"renderCompute" in appjs        # compute/GPU status panel
+    assert b"/api/validate" in appjs and b"checkPipeline" in appjs        # pre-run pipeline validation
     _, html2 = _get(base + "/")
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"#300a24" in html2                                           # Ubuntu-style console
@@ -778,6 +779,24 @@ def test_compute_endpoint(server):
     _, raw = _get(base + "/api/compute")
     d = json.loads(raw)
     assert "auto_dense_backend" in d and "cpu_count" in d and "torch_device" in d
+
+
+def test_validate_endpoint(tmp_path):
+    # a texture stage missing a model provider -> /api/validate reports an error
+    proj = (Project.create(tmp_path, name="v")
+            .add_stage("ing", "ingest", params={"image_dir": "imgs"})
+            .add_stage("mesh", "mesh", inputs=["ing"])
+            .add_stage("tex", "texture", inputs=["mesh", "ing"]))
+    httpd = serve(proj, port=0)
+    port = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        _, raw = _get(f"http://127.0.0.1:{port}/api/validate")
+        issues = json.loads(raw)["issues"]
+        assert any(i["severity"] == "error" for i in issues)
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
 
 
 def test_to_world_requires_crs(server):

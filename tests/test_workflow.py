@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import openreco
 from openreco import Project
-from openreco.workflow import operations, to_stage
+from openreco.workflow import operations, to_stage, validate_pipeline
 
 
 def test_operations_listed():
@@ -40,3 +40,45 @@ def test_project_add_operation(tmp_path):
          .add_operation("Align Photos", "align", inputs=["ingest"], values={"Accuracy": "Low"}))
     s = p.stages[0]
     assert s.id == "align" and s.type == "sfm" and s.params["max_image_size"] == 1000
+
+
+def test_validate_clean_pipeline_has_no_issues(tmp_path):
+    p = (Project.create(tmp_path, name="ok", crs="EPSG:32613")
+         .add_stage("ing", "ingest", params={"image_dir": "imgs"})
+         .add_stage("sfm", "sfm", inputs=["ing"])
+         .add_stage("geo", "georef", inputs=["sfm", "ing"])
+         .add_stage("mvs", "mvs", inputs=["ing", "geo"])
+         .add_stage("mesh", "mesh", inputs=["mvs"])
+         .add_stage("tex", "texture", inputs=["mesh", "geo", "ing"]))
+    assert validate_pipeline(p.manifest.stages) == []
+
+
+def test_validate_catches_texture_missing_model(tmp_path):
+    # texture wired without a 'model' provider (the bug the end-to-end run hit)
+    p = (Project.create(tmp_path, name="bad")
+         .add_stage("ing", "ingest", params={"image_dir": "imgs"})
+         .add_stage("sfm", "sfm", inputs=["ing"])
+         .add_stage("mvs", "mvs", inputs=["ing", "sfm"])
+         .add_stage("mesh", "mesh", inputs=["mvs"])
+         .add_stage("tex", "texture", inputs=["mesh", "ing"]))   # no model provider
+    issues = validate_pipeline(p.manifest.stages)
+    assert any(i["stage"] == "tex" and i["severity"] == "error" and "model" in i["message"]
+               for i in issues)
+
+
+def test_validate_warns_georef_local_fallback(tmp_path):
+    # georef without ingest (no GPS) and no GCP -> warns about a local frame
+    p = (Project.create(tmp_path, name="loc")
+         .add_stage("ing", "ingest", params={"image_dir": "imgs"})
+         .add_stage("sfm", "sfm", inputs=["ing"])
+         .add_stage("geo", "georef", inputs=["sfm"]))            # no ingest input
+    issues = validate_pipeline(p.manifest.stages)
+    assert any(i["stage"] == "geo" and i["severity"] == "warning" and "local" in i["message"]
+               for i in issues)
+
+
+def test_validate_flags_unknown_input(tmp_path):
+    p = (Project.create(tmp_path, name="u")
+         .add_stage("sfm", "sfm", inputs=["nope"]))
+    issues = validate_pipeline(p.manifest.stages)
+    assert any(i["severity"] == "error" and "does not exist" in i["message"] for i in issues)
