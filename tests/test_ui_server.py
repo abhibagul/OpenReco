@@ -719,6 +719,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"Space+Grotesk" in html2 and b'id="i-logo"' in html2         # Blueprint brand: fonts + logo mark
     assert b"#1d4ed8" in html2 or b"--cobalt" in html2                   # brand cobalt accent
+    assert b'id="modelEmpty"' in html2 and b"select a layer to display" in html2  # empty-state logo+hint
     assert b"abhibagul" in html2 and b"Abhishek Bagul" in html2          # About: developer credit
     assert b"/api/jobs" in appjs and b"loadJobs" in appjs                # jobs history panel
     assert b"showGuide" in appjs and b"guideFrame" in html2              # in-app user guide

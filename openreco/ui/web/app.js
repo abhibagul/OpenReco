@@ -140,12 +140,12 @@ const gizmoCam = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 100);
 gizmoCam.position.set(0, 0, 5);
 gizmoScene.add(new THREE.AmbientLight(0xffffff, 0.9));
 const gizmoLight = new THREE.DirectionalLight(0xffffff, 0.6); gizmoLight.position.set(2, 3, 4); gizmoScene.add(gizmoLight);
-function faceTex(label) {            // CAD-style: light face, dark centered label
+function faceTex(label) {            // brand navigation cube: cobalt/azure face, white centered label
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d');
-  x.fillStyle = '#dfe4ec'; x.fillRect(0, 0, 128, 128);
-  x.strokeStyle = '#9aa6b8'; x.lineWidth = 4; x.strokeRect(2, 2, 124, 124);
-  x.fillStyle = '#2a3344'; x.font = 'bold 22px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#3b82f6'; x.fillRect(0, 0, 128, 128);
+  x.strokeStyle = '#1d4ed8'; x.lineWidth = 4; x.strokeRect(2, 2, 124, 124);
+  x.fillStyle = '#ffffff'; x.font = 'bold 22px "Space Grotesk",system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
   x.fillText(label, 64, 66);
   return new THREE.CanvasTexture(c);
 }
@@ -155,12 +155,12 @@ const gizmoCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2),
   gizmoFaces.map(l => new THREE.MeshBasicMaterial({ map: faceTex(l) })));
 gizmoScene.add(gizmoCube);
 gizmoScene.add(new THREE.LineSegments(new THREE.EdgesGeometry(gizmoCube.geometry),
-  new THREE.LineBasicMaterial({ color: 0x6b7689 })));
+  new THREE.LineBasicMaterial({ color: 0xdbe7ff })));
 
 // per-region hover highlight (faces / edges / corners), child of the cube so it rotates with it
 const GZ_M = 0.66;                   // face half-extent; outer band [M,1] = edges/corners
 const gizmoHi = new THREE.Mesh(new THREE.BufferGeometry(),
-  new THREE.MeshBasicMaterial({ color: 0x1e88ff, transparent: true, opacity: 0.5, depthTest: false }));
+  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.38, depthTest: false }));
 gizmoHi.renderOrder = 2; gizmoHi.visible = false; gizmoCube.add(gizmoHi);
 function gizmoZone(p) {              // p in cube-local [-1,1]^3 -> region normal (-1/0/1 per axis)
   const s = (v) => (Math.abs(v) > GZ_M ? Math.sign(v) : 0);
@@ -392,6 +392,7 @@ async function setVisible(layer, on) {
     if (objects.has(layer.id)) objects.get(layer.id).visible = false;
   }
   styleAllClouds();           // refresh point count + apply current size/color to shown clouds
+  updateModelEmpty();
   renderWorkspace();
 }
 
@@ -1340,7 +1341,11 @@ function mkbtn(label, fn, icon, primary) {
 }
 function renderParams(L) {
   const box = $('params'); box.innerHTML = '';
-  if (!L) { box.innerHTML = '<div class="empty">Select a layer to see its properties.</div>'; return; }
+  if (!L) {
+    box.innerHTML = '<div class="emptyart"><svg viewBox="0 0 32 32"><use href="#i-logo"/></svg>'
+      + '<div>Select a layer to inspect its properties.</div></div>';
+    return;
+  }
   const info = STAGES[L.type] || { default_params: {} };
   const cur = { ...(info.default_params || {}), ...L.params };
 
@@ -1562,7 +1567,7 @@ async function loadWorkflows() {
   menuEntry('m-model', 'Show / hide grid + axes', toggleHelpers, null, 'grid');
   menuEntry('m-model', 'Show / hide cameras', () => showCameras(), 'camera positions of the active chunk', 'camera');
   menuEntry('m-model', 'Hide all layers', () => { visible.forEach(id => { const o = objects.get(id); if (o) o.visible = false; });
-    visible.clear(); renderWorkspace(); }, null, 'eye');
+    visible.clear(); updateModelEmpty(); renderWorkspace(); }, null, 'eye');
   // Tools menu
   $('m-tools').innerHTML = '';
   menuEntry('m-tools', 'Measure distance', () => startMeasure('dist'), null, 'ruler');
@@ -1657,6 +1662,10 @@ async function loadJobs() {
   });
 }
 document.querySelectorAll('[data-dtab]').forEach(b => b.onclick = () => selectDock(b.dataset.dtab));
+function updateModelEmpty() {       // show the faint-logo hint when nothing is displayed in 3D
+  const el = $('modelEmpty'); if (!el) return;
+  el.classList.toggle('hidden', !(curVtab === 'model' && visible.size === 0));
+}
 function selectVtab(name) {
   document.querySelectorAll('[data-vtab]').forEach(b => b.classList.toggle('on', b.dataset.vtab === name));
   $('imgview').classList.toggle('show', name === 'photo');
@@ -1672,6 +1681,7 @@ function selectVtab(name) {
   if (name === 'ortho') { openMPanel(); drawOrthoMeasures(); }
   if (name === 'map') { openMPanel(); showOnMap(mapRaster); setTimeout(drawMapMeasures, 60); }
   curVtab = name;
+  updateModelEmpty();
 }
 let curVtab = 'model';
 document.querySelectorAll('[data-vtab]').forEach(b => b.onclick = () => selectVtab(b.dataset.vtab));
@@ -2456,6 +2466,6 @@ function setupSplitters() {
 // ---- boot ----
 (async () => { loadPrefs(); setupSplitters(); resize(); await loadStages(); await loadWorkflows(); await loadPresets();
   await loadProject(); await loadMarkers(); await loadGeo(); await loadMeasurements();
-  applyPrefs();
+  applyPrefs(); updateModelEmpty();
   if (PREFS.defaultView && PREFS.defaultView !== 'model') selectVtab(PREFS.defaultView);
   log(`OpenReco ready · project "${PROJECT.name}" · ${PROJECT.layers.length} layer(s)`, 'ok'); })();
