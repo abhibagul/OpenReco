@@ -735,6 +735,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._geo_overlay(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/raster_info":
             return self._raster_info(parse_qs(u.query).get("path", [""])[0])
+        if route == "/api/image_info":
+            return self._image_info(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/browse":
             return self._send(200, self.state.browse(parse_qs(u.query).get("path", [None])[0]))
         if route == "/api/thumb":
@@ -1005,6 +1007,19 @@ class _Handler(BaseHTTPRequestHandler):
         if not p.is_file():
             return self._send(404, {"error": "not found"})
         self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "application/octet-stream"))
+
+    def _image_info(self, path):
+        """Full EXIF/metadata for one source photo (dimensions, camera, focal, GPS, blur)."""
+        from openreco.io.images import read_image_info
+        p = Path(path).resolve()
+        if not path or not any(r == p or r in p.parents for r in self.state.allowed_roots()):
+            return self._send(403, {"error": "outside project"})
+        if not p.is_file():
+            return self._send(404, {"error": "not found"})
+        try:
+            return self._send(200, read_image_info(p).to_dict())
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": str(exc)})
 
     def _report(self):
         """Serve the most recent run's processing report as a PDF (built from latest.json)."""

@@ -691,6 +691,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"loadPresets" in appjs and b"/api/preset" in appjs           # quality presets
     assert b"openPrefs" in appjs and b"uLen" in appjs                    # preferences: units/precision
     assert b"/api/raster_info" in appjs and b"drawOrthoMeasures" in appjs  # 2D ortho measuring
+    assert b"photoCtx" in appjs and b"/api/image_info" in appjs and b"lookThrough" in appjs  # photo right-click
     _, html2 = _get(base + "/")
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"#300a24" in html2                                           # Ubuntu-style console
@@ -749,6 +750,26 @@ def test_measurements_export_formats(server):
     assert b"area_m2" in raw and b"Pad" in raw and b"inlet pipe" in raw
     _, raw = _get(base + "/api/measurements_export?fmt=dxf")
     assert b"LWPOLYLINE" in raw and b"POINT" in raw
+
+
+def test_image_info_endpoint(server, tmp_path):
+    base, _ = server
+    from PIL import Image
+    img = tmp_path / "shot.jpg"
+    Image.new("RGB", (64, 48), (120, 130, 140)).save(img)
+    _, raw = _get(base + "/api/image_info?path=" + urllib.request.quote(str(img)))
+    info = json.loads(raw)
+    assert info["width"] == 64 and info["height"] == 48 and info["name"] == "shot.jpg"
+
+
+def test_image_info_sandbox_rejects_outside(server):
+    base, _ = server
+    req = base + "/api/image_info?path=" + urllib.request.quote("C:/Windows/system32/drivers/etc/hosts")
+    try:
+        _get(req)
+        raise AssertionError("expected non-200")
+    except urllib.error.HTTPError as e:
+        assert e.code in (403, 404, 400)
 
 
 def test_measure_volume_missing_layer_errors(server):

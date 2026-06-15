@@ -1141,7 +1141,7 @@ function showCtx(e, items) {
 }
 function hideCtx() { $('ctxMenu').classList.add('hidden'); }
 document.addEventListener('click', hideCtx);
-document.addEventListener('contextmenu', (e) => { if (!e.target.closest('.tnode')) hideCtx(); });
+document.addEventListener('contextmenu', (e) => { if (!e.target.closest('.tnode, .th')) hideCtx(); });
 
 function layerCtx(L, canView) {
   const items = [];
@@ -1749,8 +1749,55 @@ async function loadPhotos() {
                 + `<img loading="lazy" src="${url}"><div>${im.name}</div>`;
     t.querySelector('img').onclick = () => openPhoto(im);
     t.querySelector('.rm').onclick = (e) => { e.stopPropagation(); removePhoto(im); };
+    t.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, photoCtx(im)); };
     el.appendChild(t);
   });
+}
+// right-click menu on a photo thumbnail (industry-standard, scoped to what we support)
+function photoCtx(im) {
+  return [
+    { label: 'Open / preview', icon: 'image', fn: () => openPhoto(im) },
+    { label: 'Look through (3D view)', icon: 'camera', fn: () => lookThrough(im) },
+    { label: 'Show info…', icon: 'info', fn: () => showImageInfo(im) },
+    { label: 'Copy file path', icon: 'file-plus', fn: () => copyText(im.path, im.name) },
+    { sep: true },
+    { label: 'Remove from chunk', icon: 'trash', danger: true, fn: () => removePhoto(im) },
+  ];
+}
+function copyText(text, what) {
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(
+    () => log(`copied path of ${what || 'file'}`), () => log(text));
+  else log(text);
+}
+async function showImageInfo(im) {
+  selectDock('console');
+  try {
+    const d = await (await fetch('/api/image_info?path=' + encodeURIComponent(im.path))).json();
+    if (d.error) { log(`image info: ${d.error}`, 'warn'); return; }
+    const gps = (d.lat != null && d.lon != null)
+      ? `GPS ${fmtN(d.lat, 6)}, ${fmtN(d.lon, 6)}${d.alt != null ? ` · ${fmtN(d.alt, 1)} m` : ''}` : 'no GPS';
+    const cam = [d.make, d.model].filter(Boolean).join(' ') || 'unknown camera';
+    const foc = d.focal_mm != null ? ` · ${d.focal_mm} mm` : '';
+    const blur = d.blur_score != null ? ` · sharpness ${fmtN(d.blur_score, 0)}` : '';
+    log(`${d.name} — ${d.width}×${d.height} · ${cam}${foc} · ${gps}${blur}`, 'info');
+  } catch (e) { log('image info error: ' + e, 'err'); }
+}
+async function lookThrough(im) {
+  let cams = lookThrough._cache;
+  if (!cams || lookThrough._chunk !== ACTIVE_CHUNK) {
+    const r = await (await fetch('/api/cameras?chunk=' + encodeURIComponent(ACTIVE_CHUNK))).json();
+    cams = lookThrough._cache = r.cameras || []; lookThrough._chunk = ACTIVE_CHUNK;
+  }
+  const cam = cams.find(c => c.name === im.name);
+  if (!cam || !cam.c) { log(`${im.name}: no solved pose yet (align first)`, 'warn'); return; }
+  selectVtab('model');
+  const c = new THREE.Vector3(...cam.c);
+  const fwd = cam.fwd ? new THREE.Vector3(...cam.fwd).normalize() : new THREE.Vector3(0, 0, -1);
+  if (cam.up) camera.up.set(...cam.up);
+  camera.position.copy(c);
+  controls.target.copy(c.clone().add(fwd.multiplyScalar(Math.max(controls.target.distanceTo(c) || 20, 10))));
+  controls.update();
+  log(`looking through ${im.name}`);
 }
 async function removePhoto(im) {
   if (!confirm(`Remove ${im.name} from this chunk? (source file is not deleted)`)) return;
