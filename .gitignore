@@ -40,3 +40,8 @@ dist/
 .venv/
 venv/
 tools/
+
+# brand design source (large bundler artifacts kept locally, not committed)
+design_template.html
+OpenReco Brand Guidelines (standalone).html
+build.txt

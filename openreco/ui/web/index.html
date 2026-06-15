@@ -6,28 +6,38 @@
 <title>OpenReco</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Brand type: Space Grotesk (display) + JetBrains Mono (mono). Falls back to system fonts offline. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <style>
-  /* Glassmorphism: flowing dark background, translucent floating panels, soft rounded controls.
-     Ubuntu identity kept (aubergine + orange) — the console stays Ubuntu-terminal style. */
-  :root { --bg:#0b0d12;
-          --panel:rgba(28,32,40,.92); --panel2:rgba(20,23,30,.92); --chrome:rgba(24,27,34,.72);
-          --fg:#e9edf3; --muted:#98a1b2; --line:rgba(255,255,255,.08); --hover:rgba(255,255,255,.07);
-          --sel:rgba(86,148,255,.18); --accent:#5694ff; --accent-h:#74a8ff; --accent-fg:#06101f;
-          --accent-soft:rgba(86,148,255,.16);
-          --ok:#3fc97f; --warn:#f0b429; --err:#ef6b6b;
-          --console-bg:#300a24; --console-fg:#f3e9ee; --btn:rgba(255,255,255,.06); --btn-h:rgba(255,255,255,.13);
-          --radius:12px; --r-sm:8px; --blur:saturate(1.3) blur(16px); --shadow:0 10px 34px rgba(0,0,0,.5);
+  /* OpenReco "Blueprint" brand system: ink-navy ground, cobalt/azure accents, a faint blueprint
+     grid, Space Grotesk display + JetBrains Mono. Engineering-grade, precise, computational. */
+  :root { --bg:#081522; --ink:#0b1a2b;
+          --panel:rgba(16,30,48,.92); --panel2:rgba(11,22,37,.94); --chrome:rgba(11,22,37,.80);
+          --fg:#e6eef8; --muted:#9fb2c9; --line:rgba(127,176,255,.13); --hover:rgba(127,176,255,.08);
+          --sel:rgba(59,130,246,.22); --accent:#3b82f6; --accent-h:#7fb0ff; --accent-fg:#04101f;
+          --accent-soft:rgba(59,130,246,.16); --cobalt:#1d4ed8;
+          --ok:#3fc97f; --warn:#f0b429; --err:#e11d48;
+          --console-bg:#06121f; --console-fg:#dce7f5; --btn:rgba(127,176,255,.07); --btn-h:rgba(127,176,255,.16);
+          --radius:12px; --r-sm:8px; --blur:saturate(1.25) blur(16px); --shadow:0 10px 34px rgba(0,8,20,.55);
           --left-w:300px; --right-w:330px; --dock-h:190px; --hdr-h:62px;
-          --mono:"Ubuntu Mono","Cascadia Mono",ui-monospace,monospace; }
+          --disp:"Space Grotesk","Segoe UI","Ubuntu",system-ui,sans-serif;
+          --mono:"JetBrains Mono","Ubuntu Mono","Cascadia Mono",ui-monospace,monospace; }
   * { box-sizing: border-box; }
   html,body { margin:0; height:100%; color:var(--fg); overflow:hidden; background:var(--bg);
               font:13px/1.55 "Segoe UI","Ubuntu",system-ui,sans-serif; }
-  /* soft, continuously flowing background glow */
-  body::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
-    background:radial-gradient(900px 620px at 10% -8%, rgba(86,148,255,.16), transparent 60%),
-              radial-gradient(820px 720px at 112% 8%, rgba(120,90,200,.12), transparent 55%),
-              radial-gradient(1100px 900px at 50% 122%, rgba(20,30,55,.55), transparent 60%), var(--bg);
+  /* ink-navy ground + cobalt/azure glow */
+  body::before { content:""; position:fixed; inset:0; z-index:-2; pointer-events:none;
+    background:radial-gradient(900px 620px at 8% -8%, rgba(59,130,246,.18), transparent 60%),
+              radial-gradient(820px 720px at 112% 6%, rgba(29,78,216,.16), transparent 55%),
+              radial-gradient(1100px 900px at 50% 122%, rgba(11,26,43,.65), transparent 60%), var(--bg);
     background-size:200% 200%; animation:flow 30s ease-in-out infinite alternate; }
+  /* faint blueprint grid overlay */
+  body::after { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.5;
+    background-image:linear-gradient(rgba(127,176,255,.05) 1px, transparent 1px),
+                     linear-gradient(90deg, rgba(127,176,255,.05) 1px, transparent 1px);
+    background-size:36px 36px; }
   @keyframes flow { 0%{background-position:0% 0%} 100%{background-position:100% 100%} }
   ::-webkit-scrollbar { width:9px; height:9px; }
   ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.14); border-radius:6px; }
@@ -53,8 +63,10 @@
   #menubar { grid-area:menu; position:relative; z-index:70; display:flex; align-items:stretch;
              background:var(--chrome); color:#f7eef3;
              backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); }
-  #menubar > b { color:var(--accent); padding:0 14px; display:flex; align-items:center;
-                 font-size:13px; letter-spacing:.2px; }
+  #menubar > b { color:var(--fg); padding:0 12px 0 14px; display:flex; align-items:center; gap:7px;
+                 font-family:var(--disp); font-weight:700; font-size:14px; letter-spacing:.3px; }
+  #menubar > b .logo { width:20px; height:20px; }
+  #menubar > b .lr { color:var(--accent); }   /* "Reco" accent in the wordmark */
   .mItem { position:relative; padding:0 12px; display:flex; align-items:center; cursor:pointer; font-size:12.5px; }
   .mItem:hover { background:rgba(255,255,255,.10); }
   .mMenu { position:absolute; top:30px; left:0; background:var(--panel); border:1px solid var(--line);
@@ -72,7 +84,7 @@
              background:var(--panel2); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur);
              border-bottom:1px solid var(--line); }
   #toolbar .sp { flex:1; } .vsep { width:1px; height:18px; background:var(--line); margin:0 5px; }
-  #toolbar #pname { font-weight:600; color:var(--fg); font-size:13px; letter-spacing:.2px; }
+  #toolbar #pname { font-family:var(--disp); font-weight:600; color:var(--fg); font-size:13px; letter-spacing:.2px; }
   .iconbtn { padding:6px; }
   #presetSel { width:auto; max-width:230px; }
   .tgroup { display:flex; align-items:center; gap:2px; background:var(--btn); border:1px solid var(--line);
@@ -83,8 +95,8 @@
            border-radius:var(--r-sm); cursor:pointer; font-size:12.5px; display:inline-flex;
            align-items:center; gap:7px; transition:background .18s ease,border-color .18s ease,transform .1s ease; }
   button:hover{ background:var(--btn-h); } button:active{ transform:translateY(1px); }
-  button.run { background:linear-gradient(180deg,var(--accent),var(--accent-h)); color:var(--accent-fg);
-               border-color:transparent; font-weight:600; box-shadow:0 4px 16px rgba(86,148,255,.35); }
+  button.run { background:linear-gradient(180deg,var(--cobalt),var(--accent)); color:#fff;
+               border-color:transparent; font-weight:600; box-shadow:0 4px 16px rgba(29,78,216,.42); }
   button.run:hover { filter:brightness(1.07); }
   button.tgl.on { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
   button:disabled { opacity:.5; cursor:default; }
@@ -124,6 +136,23 @@
   #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:50; }
   #vtabs button { background:#2a2330cc; }
   #vtabs button.on { background:var(--accent); color:var(--accent-fg); }
+  div#m-file > div, 
+div#m-tools > div, 
+div#m-help > div, 
+div#m-model > div {
+    display: grid;
+    grid-template-columns: 15px auto;
+}
+
+div#m-file > div .t, 
+div#m-tools > div .t, 
+div#m-help > div .t, 
+div#m-model > div .t{
+    grid-column-start: 1;
+    grid-column-end: 3;
+    padding-left: 0px;
+    padding-top: 0px;
+}
   #measure { position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:9;
              background:var(--panel); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur);
              border:1px solid var(--accent); box-shadow:var(--shadow);
@@ -300,8 +329,8 @@
   .dialog { background:var(--panel); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur);
             border:1px solid var(--line); border-radius:var(--radius); padding:20px;
             width:470px; max-height:84vh; overflow:auto; box-shadow:0 20px 60px #000c; }
-  .dialog h2 { font-size:16px; margin:0 0 5px; }
-  .dialog h3 { margin:14px 0 6px; }
+  .dialog h2 { font-family:var(--disp); font-size:16px; margin:0 0 5px; }
+  .dialog h3 { font-family:var(--disp); margin:14px 0 6px; }
   .prow { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:5px 0; font-size:13px; }
   .prow > span { color:var(--muted); }
   .prow select, .prow input[type=number] { width:170px; }
@@ -332,6 +361,16 @@
 <body>
 <!-- line-icon sprite (stroke icons, currentColor) -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-logo" viewBox="0 0 32 32">
+    <path d="M16 3 L29 16 L16 29 L3 16 Z" fill="rgba(59,130,246,0.18)" stroke="#7fb0ff" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M16 3 L16 29 M3 16 L29 16 M16 3 L3 16 M29 16 L16 29" fill="none" stroke="#3b82f6" stroke-width="1.3" stroke-opacity="0.75"/>
+    <path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5" fill="none" stroke="#1d4ed8" stroke-width="1.1" stroke-opacity="0.5"/>
+    <g stroke="none">
+      <circle cx="16" cy="3" r="2" fill="#7fb0ff"/><circle cx="29" cy="16" r="2" fill="#7fb0ff"/>
+      <circle cx="16" cy="29" r="2" fill="#7fb0ff"/><circle cx="3" cy="16" r="2" fill="#7fb0ff"/>
+      <circle cx="16" cy="16" r="2" fill="#3b82f6"/>
+    </g>
+  </symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.4 4 5.6 4 9s-1.3 6.6-4 9c-2.7-2.4-4-5.6-4-9s1.3-6.6 4-9z"/></symbol>
   <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 16.5L16.5 3 21 7.5 7.5 21z"/><path d="M7 11l2 2M11 7l2 2M15 11l2 2"/></symbol>
@@ -382,7 +421,7 @@
 <div id="app">
   <!-- menu bar -->
   <div id="menubar">
-    <b>OpenReco</b>
+    <b title="OpenReco"><svg class="logo" viewBox="0 0 32 32"><use href="#i-logo"/></svg>Open<span class="lr">Reco</span></b>
     <div class="mItem" data-menu="file">File<div class="mMenu hidden" id="m-file"></div></div>
     <div class="mItem" data-menu="workflow">Workflow<div class="mMenu hidden" id="m-workflow"></div></div>
     <div class="mItem" data-menu="model">Model<div class="mMenu hidden" id="m-model"></div></div>
@@ -606,8 +645,8 @@
 
 <!-- About dialog -->
 <div id="aboutModal" class="modal hidden"><div class="dialog" style="width:420px; text-align:center">
-  <svg class="ic" style="width:42px;height:42px;color:var(--accent);margin:4px auto"><use href="#i-box"/></svg>
-  <h2 style="justify-content:center">OpenReco</h2>
+  <svg viewBox="0 0 32 32" style="width:54px;height:54px;margin:4px auto;display:block"><use href="#i-logo"/></svg>
+  <h2 style="justify-content:center;font-family:var(--disp)">OpenReco</h2>
   <div class="muted">Open, reproducible photogrammetry &amp; 3D reconstruction.</div>
   <div id="aboutVer" class="muted" style="margin-top:4px;font-size:12px"></div>
   <div style="margin:14px 0;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">

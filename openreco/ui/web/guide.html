@@ -4,17 +4,21 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>OpenReco — User Guide</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-  :root { --bg:#0f1117; --panel:#171a22; --fg:#e9edf3; --muted:#98a1b2; --line:#262b36;
-          --accent:#5694ff; --ok:#3fc97f; --warn:#f0b429; --err:#ef6b6b;
-          --mono:"Ubuntu Mono","Cascadia Mono",ui-monospace,monospace; }
+  :root { --bg:#081522; --panel:#0b1a2b; --fg:#e6eef8; --muted:#9fb2c9; --line:#1e3454;
+          --accent:#3b82f6; --cobalt:#1d4ed8; --ok:#3fc97f; --warn:#f0b429; --err:#e11d48;
+          --disp:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+          --mono:"JetBrains Mono","Ubuntu Mono","Cascadia Mono",ui-monospace,monospace; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--fg);
          font:15px/1.65 "Segoe UI","Ubuntu",system-ui,sans-serif; }
   .wrap { display:grid; grid-template-columns:248px 1fr; max-width:1100px; margin:0 auto; min-height:100vh; }
   nav { position:sticky; top:0; align-self:start; height:100vh; overflow:auto; padding:22px 14px;
         border-right:1px solid var(--line); background:var(--panel); }
-  nav h1 { font-size:16px; margin:0 0 2px; color:var(--accent); }
+  nav h1 { font-family:var(--disp); font-size:17px; margin:0 0 2px; color:var(--accent); letter-spacing:.3px; }
+  h2, h3 { font-family:var(--disp); }
   nav .v { color:var(--muted); font-size:12px; margin-bottom:14px; }
   nav a { display:block; color:var(--muted); text-decoration:none; padding:4px 8px; border-radius:6px;
           font-size:13px; }
