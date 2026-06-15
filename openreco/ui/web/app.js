@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 let STAGES = {};      // type -> {default_params, params_schema, ...}
 let PROJECT = null;   // {name, crs, chunks:[...], layers:[...]}
@@ -58,6 +59,10 @@ const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(1, 1, 1); scene.add(dl);
 const measureGroup = new THREE.Group(); scene.add(measureGroup);
+// CSS2D overlay for floating measurement labels anchored in the 3D scene (Propeller-style)
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.domElement.id = 'labels';
+$('center').appendChild(labelRenderer.domElement);
 // ---- infinite ground grid (shader plane in the XY world plane, Z-up) -------
 const grid = new THREE.Mesh(
   new THREE.PlaneGeometry(2e6, 2e6),
@@ -97,6 +102,7 @@ function resize() {
   if (!w || !h) return;
   // canvas is position:absolute filling #center via CSS, so only update the draw buffer (no inline px)
   renderer.setSize(w, h, false);
+  labelRenderer.setSize(w, h);                                            // CSS2D label overlay
   const eo = $('editoverlay'); if (eo) { eo.width = w; eo.height = h; }   // selection overlay (CSS px)
   camera.aspect = w / h; camera.updateProjectionMatrix();
   if (composer) {                                  // keep the EDL post-process buffers in sync
@@ -218,6 +224,7 @@ document.querySelectorAll('#gizmoNav .gn').forEach(b => b.onclick = () => rotate
     grid.position.x = controls.target.x; grid.position.y = controls.target.y;
   }
   if (edlOn && composer) composer.render(); else renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);                     // floating measurement labels
   gizmoCube.quaternion.copy(camera.quaternion).invert();   // cube mirrors the main camera
   gizmoR.render(gizmoScene, gizmoCam);
 })();
@@ -589,95 +596,224 @@ addEventListener('pointerup', (e) => {
   selectInPoly(poly, d.shift);
 });
 
-// ---- measurement (distance / area / volume) -------------------------------
-let measureMode = null;           // null | 'dist' | 'area' | 'vol'
-let measurePts = [];
-let volLayerId = null;            // layer the volume polygon is being drawn on
+// ---- measurements (Propeller-style: persistent, named, floating 3D labels) -------
+const MCOLORS = [0x5694ff, 0xf9e2af, 0xa6e3a1, 0xf38ba8, 0xcba6f7, 0xfab387, 0x94e2d5, 0x89dceb];
+let measurements = [];            // committed measurements (each: id,type,name,color,pts,group,visible,result,value)
+let draft = null;                 // measurement currently being drawn
+let measureMode = null;           // null | 'dist' | 'area' | 'vol' (active tool)
+const mSeq = { dist: 0, area: 0, vol: 0 };
 const raycaster = new THREE.Raycaster(); raycaster.params.Points.threshold = 0.5;
-function setMeasure(mode) {
-  measureMode = (measureMode === mode) ? null : mode;
-  measurePts = []; measureGroup.clear(); volLayerId = null;
-  $('distBtn').classList.toggle('on', measureMode === 'dist');
-  $('areaBtn').classList.toggle('on', measureMode === 'area');
-  $('volBtn').classList.toggle('on', measureMode === 'vol');
-  $('volBase').style.display = measureMode === 'vol' ? '' : 'none';
-  $('measure').classList.toggle('show', !!measureMode);
-  $('measure').textContent = measureMode === 'vol'
-    ? 'Outline the footprint on the model — double-click to compute volume'
-    : (measureMode ? `Click points on the model (${measureMode})` : '');
-}
-$('distBtn').onclick = () => setMeasure('dist');
-$('areaBtn').onclick = () => setMeasure('area');
-$('volBtn').onclick = () => setMeasure('vol');
-$('volBase').onchange = () => { if (measureMode === 'vol' && measurePts.length >= 3) computeVolume(); };
-$('clearMeasBtn').onclick = () => { measurePts = []; measureGroup.clear(); volLayerId = null; $('measure').textContent = ''; };
-// map a raycast hit back to the layer id that owns the hit THREE object
+const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+const fmt = (n, d = 2) => Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
+
+// geometry helpers
 function layerIdForObject(obj) {
-  for (const [id, o] of objects) { if (o === obj) return id;
-    let p = obj; while (p) { if (p === o) return id; p = p.parent; } }
+  for (const [id, o] of objects) { let p = obj; while (p) { if (p === o) return id; p = p.parent; } }
   return null;
 }
-renderer.domElement.addEventListener('pointerdown', (e) => {
-  if (!measureMode || e.button !== 0) return;
+function perimeter(p) { let s = 0; for (let i = 0; i < p.length; i++) s += p[i].distanceTo(p[(i+1)%p.length]); return s; }
+function polylineLen(p) { let s = 0; for (let i = 1; i < p.length; i++) s += p[i].distanceTo(p[i-1]); return s; }
+function polygonArea(p) {            // 3D polygon area via the Newell cross-product method
+  const n = new THREE.Vector3();
+  for (let i = 0; i < p.length; i++) n.add(new THREE.Vector3().crossVectors(p[i], p[(i+1)%p.length]));
+  return Math.abs(n.length()) / 2;
+}
+function centroid(p) { const c = new THREE.Vector3(); p.forEach(v => c.add(v)); return c.divideScalar(p.length || 1); }
+function pickModel(e) {
   const r = renderer.domElement.getBoundingClientRect();
   const ndc = new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
   raycaster.setFromCamera(ndc, camera);
   const targets = [...objects.entries()].filter(([id]) => visible.has(id)).map(([, o]) => o);
-  const hit = raycaster.intersectObjects(targets, true)[0];
-  if (!hit) return;
-  if (measureMode === 'vol') volLayerId = layerIdForObject(hit.object) || volLayerId;
-  measurePts.push(hit.point.clone());
-  measureGroup.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints([hit.point]),
-    new THREE.PointsMaterial({ size: 8, sizeAttenuation: false, color: 0xf9e2af })));
-  redrawMeasure();
-});
-renderer.domElement.addEventListener('dblclick', (e) => {
-  if (measureMode === 'vol' && measurePts.length >= 3) { e.preventDefault(); computeVolume(); }
-});
-async function computeVolume() {
-  if (!volLayerId) { $('measure').textContent = 'volume: could not tell which layer — click on a mesh/cloud'; return; }
-  const base = $('volBase').value;
-  $('measure').textContent = `computing volume (${volLayerId}, base: ${base})…`;
+  return raycaster.intersectObjects(targets, true)[0];
+}
+function mkLabel(text, cls, color) {
+  const d = document.createElement('div'); d.className = 'mlabel ' + (cls || ''); d.textContent = text;
+  if (color != null) d.style.borderColor = hex(color);
+  return new CSS2DObject(d);
+}
+
+// (re)build a measurement's THREE group: vertex handles + line + fill + floating labels
+function buildMeasure(m, isDraft) {
+  m.group.clear();
+  const col = m.color, pts = m.pts, closed = m.type !== 'dist';
+  if (!pts.length) return;
+  m.group.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts),     // vertex handles
+    new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, color: col })));
+  if (pts.length >= 2) {                                                           // connecting line
+    const lp = closed ? [...pts, pts[0]] : pts;
+    m.group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lp),
+      new THREE.LineBasicMaterial({ color: col })));
+  }
+  if (closed && pts.length >= 3) {                                                 // translucent fill (fan)
+    const c = centroid(pts), verts = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i+1)%pts.length];
+      verts.push(c.x, c.y, c.z, a.x, a.y, a.z, b.x, b.y, b.z);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    m.group.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: col, transparent: true,
+      opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })));
+  }
+  // floating labels
+  if (m.type === 'dist') {
+    for (let i = 1; i < pts.length; i++) {                                         // per-segment length
+      const lbl = mkLabel(`${fmt(pts[i].distanceTo(pts[i-1]))} m`, 'seg', col);
+      lbl.position.copy(pts[i].clone().add(pts[i-1]).multiplyScalar(0.5)); m.group.add(lbl);
+    }
+    if (pts.length >= 2) {
+      const lbl = mkLabel(`${m.name} · ${fmt(polylineLen(pts))} m`, 'tot', col);
+      lbl.position.copy(pts[pts.length-1]); m.group.add(lbl);
+    }
+  } else if (pts.length >= 3) {
+    let text;
+    if (m.type === 'area') text = `${m.name} · ${fmt(polygonArea(pts))} m²`;
+    else if (m.result) text = `${m.name} · ${fmt(m.result.net_m3)} m³`;
+    else text = isDraft ? `${m.name} · double-click to finish` : `${m.name} · …`;
+    const lbl = mkLabel(text, 'tot', col); lbl.position.copy(centroid(pts)); m.group.add(lbl);
+  }
+}
+
+// ---- drafting -------------------------------------------------------------
+function setTool(type) {
+  measureMode = type;
+  $('distBtn').classList.toggle('on', type === 'dist');
+  $('areaBtn').classList.toggle('on', type === 'area');
+  $('volBtn').classList.toggle('on', type === 'vol');
+  $('volBase').style.display = type === 'vol' ? '' : 'none';
+}
+function defName(type) { mSeq[type]++; return { dist: 'Distance', area: 'Area', vol: 'Volume' }[type] + ' ' + mSeq[type]; }
+function startMeasure(type) {
+  if (draft) cancelDraft();
+  if (measureMode === type) { setTool(null); $('measure').classList.remove('show'); return; }   // toggle off
+  setTool(type);
+  draft = { id: 'm' + Date.now(), type, name: defName(type), color: MCOLORS[measurements.length % MCOLORS.length],
+            pts: [], group: new THREE.Group(), visible: true, result: null, value: null,
+            layerId: null, volBase: $('volBase').value };
+  scene.add(draft.group); openMPanel(); hint();
+}
+function hint() {
+  if (!draft) { $('measure').classList.remove('show'); return; }
+  const n = draft.pts.length, need = draft.type === 'dist' ? 2 : 3;
+  let t;
+  if (draft.type === 'dist') t = n < 1 ? 'Click points to measure distance' : `${fmt(polylineLen(draft.pts))} m — double-click / Enter to finish`;
+  else t = n < need ? `Outline the ${draft.type === 'vol' ? 'footprint' : 'area'} (${n} pt) — Esc cancels` : `${fmt(polygonArea(draft.pts))} m² — double-click / Enter to finish`;
+  $('measure').textContent = t; $('measure').classList.add('show');
+}
+function cancelDraft() {
+  if (!draft) return;
+  scene.remove(draft.group); draft.group.clear();
+  draft = null; setTool(null); $('measure').classList.remove('show');
+}
+async function finishDraft() {
+  if (!draft) return;
+  const need = draft.type === 'dist' ? 2 : 3;
+  // the finishing double-click's 2nd press adds a duplicate vertex — drop coincident trailing points
+  while (draft.pts.length > need && draft.pts.at(-1).distanceToSquared(draft.pts.at(-2)) < 1e-4) draft.pts.pop();
+  if (draft.pts.length < need) { log(`measurement needs at least ${need} points`, 'warn'); return; }
+  const m = draft; draft = null; setTool(null); $('measure').classList.remove('show');
+  measurements.push(m); buildMeasure(m, false); renderMPanel();
+  if (m.type === 'dist') m.value = polylineLen(m.pts);
+  else if (m.type === 'area') m.value = polygonArea(m.pts);
+  else if (m.type === 'vol') { await computeVolume(m); buildMeasure(m, false); }
+  renderMPanel();
+}
+async function computeVolume(m) {
+  if (!m.layerId) { log('volume: could not tell which layer — click on a mesh/cloud', 'warn'); m.error = 'no layer'; return; }
   try {
     const r = await fetch('/api/measure_volume', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ layer: volLayerId, base, polygon: measurePts.map(p => [p.x, p.y, p.z]) }) });
+      body: JSON.stringify({ layer: m.layerId, base: m.volBase, polygon: m.pts.map(p => [p.x, p.y, p.z]) }) });
     const d = await r.json();
-    if (!r.ok) { $('measure').textContent = `volume failed: ${d.error || r.status}`; return; }
-    $('measure').textContent =
-      `net: ${d.net_m3.toLocaleString()} m³  ·  cut: ${d.cut_m3.toLocaleString()}  fill: ${d.fill_m3.toLocaleString()}  ` +
-      `· area ${d.area_m2.toLocaleString()} m²  · base ${d.base} @ ${d.base_elevation}  (${d.source}, ${d.cells} cells)`;
-    log(`volume[${volLayerId}] net=${d.net_m3} m³ cut=${d.cut_m3} fill=${d.fill_m3} area=${d.area_m2} m²`, 'ok');
-  } catch (err) { $('measure').textContent = `volume error: ${err}`; }
+    if (!r.ok) { log(`volume failed: ${d.error || r.status}`, 'err'); m.error = d.error || ('HTTP ' + r.status); return; }
+    m.result = d; m.value = d.net_m3;
+    log(`${m.name}: net ${fmt(d.net_m3)} m³ (cut ${fmt(d.cut_m3)} / fill ${fmt(d.fill_m3)}) · area ${fmt(d.area_m2)} m²`, 'ok');
+  } catch (err) { log(`volume error: ${err}`, 'err'); m.error = String(err); }
 }
-function redrawMeasure() {
-  // keep only the marker points; rebuild the connecting line + readout
-  [...measureGroup.children].filter(c => c.isLine).forEach(c => measureGroup.remove(c));
-  const closed = measureMode === 'area' || measureMode === 'vol';
-  if (measurePts.length >= 2) {
-    const pts = closed ? [...measurePts, measurePts[0]] : measurePts;
-    measureGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
-      new THREE.LineBasicMaterial({ color: 0xf9e2af })));
-  }
-  let txt = '';
-  if (measureMode === 'dist') {
-    let d = 0; for (let i = 1; i < measurePts.length; i++) d += measurePts[i].distanceTo(measurePts[i-1]);
-    txt = `distance: ${d.toFixed(3)} m  (${measurePts.length} pts)`;
-  } else if (measureMode === 'area' && measurePts.length >= 3) {
-    txt = `area: ${polygonArea(measurePts).toFixed(3)} m²  ·  perimeter: ${perimeter(measurePts).toFixed(3)} m`;
-  } else if (measureMode === 'vol') {
-    txt = measurePts.length >= 3
-      ? `footprint: ${measurePts.length} pts, ${polygonArea(measurePts).toFixed(2)} m² — double-click to compute volume`
-      : `outline the footprint (${measurePts.length} pt)`;
-  } else {
-    txt = `picked ${measurePts.length} point(s)`;
-  }
-  $('measure').textContent = txt;
+
+$('distBtn').onclick = () => startMeasure('dist');
+$('areaBtn').onclick = () => startMeasure('area');
+$('volBtn').onclick = () => startMeasure('vol');
+$('volBase').onchange = () => { if (draft) draft.volBase = $('volBase').value; };
+$('clearMeasBtn').onclick = () => clearAllMeasures();
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!draft || e.button !== 0) return;
+  const hit = pickModel(e);
+  if (!hit) return;
+  if (draft.type === 'vol') draft.layerId = layerIdForObject(hit.object) || draft.layerId;
+  draft.pts.push(hit.point.clone()); buildMeasure(draft, true); hint();
+});
+renderer.domElement.addEventListener('dblclick', (e) => { if (draft) { e.preventDefault(); finishDraft(); } });
+addEventListener('keydown', (e) => {
+  if (!draft) return;
+  const t = document.activeElement && document.activeElement.tagName;
+  if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
+  if (e.key === 'Enter') finishDraft();
+  else if (e.key === 'Escape') cancelDraft();
+  else if (e.key === 'Backspace') { e.preventDefault(); draft.pts.pop(); buildMeasure(draft, true); hint(); }
+});
+
+// ---- measurements panel ---------------------------------------------------
+function openMPanel() { $('mpanel').classList.remove('hidden'); }
+$('mpClose').onclick = () => $('mpanel').classList.add('hidden');
+function mIcon(t) { return t === 'dist' ? 'ruler' : t === 'area' ? 'square' : 'box'; }
+function mValue(m) {
+  if (m.type === 'dist') return `${fmt(m.value ?? polylineLen(m.pts))} m`;
+  if (m.type === 'area') return `${fmt(m.value ?? polygonArea(m.pts))} m²`;
+  if (m.result) return `${fmt(m.result.net_m3)} m³`;
+  return m.error ? '⚠' : '…';
 }
-function perimeter(p) { let s = 0; for (let i = 0; i < p.length; i++) s += p[i].distanceTo(p[(i+1)%p.length]); return s; }
-function polygonArea(p) {            // 3D polygon area via the cross-product (Newell) method
-  const n = new THREE.Vector3();
-  for (let i = 0; i < p.length; i++) n.add(new THREE.Vector3().crossVectors(p[i], p[(i+1)%p.length]));
-  return Math.abs(n.length()) / 2;
+function removeMeasure(id) {
+  const i = measurements.findIndex(m => m.id === id); if (i < 0) return;
+  scene.remove(measurements[i].group); measurements[i].group.clear();
+  measurements.splice(i, 1); renderMPanel();
+}
+function toggleMeasure(id) {
+  const m = measurements.find(x => x.id === id); if (!m) return;
+  m.visible = !m.visible; m.group.visible = m.visible;
+  m.group.traverse(o => { if (o.isCSS2DObject && o.element) o.element.style.display = m.visible ? '' : 'none'; });
+  renderMPanel();
+}
+function renameMeasure(id) {
+  const m = measurements.find(x => x.id === id); if (!m) return;
+  const name = prompt('Rename measurement:', m.name); if (!name) return;
+  m.name = name.trim(); buildMeasure(m, false); renderMPanel();
+}
+function focusMeasure(id) {
+  const m = measurements.find(x => x.id === id); if (!m || !m.pts.length) return;
+  const box = new THREE.Box3().setFromPoints(m.pts);
+  const c = box.getCenter(new THREE.Vector3()), s = Math.max(box.getSize(new THREE.Vector3()).length(), 5);
+  controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(s*.6, -s*.6, s*.5)); controls.update();
+}
+function clearAllMeasures() {
+  measurements.forEach(m => { scene.remove(m.group); m.group.clear(); });
+  measurements = []; cancelDraft(); renderMPanel();
+}
+function renderMPanel() {
+  const list = $('mpList'); if (!list) return;
+  $('mpCount').textContent = measurements.length ? `(${measurements.length})` : '';
+  if (!measurements.length) {
+    list.innerHTML = '<div class="muted" style="padding:10px 12px">No measurements yet. Pick a tool above, click on the model, then double-click to finish.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  measurements.forEach(m => {
+    const row = document.createElement('div'); row.className = 'mrow' + (m.visible ? '' : ' off');
+    if (m.type === 'vol' && m.result) row.title = `cut ${fmt(m.result.cut_m3)} m³ · fill ${fmt(m.result.fill_m3)} m³ · area ${fmt(m.result.area_m2)} m² · base ${m.result.base} @ ${m.result.base_elevation}`;
+    else if (m.type === 'area') row.title = `perimeter ${fmt(perimeter(m.pts))} m · ${m.pts.length} vertices`;
+    else if (m.type === 'dist') row.title = `${m.pts.length} points · ${m.pts.length - 1} segments`;
+    row.innerHTML =
+      `<span class="msw" style="background:${hex(m.color)}"></span>`
+      + `<svg class="ic mt"><use href="#i-${mIcon(m.type)}"/></svg>`
+      + `<span class="mname" title="click to focus · double-click to rename">${m.name}</span>`
+      + `<span class="mval">${mValue(m)}</span>`
+      + `<button class="mbtn" data-act="eye" title="Show / hide">${ic('eye')}</button>`
+      + `<button class="mbtn" data-act="del" title="Delete">${ic('trash')}</button>`;
+    row.querySelector('.mname').onclick = () => focusMeasure(m.id);
+    row.querySelector('.mname').ondblclick = () => renameMeasure(m.id);
+    row.querySelector('[data-act=eye]').onclick = () => toggleMeasure(m.id);
+    row.querySelector('[data-act=del]').onclick = () => removeMeasure(m.id);
+    list.appendChild(row);
+  });
 }
 
 // ---- data + workspace tree ------------------------------------------------
@@ -1158,10 +1294,11 @@ async function loadWorkflows() {
     visible.clear(); renderWorkspace(); }, null, 'eye');
   // Tools menu
   $('m-tools').innerHTML = '';
-  menuEntry('m-tools', 'Measure distance', () => setMeasure('dist'), null, 'ruler');
-  menuEntry('m-tools', 'Measure area', () => setMeasure('area'), null, 'square');
-  menuEntry('m-tools', 'Measure volume (stockpile)', () => setMeasure('vol'),
+  menuEntry('m-tools', 'Measure distance', () => startMeasure('dist'), null, 'ruler');
+  menuEntry('m-tools', 'Measure area', () => startMeasure('area'), null, 'square');
+  menuEntry('m-tools', 'Measure volume (stockpile)', () => startMeasure('vol'),
     'outline a footprint on the model, double-click to compute cut/fill', 'box');
+  menuEntry('m-tools', 'Measurements panel', () => { openMPanel(); renderMPanel(); }, null, 'layers');
   menuSep('m-tools');
   menuEntry('m-tools', 'Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); }, null, 'pin');
   // Help
@@ -1228,6 +1365,8 @@ function selectVtab(name) {
   const showGz = name === 'model' ? 'block' : 'none';
   $('gizmo').style.display = showGz; $('gizmoNav').style.display = showGz;
   $('viewbar').style.display = name === 'model' ? 'flex' : 'none';
+  labelRenderer.domElement.style.display = showGz;     // 3D measurement labels live in the model view
+  if (name !== 'model') $('mpanel').classList.add('hidden');
   if (name === 'map') showOnMap(mapRaster);
 }
 document.querySelectorAll('[data-vtab]').forEach(b => b.onclick = () => selectVtab(b.dataset.vtab));
