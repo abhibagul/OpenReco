@@ -702,3 +702,60 @@ def test_desktop_mode_resolution(monkeypatch):
     monkeypatch.setattr(desktop, "_have_webview", lambda: False)
     assert desktop.resolve_mode("auto") == "browser"
     assert desktop.resolve_mode("window") == "browser"   # downgrades when pywebview absent
+
+
+def test_measurements_persist_roundtrip(server):
+    base, root = server
+    ms = [
+        {"id": "m1", "type": "dist", "name": "D1", "color": 1, "chunk": "Chunk 1",
+         "points": [[0, 0, 0], [3, 4, 0]], "result": {"length_m": 5.0}},
+        {"id": "m2", "type": "area", "name": "A1", "color": 2, "chunk": "Chunk 1",
+         "points": [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
+         "result": {"area_m2": 100.0, "perimeter_m": 40.0}},
+    ]
+    status, body = _post(base + "/api/measurements", {"measurements": ms})
+    assert status == 200 and body["count"] == 2
+    _, raw = _get(base + "/api/measurements")
+    got = json.loads(raw)["measurements"]
+    assert [m["id"] for m in got] == ["m1", "m2"]
+    assert got[1]["result"]["area_m2"] == 100.0
+    assert (root / "measurements.json").is_file()       # persisted to a project sidecar
+
+
+def test_georef_fallback_is_local(server):
+    base, _ = server
+    _, raw = _get(base + "/api/georef")
+    g = json.loads(raw)
+    assert g["has_geo"] is False
+    assert g["origin"] == [0, 0, 0]
+
+
+def test_measurements_export_formats(server):
+    base, _ = server
+    ms = [{"id": "a", "type": "area", "name": "Pad", "color": 2, "chunk": "Chunk 1",
+           "points": [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
+           "result": {"area_m2": 100.0, "perimeter_m": 40.0}}]
+    _post(base + "/api/measurements", {"measurements": ms})
+    _, raw = _get(base + "/api/measurements_export?fmt=geojson")
+    gj = json.loads(raw)
+    assert gj["type"] == "FeatureCollection"
+    assert gj["features"][0]["geometry"]["type"] == "Polygon"
+    assert gj["features"][0]["properties"]["area_m2"] == 100.0
+    _, raw = _get(base + "/api/measurements_export?fmt=csv")
+    assert b"area_m2" in raw and b"Pad" in raw
+    _, raw = _get(base + "/api/measurements_export?fmt=dxf")
+    assert b"LWPOLYLINE" in raw
+
+
+def test_measure_volume_missing_layer_errors(server):
+    base, _ = server
+    req = urllib.request.Request(
+        base + "/api/measure_volume",
+        data=json.dumps({"layer": "nope", "polygon": [[0, 0, 0], [1, 0, 0], [1, 1, 0]]}).encode(),
+        method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        raise AssertionError("expected HTTP 400")
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
+        assert "error" in json.loads(e.read())

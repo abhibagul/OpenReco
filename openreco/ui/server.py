@@ -503,15 +503,87 @@ class AppState:
         return res
 
     def measure_profile(self, layer_id: str, p_from, p_to, n: int = 200) -> dict:
-        """Elevation cross-section along p_from -> p_to, sampled from a layer's surface."""
+        """Elevation cross-section along a polyline path (>=2 vertices), sampled from a layer's
+        surface. Multi-segment paths concatenate per-segment profiles with continuous distance."""
         from openreco.measure import measure_profile_region
-        if not p_from or not p_to:
-            raise ValueError("a profile needs two endpoints")
+        path = p_to if (p_to and isinstance(p_to[0], (list, tuple))) else None
+        if path is None:
+            if not p_from or not p_to:
+                raise ValueError("a profile needs two endpoints")
+            path = [p_from, p_to]
+        else:
+            path = [p_from, *path] if p_from and not isinstance(p_from[0], (list, tuple)) else path
+        if len(path) < 2:
+            raise ValueError("a profile needs at least two points")
         xyz, source = self._layer_xyz(layer_id)
-        res = measure_profile_region(xyz, p_from, p_to, n=n)
-        res["layer"] = layer_id
-        res["source"] = source
-        return res
+        per = max(int(n) // max(len(path) - 1, 1), 2)
+        samples: list = []
+        d0 = 0.0
+        zmins: list = []
+        zmaxs: list = []
+        for a, b in zip(path[:-1], path[1:]):
+            seg = measure_profile_region(xyz, a, b, n=per)
+            for s in seg["samples"]:
+                s2 = dict(s)
+                s2["dist_m"] = round(s["dist_m"] + d0, 3)
+                if not (samples and abs(s2["dist_m"] - samples[-1]["dist_m"]) < 1e-9):
+                    samples.append(s2)
+            d0 += seg["length_m"]
+            if seg.get("z_min") is not None:
+                zmins.append(seg["z_min"])
+                zmaxs.append(seg["z_max"])
+        z_min = min(zmins) if zmins else None
+        z_max = max(zmaxs) if zmaxs else None
+        relief = (z_max - z_min) if z_min is not None else None
+        return {
+            "layer": layer_id, "source": source, "length_m": round(d0, 3), "samples": samples,
+            "z_min": z_min, "z_max": z_max,
+            "relief_m": round(relief, 3) if relief is not None else None,
+            "slope_pct": round(relief / d0 * 100.0, 2) if relief is not None and d0 else None,
+            "covered": sum(1 for s in samples if s["z"] is not None),
+        }
+
+    # ---- measurements: persistence (sidecar JSON) + georeferencing -------------
+    def _measurements_path(self) -> Path:
+        return self.project.manifest.project_dir / "measurements.json"
+
+    def load_measurements(self) -> list:
+        p = self._measurements_path()
+        if not p.is_file():
+            return []
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            return data.get("measurements", data) if isinstance(data, (dict, list)) else []
+        except Exception:  # noqa: BLE001
+            return []
+
+    def save_measurements(self, measurements: list) -> dict:
+        if not isinstance(measurements, list):
+            raise ValueError("measurements must be a list")
+        self._measurements_path().write_text(
+            json.dumps({"measurements": measurements}, indent=2), encoding="utf-8")
+        return {"ok": True, "count": len(measurements)}
+
+    def geo_for_chunk(self, chunk: str | None = None) -> dict:
+        """CRS + origin for converting picked world coords to projected E/N (and lon/lat).
+        Reads the chunk's georef.json; falls back to the project CRS with a zero origin."""
+        last = self._last_run()
+        for s in self.project.manifest.stages:
+            if s.type == "georef" and (not chunk or s.chunk == chunk):
+                gpath = last.get(s.id, {}).get("artifacts", {}).get("georef")
+                if gpath and Path(gpath).is_file():
+                    info = json.loads(Path(gpath).read_text(encoding="utf-8"))
+                    epsg = info.get("crs_epsg")
+                    return {"crs": info.get("crs"), "crs_epsg": epsg,
+                            "origin": info.get("origin", [0.0, 0.0, 0.0]), "has_geo": bool(epsg)}
+        crs = self.project.manifest.crs
+        epsg = None
+        if crs and str(crs).upper().startswith("EPSG:"):
+            try:
+                epsg = int(str(crs).split(":", 1)[1])
+            except ValueError:
+                epsg = None
+        return {"crs": crs, "crs_epsg": epsg, "origin": [0.0, 0.0, 0.0], "has_geo": bool(epsg)}
 
     def detect_markers(self, chunk: str | None, dictionary: str) -> dict:
         """Auto-detect coded targets across a chunk's photos -> GCP markers (id -> observations)."""
@@ -668,6 +740,12 @@ class _Handler(BaseHTTPRequestHandler):
         if route == "/api/cameras":
             return self._send(200, self.state.cameras_for_chunk(
                 parse_qs(u.query).get("chunk", [None])[0]))
+        if route == "/api/measurements":
+            return self._send(200, {"measurements": self.state.load_measurements()})
+        if route == "/api/georef":
+            return self._send(200, self.state.geo_for_chunk(parse_qs(u.query).get("chunk", [None])[0]))
+        if route == "/api/measurements_export":
+            return self._measurements_export(parse_qs(u.query))
         if route == "/api/report":
             return self._report()
         if route == "/api/cesium":
@@ -728,6 +806,11 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 return self._send(200, self.state.measure_profile(body.get("layer", ""),
                                   body.get("from"), body.get("to"), int(body.get("n", 200))))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": str(exc)})
+        if u.path == "/api/measurements":
+            try:
+                return self._send(200, self.state.save_measurements(body.get("measurements", [])))
             except Exception as exc:  # noqa: BLE001
                 return self._send(400, {"error": str(exc)})
         if u.path == "/api/use_gcps":
@@ -932,7 +1015,7 @@ class _Handler(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001
                 data = None
         try:
-            pdf = write_report_pdf(data)
+            pdf = write_report_pdf(data, measurements=self.state.load_measurements())
         except Exception as exc:  # noqa: BLE001
             return self._send(500, {"error": f"report build failed: {exc!r}"})
         name = (self.state.project.manifest.name or "openreco").replace(" ", "_")
@@ -1023,6 +1106,42 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, {"out": str(out)})
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})
+
+    def _download(self, data: bytes, filename: str, ctype: str):
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _measurements_export(self, q):
+        """Download persisted measurements as GeoJSON / DXF / CSV (or one profile's stations CSV)."""
+        from openreco.measure_export import profile_samples_csv, write_measurements
+        fmt = q.get("fmt", ["geojson"])[0]
+        chunk = q.get("chunk", [None])[0]
+        one = q.get("id", [None])[0]
+        geo = self.state.geo_for_chunk(chunk)
+        epsg, origin = geo.get("crs_epsg"), geo.get("origin")
+        ms = self.state.load_measurements()
+        try:
+            if one:                                  # single-profile stations CSV (chart export)
+                m = next((x for x in ms if x.get("id") == one), None)
+                if not m:
+                    return self._send(404, {"error": "measurement not found"})
+                safe = "".join(c for c in m.get("name", "profile") if c.isalnum() or c in "-_ ").strip() or "profile"
+                return self._download(profile_samples_csv(m, epsg, origin), f"{safe}.csv", "text/csv")
+            if not ms:
+                return self._send(400, {"error": "no measurements to export"})
+            out_dir = self.state.project.manifest.project_dir / "exports"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out = out_dir / f"measurements.{fmt}"
+            write_measurements(ms, fmt, out, epsg, origin)
+            ct = {"geojson": "application/geo+json", "dxf": "image/vnd.dxf",
+                  "csv": "text/csv"}.get(fmt, "application/octet-stream")
+            return self._download(out.read_bytes(), out.name, ct)
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": str(exc)})
 
     def _crs(self, q):
         from openreco.geo.crs import crs_info, search_crs

@@ -167,6 +167,11 @@
           display:inline-flex; }
   .mbtn:hover { background:var(--hover); color:var(--fg); }
   .mbtn .ic { width:14px; height:14px; }
+  .mp-foot { display:flex; align-items:center; gap:6px; padding:7px 10px; border-top:1px solid var(--line);
+             font-size:11px; }
+  .mfbtn { border:1px solid var(--line); background:var(--btn); border-radius:6px; padding:3px 8px;
+           font-size:11px; cursor:pointer; color:var(--fg); }
+  .mfbtn:hover { background:var(--btn-h); border-color:var(--accent); }
   /* cross-section profile chart (floating, bottom-center) */
   #profpanel { position:absolute; left:50%; bottom:54px; transform:translateX(-50%); width:540px;
                max-width:calc(100% - 24px); z-index:9; background:var(--panel); backdrop-filter:var(--blur);
@@ -484,12 +489,19 @@
         <button id="mpClose" class="iconbtn" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div id="mpList"></div>
+      <div class="mp-foot">
+        <span class="muted">Export</span>
+        <button id="mpGeojson" class="mfbtn" title="Export all measurements as GeoJSON">GeoJSON</button>
+        <button id="mpDxf" class="mfbtn" title="Export all measurements as DXF (CAD)">DXF</button>
+        <button id="mpCsv" class="mfbtn" title="Export measurement summary as CSV">CSV</button>
+      </div>
     </div>
     <div id="profpanel" class="hidden">
       <div class="mp-head">
         <svg class="ic"><use href="#i-chart"/></svg>
         <span id="proftitle">Cross-section</span>
         <span style="flex:1"></span>
+        <button id="profCsv" class="iconbtn" title="Export stations CSV"><svg class="ic"><use href="#i-save"/></svg></button>
         <button id="profClose" class="iconbtn" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <svg id="profsvg" viewBox="0 0 520 150" preserveAspectRatio="none"></svg>

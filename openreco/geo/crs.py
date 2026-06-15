@@ -115,3 +115,13 @@ def geodetic_to_crs(
     x, y = tf.transform(np.asarray(lon, float), np.asarray(lat, float))
     z = np.asarray(alt, float)
     return np.column_stack([np.atleast_1d(x), np.atleast_1d(y), np.atleast_1d(z)])
+
+
+def crs_to_geodetic(x: np.ndarray, y: np.ndarray, epsg: int) -> np.ndarray:
+    """Inverse of geodetic_to_crs: projected (x, y) meters in EPSG -> WGS84 (lon, lat) degrees.
+    Returns an [N, 2] array of (lon, lat)."""
+    from pyproj import Transformer
+
+    tf = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
+    lon, lat = tf.transform(np.asarray(x, float), np.asarray(y, float))
+    return np.column_stack([np.atleast_1d(lon), np.atleast_1d(lat)])

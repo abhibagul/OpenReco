@@ -688,10 +688,10 @@ function defName(type) { mSeq[type]++; return { dist: 'Distance', area: 'Area', 
 function startMeasure(type) {
   if (draft) cancelDraft();
   if (measureMode === type) { setTool(null); $('measure').classList.remove('show'); return; }   // toggle off
-  setTool(type);
+  setTool(type); loadGeo();          // refresh CRS/origin for the active chunk's geo readout
   draft = { id: 'm' + Date.now(), type, name: defName(type), color: MCOLORS[measurements.length % MCOLORS.length],
             pts: [], group: new THREE.Group(), visible: true, result: null, value: null,
-            layerId: null, volBase: $('volBase').value };
+            layerId: null, chunk: ACTIVE_CHUNK, volBase: $('volBase').value };
   scene.add(draft.group); openMPanel(); hint();
 }
 function hint() {
@@ -699,8 +699,9 @@ function hint() {
   const n = draft.pts.length, need = (draft.type === 'dist' || draft.type === 'prof') ? 2 : 3;
   let t;
   if (draft.type === 'dist') t = n < 1 ? 'Click points to measure distance' : `${fmt(polylineLen(draft.pts))} m — double-click / Enter to finish`;
-  else if (draft.type === 'prof') t = n < 1 ? 'Click the start of the section line' : 'Click the end point to draw the profile';
+  else if (draft.type === 'prof') t = n < 2 ? 'Click points along the section line (≥2)' : `${fmt(polylineLen(draft.pts))} m path — double-click / Enter to draw profile`;
   else t = n < need ? `Outline the ${draft.type === 'vol' ? 'footprint' : 'area'} (${n} pt) — Esc cancels` : `${fmt(polygonArea(draft.pts))} m² — double-click / Enter to finish`;
+  if (n) t += `   ·   ${enLabel(draft.pts.at(-1))}`;     // live geo coordinate of the last point
   $('measure').textContent = t; $('measure').classList.add('show');
 }
 function cancelDraft() {
@@ -715,18 +716,21 @@ async function finishDraft() {
   while (draft.pts.length > need && draft.pts.at(-1).distanceToSquared(draft.pts.at(-2)) < 1e-4) draft.pts.pop();
   if (draft.pts.length < need) { log(`measurement needs at least ${need} points`, 'warn'); return; }
   const m = draft; draft = null; setTool(null); $('measure').classList.remove('show');
+  m.chunk = ACTIVE_CHUNK;
   measurements.push(m); buildMeasure(m, false); renderMPanel();
-  if (m.type === 'dist') m.value = polylineLen(m.pts);
-  else if (m.type === 'area') m.value = polygonArea(m.pts);
+  if (m.type === 'dist') { m.value = polylineLen(m.pts); m.result = { length_m: +m.value.toFixed(3) }; }
+  else if (m.type === 'area') { m.value = polygonArea(m.pts);
+    m.result = { area_m2: +m.value.toFixed(3), perimeter_m: +perimeter(m.pts).toFixed(3) }; }
   else if (m.type === 'vol') { await computeVolume(m); buildMeasure(m, false); }
   else if (m.type === 'prof') { m.value = polylineLen(m.pts); await computeProfile(m); buildMeasure(m, false); showProfile(m); }
-  renderMPanel();
+  renderMPanel(); persistMeasures();
 }
 async function computeProfile(m) {
   if (!m.layerId) { log('profile: could not tell which layer — click on a mesh/cloud', 'warn'); m.error = 'no layer'; return; }
   try {
+    const path = m.pts.map(p => [p.x, p.y]);     // full polyline path (server samples each segment)
     const r = await fetch('/api/measure_profile', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ layer: m.layerId, from: [m.pts[0].x, m.pts[0].y], to: [m.pts[1].x, m.pts[1].y] }) });
+      body: JSON.stringify({ layer: m.layerId, from: null, to: path }) });
     const d = await r.json();
     if (!r.ok) { log(`profile failed: ${d.error || r.status}`, 'err'); m.error = d.error || ('HTTP ' + r.status); return; }
     m.result = d;
@@ -757,7 +761,6 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!hit) return;
   if (draft.type === 'vol' || draft.type === 'prof') draft.layerId = layerIdForObject(hit.object) || draft.layerId;
   draft.pts.push(hit.point.clone()); buildMeasure(draft, true); hint();
-  if (draft.type === 'prof' && draft.pts.length >= 2) finishDraft();   // a profile is a single line
 });
 renderer.domElement.addEventListener('dblclick', (e) => { if (draft) { e.preventDefault(); finishDraft(); } });
 addEventListener('keydown', (e) => {
@@ -774,10 +777,12 @@ function openMPanel() { $('mpanel').classList.remove('hidden'); }
 $('mpClose').onclick = () => $('mpanel').classList.add('hidden');
 $('profClose').onclick = () => $('profpanel').classList.add('hidden');
 // draw an elevation cross-section as an inline SVG area chart
+let curProfile = null;            // profile whose chart is currently shown (for CSV export)
 function showProfile(m) {
   const panel = $('profpanel'), svg = $('profsvg');
   const r = m && m.result;
   if (!r || !r.samples) { panel.classList.add('hidden'); return; }
+  curProfile = m;
   const sm = r.samples.filter(s => s.z != null);
   $('proftitle').textContent = `${m.name} · ${fmt(r.length_m)} m · Δ ${fmt(r.relief_m)} m · slope ${fmt(r.slope_pct)}%`;
   if (sm.length < 2) { svg.innerHTML = '<text x="10" y="22" class="axt">no surface under the line</text>'; panel.classList.remove('hidden'); return; }
@@ -811,18 +816,18 @@ function mValue(m) {
 function removeMeasure(id) {
   const i = measurements.findIndex(m => m.id === id); if (i < 0) return;
   scene.remove(measurements[i].group); measurements[i].group.clear();
-  measurements.splice(i, 1); renderMPanel();
+  measurements.splice(i, 1); renderMPanel(); persistMeasures();
 }
 function toggleMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m) return;
   m.visible = !m.visible; m.group.visible = m.visible;
   m.group.traverse(o => { if (o.isCSS2DObject && o.element) o.element.style.display = m.visible ? '' : 'none'; });
-  renderMPanel();
+  renderMPanel(); persistMeasures();
 }
 function renameMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m) return;
   const name = prompt('Rename measurement:', m.name); if (!name) return;
-  m.name = name.trim(); buildMeasure(m, false); renderMPanel();
+  m.name = name.trim(); buildMeasure(m, false); renderMPanel(); persistMeasures();
 }
 function focusMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m || !m.pts.length) return;
@@ -832,7 +837,7 @@ function focusMeasure(id) {
 }
 function clearAllMeasures() {
   measurements.forEach(m => { scene.remove(m.group); m.group.clear(); });
-  measurements = []; cancelDraft(); renderMPanel();
+  measurements = []; cancelDraft(); renderMPanel(); persistMeasures();
 }
 function renderMPanel() {
   const list = $('mpList'); if (!list) return;
@@ -862,6 +867,68 @@ function renderMPanel() {
     list.appendChild(row);
   });
 }
+
+// ---- geo readout + persistence (survives reload; export GeoJSON/DXF/CSV) ----
+let GEO = { crs_epsg: null, origin: [0, 0, 0], has_geo: false, crs: null };
+async function loadGeo() {
+  try { GEO = await (await fetch('/api/georef?chunk=' + encodeURIComponent(ACTIVE_CHUNK))).json(); }
+  catch (e) { GEO = { crs_epsg: null, origin: [0, 0, 0], has_geo: false, crs: null }; }
+}
+function toEN(p) { const o = GEO.origin || [0, 0, 0]; return [p.x + o[0], p.y + o[1], p.z + o[2]]; }
+function enLabel(p) {
+  const e = toEN(p);
+  return GEO.has_geo ? `E ${fmt(e[0])}  N ${fmt(e[1])}  Z ${fmt(e[2])} m`
+                     : `x ${fmt(p.x)}  y ${fmt(p.y)}  z ${fmt(p.z)}`;
+}
+function resultFor(m) {                            // ensure every type has a metrics object to persist
+  if (m.result) return m.result;
+  if (m.type === 'dist') return { length_m: +polylineLen(m.pts).toFixed(3) };
+  if (m.type === 'area') return { area_m2: +polygonArea(m.pts).toFixed(3), perimeter_m: +perimeter(m.pts).toFixed(3) };
+  return {};
+}
+function serializeMeasures() {
+  return measurements.map(m => ({ id: m.id, type: m.type, name: m.name, color: m.color,
+    chunk: m.chunk || ACTIVE_CHUNK, layer: m.layerId || null, visible: m.visible,
+    points: m.pts.map(p => [p.x, p.y, p.z]), result: resultFor(m), value: m.value }));
+}
+let _saveT = null;
+function persistMeasures() {
+  clearTimeout(_saveT);
+  _saveT = setTimeout(async () => {
+    try {
+      await fetch('/api/measurements', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ measurements: serializeMeasures() }) });
+    } catch (e) { /* keep working offline; retried on next change */ }
+  }, 400);
+}
+async function loadMeasurements() {
+  let saved = [];
+  try { saved = (await (await fetch('/api/measurements')).json()).measurements || []; } catch (e) { saved = []; }
+  measurements.forEach(m => { scene.remove(m.group); m.group.clear(); });
+  measurements = [];
+  saved.forEach(s => {
+    const m = { id: s.id, type: s.type, name: s.name, color: s.color, chunk: s.chunk,
+      layerId: s.layer || null, visible: s.visible !== false, result: s.result || null, value: s.value,
+      volBase: 'plane', pts: (s.points || []).map(a => new THREE.Vector3(a[0], a[1], a[2])),
+      group: new THREE.Group() };
+    scene.add(m.group); buildMeasure(m, false);
+    if (!m.visible) { m.group.visible = false;
+      m.group.traverse(o => { if (o.isCSS2DObject && o.element) o.element.style.display = 'none'; }); }
+    measurements.push(m);
+  });
+  ['dist', 'area', 'vol', 'prof'].forEach(t => { mSeq[t] = measurements.filter(m => m.type === t).length; });
+  renderMPanel();
+}
+// export buttons (downloads stream from the server with the project CRS applied)
+function exportMeasures(fmt) {
+  if (!measurements.length) { log('no measurements to export', 'warn'); return; }
+  window.open(`/api/measurements_export?fmt=${fmt}&chunk=${encodeURIComponent(ACTIVE_CHUNK)}`, '_blank');
+}
+$('mpGeojson').onclick = () => exportMeasures('geojson');
+$('mpDxf').onclick = () => exportMeasures('dxf');
+$('mpCsv').onclick = () => exportMeasures('csv');
+$('profCsv').onclick = () => { if (curProfile) window.open(
+  `/api/measurements_export?fmt=csv&id=${encodeURIComponent(curProfile.id)}&chunk=${encodeURIComponent(curProfile.chunk || ACTIVE_CHUNK)}`, '_blank'); };
 
 // ---- data + workspace tree ------------------------------------------------
 async function loadStages() {
@@ -1920,5 +1987,5 @@ function setupSplitters() {
 
 // ---- boot ----
 (async () => { setupSplitters(); resize(); await loadStages(); await loadWorkflows(); await loadPresets();
-  await loadProject(); await loadMarkers();
+  await loadProject(); await loadMarkers(); await loadGeo(); await loadMeasurements();
   log(`OpenReco ready · project "${PROJECT.name}" · ${PROJECT.layers.length} layer(s)`, 'ok'); })();

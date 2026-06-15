@@ -7,7 +7,16 @@ import pytest
 
 pytest.importorskip("pyproj")
 
-from openreco.geo.crs import crs_info, search_crs  # noqa: E402
+from openreco.geo.crs import crs_info, crs_to_geodetic, geodetic_to_crs, search_crs  # noqa: E402
+
+
+def test_crs_to_geodetic_roundtrip():
+    # a point near Boulder, CO -> UTM 13N and back should return the original lon/lat
+    lat, lon = 40.015, -105.27
+    en = geodetic_to_crs(np.array([lat]), np.array([lon]), np.array([1600.0]), 32613)
+    ll = crs_to_geodetic(en[:, 0], en[:, 1], 32613)
+    assert ll[0, 0] == pytest.approx(lon, abs=1e-6)
+    assert ll[0, 1] == pytest.approx(lat, abs=1e-6)
 
 
 def test_wgs84_components():

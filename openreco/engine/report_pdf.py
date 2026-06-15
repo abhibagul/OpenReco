@@ -178,13 +178,43 @@ def _gcp_section(doc: _Doc, stages):
         _table(doc, ["GCP", "type", "err (m)", "dx", "dy", "dz"], rows, [0.28, 0.16, 0.16, 0.13, 0.13, 0.14])
 
 
-def write_report_pdf(data: dict[str, Any] | None) -> bytes:
-    """Render a run record (latest.json dict) to PDF bytes. None -> a 'no report yet' page."""
+def _measure_value(m: dict) -> str:
+    r = m.get("result") or {}
+    t = m.get("type")
+    if t == "dist":
+        return f"{r.get('length_m', '?')} m"
+    if t == "area":
+        per = r.get("perimeter_m")
+        return f"{r.get('area_m2', '?')} m²" + (f"  (perim {per} m)" if per is not None else "")
+    if t == "vol":
+        return f"net {r.get('net_m3', '?')} m³  ·  cut {r.get('cut_m3', '?')} / fill {r.get('fill_m3', '?')}"
+    if t == "prof":
+        return f"{r.get('length_m', '?')} m  ·  Δ {r.get('relief_m', '?')} m  ·  {r.get('slope_pct', '?')}%"
+    return "—"
+
+
+_MEASURE_LABEL = {"dist": "distance", "area": "area", "vol": "volume", "prof": "profile"}
+
+
+def _measurements_section(doc: _Doc, measurements):
+    if not measurements:
+        return
+    doc.gap(12)
+    doc.text("Measurements", doc.f_h)
+    rows = [[m.get("name", "?"), _MEASURE_LABEL.get(m.get("type"), m.get("type", "?")),
+             _measure_value(m)] for m in measurements]
+    _table(doc, ["name", "type", "value"], rows, [0.26, 0.16, 0.58])
+
+
+def write_report_pdf(data: dict[str, Any] | None, measurements=None) -> bytes:
+    """Render a run record (latest.json dict) to PDF bytes. None -> a 'no report yet' page.
+    `measurements` (the persisted list) are appended as their own section when present."""
     doc = _Doc()
     if not data:
         doc.text("OpenReco — Processing report", doc.f_title)
         doc.gap(6)
         doc.text("No processing report yet. Run the pipeline (Run), then open it again.", doc.f_b, GREY)
+        _measurements_section(doc, measurements)
         return _save(doc)
 
     badge = ("OK", OK) if data.get("ok") else ("FAILED", ERR)
@@ -214,6 +244,9 @@ def write_report_pdf(data: dict[str, Any] | None) -> bytes:
 
     # GCP accuracy
     _gcp_section(doc, data["stages"])
+
+    # measurements (volumes / areas / distances / profiles)
+    _measurements_section(doc, measurements)
 
     # stages
     doc.gap(12)
