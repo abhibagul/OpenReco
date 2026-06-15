@@ -693,6 +693,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"/api/raster_info" in appjs and b"drawOrthoMeasures" in appjs  # 2D ortho measuring
     assert b"photoCtx" in appjs and b"/api/image_info" in appjs and b"lookThrough" in appjs  # photo right-click
     assert b"drawMapMeasures" in appjs and b"/api/to_world" in appjs and b"onMapClick" in appjs  # map measuring
+    assert b"togglePhoto" in appjs and b"movePhoto" in appjs and b"estimateQuality" in appjs  # photo cluster
     _, html2 = _get(base + "/")
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"#300a24" in html2                                           # Ubuntu-style console
@@ -780,6 +781,48 @@ def test_to_world_requires_crs(server):
         raise AssertionError("expected HTTP 400")
     except urllib.error.HTTPError as e:
         assert e.code == 400
+
+
+def _photo_server(tmp_path):
+    from PIL import Image
+    imgs = tmp_path / "imgs"
+    imgs.mkdir()
+    for n in ("a.jpg", "b.jpg", "c.jpg"):
+        Image.new("RGB", (96, 72), (100, 120, 140)).save(imgs / n)
+    proj = Project.create(tmp_path / "proj", name="ph").add_stage("ing", "ingest",
+                                                                  params={"image_dir": str(imgs)})
+    httpd = serve(proj, port=0)
+    port = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd, f"http://127.0.0.1:{port}"
+
+
+def test_photo_enable_disable(tmp_path):
+    httpd, base = _photo_server(tmp_path)
+    try:
+        s, b = _post(base + "/api/photo_enabled", {"layer": "ing", "name": "b.jpg", "enabled": False})
+        assert s == 200 and b["excluded"] is True
+        _, raw = _get(base + "/api/images")
+        imgs = {im["name"]: im["excluded"] for im in json.loads(raw)["images"]}
+        assert imgs["b.jpg"] is True and imgs["a.jpg"] is False
+        _post(base + "/api/photo_enabled", {"layer": "ing", "name": "b.jpg", "enabled": True})
+        _, raw = _get(base + "/api/images")
+        assert not any(im["excluded"] for im in json.loads(raw)["images"])
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_estimate_quality(tmp_path):
+    httpd, base = _photo_server(tmp_path)
+    try:
+        _, raw = _get(base + "/api/estimate_quality")
+        d = json.loads(raw)
+        assert "median" in d and len(d["images"]) == 3
+        assert all("score" in im for im in d["images"])
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
 
 
 def test_image_info_endpoint(server, tmp_path):

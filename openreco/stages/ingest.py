@@ -28,6 +28,7 @@ class Ingest(Stage):
         return {
             "image_dir": "images",     # relative to the project dir
             "select": [],              # optional whitelist of filenames in image_dir ([] = use all)
+            "exclude": [],             # manually disabled filenames (kept in the table, marked excluded)
             "blur_threshold": 0.0,     # 0 = disable culling; else absolute variance-of-Laplacian
             "blur_relative": 0.15,     # also cull images below this fraction of the median blur
             "min_images": 3,
@@ -37,6 +38,7 @@ class Ingest(Stage):
         return {
             "image_dir": {"type": "string"},
             "select": {"type": "array", "items": {"type": "string"}},
+            "exclude": {"type": "array", "items": {"type": "string"}},
             "blur_threshold": {"type": "number", "minimum": 0},
             "blur_relative": {"type": "number", "minimum": 0, "maximum": 1},
             "min_images": {"type": "integer", "minimum": 2},
@@ -63,6 +65,12 @@ class Ingest(Stage):
                 raise RuntimeError("cancelled during ingest")
 
         self._cull(infos, ctx.params)
+
+        exclude = set(ctx.params.get("exclude") or [])    # manually disabled photos
+        for im in infos:
+            if im.name in exclude and not im.excluded:
+                im.excluded = True
+                im.reason = "disabled"
 
         kept = [im for im in infos if not im.excluded]
         gps = [im for im in kept if im.has_gps]

@@ -239,6 +239,7 @@ class AppState:
         for s in self.project.manifest.stages:
             if s.type != "ingest" or (chunk and s.chunk != chunk):
                 continue
+            exclude = set(s.params.get("exclude") or [])     # manually disabled photos (live)
             art = last.get(s.id, {}).get("artifacts", {}).get("images")
             if art and Path(art).is_file():
                 data = json.loads(Path(art).read_text(encoding="utf-8"))
@@ -246,7 +247,8 @@ class AppState:
                 for im in data.get("images", []):
                     out.append({"name": im["name"], "path": str(Path(image_dir) / im["name"]),
                                 "lat": im.get("lat"), "lon": im.get("lon"),
-                                "excluded": im.get("excluded", False), "layer": s.id})
+                                "excluded": im.get("excluded", False) or im["name"] in exclude,
+                                "layer": s.id})
                 continue
             # not run yet: scan the configured folder so the user sees the photos immediately
             idir = s.params.get("image_dir", "images")
@@ -258,7 +260,7 @@ class AppState:
                     if select and f.name not in select:
                         continue
                     out.append({"name": f.name, "path": str(f), "lat": None, "lon": None,
-                                "excluded": False, "layer": s.id})
+                                "excluded": f.name in exclude, "layer": s.id})
         return {"image_dir": image_dir, "images": out}
 
     def browse(self, path: str | None) -> dict:
@@ -342,6 +344,62 @@ class AppState:
         stage.params["select"] = sorted(current)
         self.project.save()
         return {"ok": True, "id": layer_id, "remaining": len(current)}
+
+    def set_photo_enabled(self, layer_id: str, name: str, enabled: bool) -> dict:
+        """Enable/disable one photo: toggles its name in the ingest layer's `exclude` list. Disabled
+        photos stay listed but are marked excluded (re-run to drop them from alignment downstream)."""
+        stage = next((s for s in self.project.manifest.stages if s.id == layer_id), None)
+        if stage is None or stage.type != "ingest":
+            raise ValueError(f"no ingest layer {layer_id!r}")
+        ex = set(stage.params.get("exclude") or [])
+        if enabled:
+            ex.discard(name)
+        else:
+            ex.add(name)
+        stage.params["exclude"] = sorted(ex)
+        self.project.save()
+        return {"ok": True, "id": layer_id, "name": name, "excluded": not enabled}
+
+    def move_photo(self, layer_id: str, name: str, to_chunk: str) -> dict:
+        """Move one photo to another chunk: add it to (an ingest in) `to_chunk`, drop from source."""
+        src = next((s for s in self.project.manifest.stages if s.id == layer_id), None)
+        if src is None or src.type != "ingest":
+            raise ValueError(f"no ingest layer {layer_id!r}")
+        idir = src.params.get("image_dir", "images")
+        p = Path(idir) if Path(idir).is_absolute() else (self.project.manifest.project_dir / idir)
+        path = str(p / name)
+        if not Path(path).is_file():
+            raise ValueError(f"{name} not found on disk")
+        # reuse an ingest in the target chunk if one points at the same folder, else create one
+        dest = next((s for s in self.project.manifest.stages
+                     if s.type == "ingest" and s.chunk == to_chunk), None)
+        added = self.add_photos([path], to_chunk, dest.id if dest else None)
+        self.remove_photo(layer_id, name)
+        return {"ok": True, "moved": name, "to": to_chunk, "id": added.get("id")}
+
+    def estimate_quality(self, chunk: str | None) -> dict:
+        """Sharpness (variance-of-Laplacian) per photo in a chunk — the reference tool's 'Estimate Image
+        Quality'. Computed on a downscaled copy for speed; higher = sharper."""
+        import numpy as np
+        from PIL import Image
+
+        from openreco.io.images import blur_score
+        imgs = self.images_for_chunk(chunk)["images"]
+        out = []
+        for im in imgs:
+            fp = Path(im["path"])
+            if not fp.is_file():
+                continue
+            try:
+                with Image.open(fp) as img:
+                    img.thumbnail((1024, 1024))
+                    out.append({"name": im["name"], "score": round(float(blur_score(img)), 1),
+                                "excluded": im["excluded"]})
+            except Exception:  # noqa: BLE001
+                continue
+        scores = [o["score"] for o in out]
+        med = round(float(np.median(scores)), 1) if scores else 0.0
+        return {"median": med, "images": out}
 
     def cameras_for_chunk(self, chunk: str | None) -> dict:
         """Camera positions for the 3D view (the reference tool 'show cameras'). Prefers solved poses from
@@ -737,6 +795,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._raster_info(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/image_info":
             return self._image_info(parse_qs(u.query).get("path", [""])[0])
+        if route == "/api/estimate_quality":
+            try:
+                return self._send(200, self.state.estimate_quality(parse_qs(u.query).get("chunk", [None])[0]))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": str(exc)})
         if route == "/api/browse":
             return self._send(200, self.state.browse(parse_qs(u.query).get("path", [None])[0]))
         if route == "/api/thumb":
@@ -827,6 +890,18 @@ class _Handler(BaseHTTPRequestHandler):
             return self._add_photos(body)
         if u.path == "/api/remove_photo":
             return self._remove_photo(body)
+        if u.path == "/api/photo_enabled":
+            try:
+                return self._send(200, self.state.set_photo_enabled(
+                    body.get("layer", ""), body.get("name", ""), bool(body.get("enabled", True))))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": str(exc)})
+        if u.path == "/api/move_photo":
+            try:
+                return self._send(200, self.state.move_photo(
+                    body.get("layer", ""), body.get("name", ""), body.get("to", "")))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": str(exc)})
         if u.path == "/api/operation":
             return self._operation(body)
         if u.path == "/api/chunk":

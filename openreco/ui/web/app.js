@@ -1841,7 +1841,9 @@ async function loadPhotos() {
   PHOTOS.images.forEach(im => {
     const t = document.createElement('div'); t.className = 'th' + (im.excluded ? ' exc' : '');
     const url = `/api/file?path=${encodeURIComponent(im.path)}`;
+    const q = QUALITY[im.name];
     t.innerHTML = `<button class="rm" title="Remove from chunk">${ic('x')}</button>`
+                + (q != null ? `<span class="q" title="sharpness">${q}</span>` : '')
                 + `<img loading="lazy" src="${url}"><div>${im.name}</div>`;
     t.querySelector('img').onclick = () => openPhoto(im);
     t.querySelector('.rm').onclick = (e) => { e.stopPropagation(); removePhoto(im); };
@@ -1851,14 +1853,52 @@ async function loadPhotos() {
 }
 // right-click menu on a photo thumbnail (industry-standard, scoped to what we support)
 function photoCtx(im) {
-  return [
+  const items = [
     { label: 'Open / preview', icon: 'image', fn: () => openPhoto(im) },
     { label: 'Look through (3D view)', icon: 'camera', fn: () => lookThrough(im) },
-    { label: 'Show info…', icon: 'info', fn: () => showImageInfo(im) },
-    { label: 'Copy file path', icon: 'file-plus', fn: () => copyText(im.path, im.name) },
     { sep: true },
-    { label: 'Remove from chunk', icon: 'trash', danger: true, fn: () => removePhoto(im) },
+    { label: im.excluded ? 'Enable image' : 'Disable image', icon: im.excluded ? 'eye' : 'minus',
+      fn: () => togglePhoto(im) },
   ];
+  const srcChunk = (PROJECT.layers.find(l => l.id === im.layer) || {}).chunk;
+  (PROJECT.chunks || []).filter(c => c !== srcChunk).forEach(c =>
+    items.push({ label: `Move to "${c}"`, icon: 'folders', fn: () => movePhoto(im, c) }));
+  items.push({ label: 'Estimate image quality', icon: 'chart', fn: estimateQuality });
+  items.push({ sep: true });
+  items.push({ label: 'Show info…', icon: 'info', fn: () => showImageInfo(im) });
+  items.push({ label: 'Copy file path', icon: 'file-plus', fn: () => copyText(im.path, im.name) });
+  items.push({ sep: true });
+  items.push({ label: 'Remove from chunk', icon: 'trash', danger: true, fn: () => removePhoto(im) });
+  return items;
+}
+async function togglePhoto(im) {
+  const enable = im.excluded;            // currently excluded -> enabling
+  const r = await fetch('/api/photo_enabled', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layer: im.layer, name: im.name, enabled: enable }) });
+  const j = await r.json();
+  if (r.ok) { log(`${im.name} ${enable ? 'enabled' : 'disabled'} (re-run to apply downstream)`); await loadPhotos(); }
+  else log('toggle error: ' + j.error, 'err');
+}
+async function movePhoto(im, to) {
+  const r = await fetch('/api/move_photo', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layer: im.layer, name: im.name, to }) });
+  const j = await r.json();
+  if (r.ok) { log(`moved ${im.name} → "${to}"`, 'ok'); await loadPhotos(); await loadProject(); }
+  else log('move error: ' + j.error, 'err');
+}
+let QUALITY = {};
+async function estimateQuality() {
+  log('estimating image quality (sharpness)…');
+  try {
+    const d = await (await fetch('/api/estimate_quality?chunk=' + encodeURIComponent(ACTIVE_CHUNK))).json();
+    if (d.error) { log('quality error: ' + d.error, 'err'); return; }
+    QUALITY = {}; d.images.forEach(o => { QUALITY[o.name] = o.score; });
+    const worst = [...d.images].sort((a, b) => a.score - b.score).slice(0, 6);
+    log(`image quality — median ${d.median} (higher = sharper); softest:`, 'info');
+    worst.forEach(o => log(`  ${o.name}: ${o.score}${o.score < d.median * 0.5 ? '  ⚠ soft' : ''}`,
+      o.score < d.median * 0.5 ? 'warn' : 'info'));
+    await loadPhotos();
+  } catch (e) { log('quality error: ' + e, 'err'); }
 }
 function copyText(text, what) {
   if (navigator.clipboard) navigator.clipboard.writeText(text).then(
