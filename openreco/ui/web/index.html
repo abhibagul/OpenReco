@@ -16,8 +16,8 @@
   :root { --bg:#f5f7fb; --ink:#0b1a2b;
           --panel:#ffffff; --panel2:#ffffff; --chrome:#ffffff;
           --fg:#142233; --muted:#5b6b82; --line:#e2e9f4; --hover:#eef3fb;
-          --sel:rgba(59,130,246,.14); --accent:#3b82f6; --accent-h:#1d4ed8; --accent-fg:#ffffff;
-          --accent-soft:rgba(59,130,246,.12); --cobalt:#1d4ed8;
+          --sel:rgba(29,78,216,.13); --accent:#1d4ed8; --accent-h:#163fa8; --accent-fg:#ffffff;
+          --accent-soft:rgba(29,78,216,.11); --cobalt:#1d4ed8;
           --ok:#16a34a; --warn:#b7791f; --err:#e11d48;
           --console-bg:#ffffff; --console-fg:#2a3a52; --btn:#f3f6fc; --btn-h:#e7eefb;
           --radius:12px; --r-sm:8px; --blur:saturate(1.05) blur(8px); --shadow:0 6px 22px rgba(20,45,90,.09);
@@ -177,11 +177,11 @@ div#m-model > div .t{
   /* floating 3D measurement labels (CSS2D overlay) */
   #labels { position:absolute; inset:0; pointer-events:none; z-index:6; overflow:hidden; }
   .mlabel { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap;
-            background:#11131acc; backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur);
+            background:rgba(255,255,255,.95); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur);
             border:1px solid var(--accent); border-radius:7px; padding:2px 7px;
-            box-shadow:0 2px 8px #0007; transform:translate(-50%,-50%); }
+            box-shadow:0 2px 8px rgba(20,40,80,.18); transform:translate(-50%,-50%); }
   .mlabel.seg { font-weight:500; color:var(--muted); padding:1px 5px; font-size:10px;
-                background:#0d0f14cc; border-color:var(--line); }
+                background:rgba(255,255,255,.9); border-color:var(--line); }
   .mlabel.note { transform:translate(-50%,-115%); max-width:240px; white-space:normal;
                  border-width:1px 1px 1px 3px; }
   /* measurements list panel (floating, top-right of the viewport) */
@@ -368,15 +368,19 @@ div#m-model > div .t{
 <body>
 <!-- line-icon sprite (stroke icons, currentColor) -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-  <symbol id="i-logo" viewBox="0 0 32 32">
-    <path d="M16 3 L29 16 L16 29 L3 16 Z" fill="rgba(59,130,246,0.18)" stroke="#7fb0ff" stroke-width="1.6" stroke-linejoin="round"/>
-    <path d="M16 3 L16 29 M3 16 L29 16 M16 3 L3 16 M29 16 L16 29" fill="none" stroke="#3b82f6" stroke-width="1.3" stroke-opacity="0.75"/>
-    <path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5" fill="none" stroke="#1d4ed8" stroke-width="1.1" stroke-opacity="0.5"/>
-    <g stroke="none">
-      <circle cx="16" cy="3" r="2" fill="#7fb0ff"/><circle cx="29" cy="16" r="2" fill="#7fb0ff"/>
-      <circle cx="16" cy="29" r="2" fill="#7fb0ff"/><circle cx="3" cy="16" r="2" fill="#7fb0ff"/>
-      <circle cx="16" cy="16" r="2" fill="#3b82f6"/>
-    </g>
+  <symbol id="i-logo" viewBox="0 0 100 100">
+    <polygon points="15.4,32 50,12 50,52" fill="#7FB0FF"/>
+    <polygon points="50,12 84.6,32 50,52" fill="#3B82F6"/>
+    <polygon points="84.6,32 84.6,72 50,52" fill="#1D4ED8"/>
+    <line x1="50" y1="52" x2="84.6" y2="72" stroke="#9DB8E6" stroke-width="2" stroke-linecap="round"/>
+    <line x1="50" y1="52" x2="50" y2="92" stroke="#9DB8E6" stroke-width="2" stroke-linecap="round"/>
+    <line x1="50" y1="52" x2="15.4" y2="72" stroke="#9DB8E6" stroke-width="2" stroke-linecap="round"/>
+    <line x1="50" y1="52" x2="15.4" y2="32" stroke="#9DB8E6" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="50,12 84.6,32 84.6,72 50,92 15.4,72 15.4,32" fill="none" stroke="#1D4ED8" stroke-width="3" stroke-linejoin="round"/>
+    <circle cx="50" cy="12" r="3.4" fill="#1D4ED8"/><circle cx="84.6" cy="32" r="3.4" fill="#1D4ED8"/>
+    <circle cx="84.6" cy="72" r="3.4" fill="#1D4ED8"/><circle cx="50" cy="92" r="3.4" fill="#1D4ED8"/>
+    <circle cx="15.4" cy="72" r="3.4" fill="#1D4ED8"/><circle cx="15.4" cy="32" r="3.4" fill="#1D4ED8"/>
+    <circle cx="50" cy="52" r="3.4" fill="#3B82F6"/>
   </symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.4 4 5.6 4 9s-1.3 6.6-4 9c-2.7-2.4-4-5.6-4-9s1.3-6.6 4-9z"/></symbol>
@@ -428,7 +432,7 @@ div#m-model > div .t{
 <div id="app">
   <!-- menu bar -->
   <div id="menubar">
-    <b title="OpenReco"><svg class="logo" viewBox="0 0 32 32"><use href="#i-logo"/></svg>Open<span class="lr">Reco</span></b>
+    <b title="OpenReco"><svg class="logo" viewBox="0 0 100 100"><use href="#i-logo"/></svg>Open<span class="lr">Reco</span></b>
     <div class="mItem" data-menu="file">File<div class="mMenu hidden" id="m-file"></div></div>
     <div class="mItem" data-menu="workflow">Workflow<div class="mMenu hidden" id="m-workflow"></div></div>
     <div class="mItem" data-menu="model">Model<div class="mMenu hidden" id="m-model"></div></div>
@@ -521,7 +525,7 @@ div#m-model > div .t{
       <button data-vtab="photo">Photo</button>
     </div>
     <canvas id="c"></canvas>
-    <div id="modelEmpty"><svg viewBox="0 0 32 32"><use href="#i-logo"/></svg>
+    <div id="modelEmpty"><svg viewBox="0 0 100 100"><use href="#i-logo"/></svg>
       <div>Model view · select a layer to display</div></div>
     <canvas id="editoverlay"></canvas>
     <canvas id="gizmo" title="Navigation cube — click a face, edge or corner to snap the view"></canvas>
@@ -582,7 +586,7 @@ div#m-model > div .t{
   <!-- right: properties -->
   <div id="right">
     <h3>Properties</h3>
-    <div id="params"><div class="emptyart"><svg viewBox="0 0 32 32"><use href="#i-logo"/></svg>
+    <div id="params"><div class="emptyart"><svg viewBox="0 0 100 100"><use href="#i-logo"/></svg>
       <div>Select a layer to inspect its properties.</div></div></div>
   </div>
   <!-- bottom dock -->
@@ -655,7 +659,7 @@ div#m-model > div .t{
 
 <!-- About dialog -->
 <div id="aboutModal" class="modal hidden"><div class="dialog" style="width:420px; text-align:center">
-  <svg viewBox="0 0 32 32" style="width:54px;height:54px;margin:4px auto;display:block"><use href="#i-logo"/></svg>
+  <svg viewBox="0 0 100 100" style="width:54px;height:54px;margin:4px auto;display:block"><use href="#i-logo"/></svg>
   <h2 style="justify-content:center;font-family:var(--disp)">OpenReco</h2>
   <div class="muted">Open, reproducible photogrammetry &amp; 3D reconstruction.</div>
   <div id="aboutVer" class="muted" style="margin-top:4px;font-size:12px"></div>

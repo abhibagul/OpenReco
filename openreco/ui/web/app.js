@@ -143,8 +143,8 @@ const gizmoLight = new THREE.DirectionalLight(0xffffff, 0.6); gizmoLight.positio
 function faceTex(label) {            // brand navigation cube: cobalt/azure face, white centered label
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d');
-  x.fillStyle = '#3b82f6'; x.fillRect(0, 0, 128, 128);
-  x.strokeStyle = '#1d4ed8'; x.lineWidth = 4; x.strokeRect(2, 2, 124, 124);
+  x.fillStyle = '#1d4ed8'; x.fillRect(0, 0, 128, 128);
+  x.strokeStyle = '#163fa8'; x.lineWidth = 4; x.strokeRect(2, 2, 124, 124);
   x.fillStyle = '#ffffff'; x.font = 'bold 22px "Space Grotesk",system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
   x.fillText(label, 64, 66);
   return new THREE.CanvasTexture(c);
@@ -616,7 +616,8 @@ addEventListener('pointerup', (e) => {
 });
 
 // ---- measurements (Propeller-style: persistent, named, floating 3D labels) -------
-const MCOLORS = [0x5694ff, 0xf9e2af, 0xa6e3a1, 0xf38ba8, 0xcba6f7, 0xfab387, 0x94e2d5, 0x89dceb];
+// brand-aligned, distinct, readable-on-light measurement colors
+const MCOLORS = [0x1d4ed8, 0x3b82f6, 0x0891b2, 0x16a34a, 0xca8a04, 0xea580c, 0xe11d48, 0x7c3aed];
 let measurements = [];            // committed measurements (each: id,type,name,color,pts,group,visible,result,value)
 let draft = null;                 // measurement currently being drawn
 let measureMode = null;           // null | 'dist' | 'area' | 'vol' (active tool)
@@ -1342,7 +1343,7 @@ function mkbtn(label, fn, icon, primary) {
 function renderParams(L) {
   const box = $('params'); box.innerHTML = '';
   if (!L) {
-    box.innerHTML = '<div class="emptyart"><svg viewBox="0 0 32 32"><use href="#i-logo"/></svg>'
+    box.innerHTML = '<div class="emptyart"><svg viewBox="0 0 100 100"><use href="#i-logo"/></svg>'
       + '<div>Select a layer to inspect its properties.</div></div>';
     return;
   }
