@@ -18,10 +18,23 @@ import logging
 import sys
 from pathlib import Path
 
-from openreco import __version__, stages  # noqa: F401 — import registers stages
+from openreco import __version__
 from openreco.engine.manifest import load_manifest
 from openreco.engine.runner import Runner, StageStatus, compute_keys
 from openreco.engine.stage import registered_types
+
+
+def _register_stages() -> None:
+    """Import the stage implementations (registration side-effect). Deferred so the lightweight
+    commands (doctor / init / crs / --version) run on a bare install without the heavy `slice`
+    deps — `doctor` can then report exactly which deps are missing instead of crashing on import."""
+    try:
+        from openreco import stages  # noqa: F401
+    except ImportError as e:
+        raise SystemExit(
+            f"missing reconstruction dependency ({e.name}). Install the runtime extras with:\n"
+            "    pip install 'openreco[slice]'\n"
+            "(run `openreco doctor` to see exactly what's available)") from None
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -33,6 +46,7 @@ def _setup_logging(verbose: bool) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
+    _register_stages()
     manifest = load_manifest(args.project)
     force = ["*"] if args.force_all else (args.force or [])
     outcome = Runner(manifest, force=force).run()
@@ -102,6 +116,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 def cmd_batch(args: argparse.Namespace) -> int:
     from openreco.batch import discover_projects, run_batch
 
+    _register_stages()
     projects = discover_projects(args.root)
     if not projects:
         print(f"no project.toml found under {args.root}", file=sys.stderr)
@@ -140,6 +155,8 @@ def cmd_export(args: argparse.Namespace) -> int:
 def cmd_ui(args: argparse.Namespace) -> int:
     from openreco.api import Project
     from openreco.ui.desktop import launch
+
+    _register_stages()
 
     proj = Project.open(args.project) if Path(args.project).exists() else Project.create(args.project)
     mode = "browser" if args.browser else "window" if args.window else "auto"
@@ -258,6 +275,7 @@ def cmd_crs(args: argparse.Namespace) -> int:
 
 
 def cmd_stages(_args: argparse.Namespace) -> int:
+    _register_stages()
     for t in registered_types():
         print(t)
     return 0

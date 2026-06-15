@@ -22,6 +22,10 @@ valproj/
 valproj_run.py
 valproj_run.log
 verify_transforms.py
+# wheel-build verification scratch
+dist_check/
+_whlvenv/
+_whltest/
 
 # Python
 *.egg-info/

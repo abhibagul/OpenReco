@@ -26,7 +26,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from openreco import stages as _stages  # noqa: F401 — importing registers built-in stages
 from openreco.engine.manifest import Manifest, StageSpec, load_manifest
 from openreco.engine.runner import RunOutcome, Runner, compute_keys
 from openreco.engine.stage import get_stage, registered_types
@@ -34,8 +33,16 @@ from openreco.engine.stage import get_stage, registered_types
 __all__ = ["Project", "registered_stages", "stage_info"]
 
 
+def _ensure_stages() -> None:
+    """Import the built-in stages (registration side-effect). Lazy so that editing a project
+    (create / add_stage / save) and the lightweight CLI work without the heavy reconstruction
+    deps; only running or introspecting stages pulls them in."""
+    from openreco import stages  # noqa: F401
+
+
 def registered_stages() -> list[str]:
     """Names of all registered stage types."""
+    _ensure_stages()
     return registered_types()
 
 
@@ -43,6 +50,8 @@ def stage_info(type_name: str | None = None) -> list[dict[str, Any]] | dict[str,
     """Introspect registered stages — for building a UI stage palette and parameter panels.
     Returns, per stage: type, version, deterministic, default_params, params_schema. Pass a
     `type_name` for a single stage's info."""
+    _ensure_stages()
+
     def info(t: str) -> dict[str, Any]:
         s = get_stage(t)
         return {"type": t, "version": s.version, "deterministic": s.deterministic,
@@ -187,6 +196,7 @@ class Project:
         recomputes everything. `targets` limits the run to those stages + their ancestors (e.g. run
         a single layer and only what it needs). `on_event(dict)` receives live run events and
         `cancel()->bool` enables cancellation. Disabled layers (and their dependents) are excluded."""
+        _ensure_stages()
         manifest = self.manifest
         runnable = self._runnable_stages()
         if targets:

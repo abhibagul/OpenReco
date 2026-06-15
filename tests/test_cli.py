@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from openreco.api import Project
 from openreco.cli import main
 from openreco.workflow import validate_pipeline
@@ -40,3 +42,18 @@ def test_init_refuses_overwrite(tmp_path, capsys):
     assert main(["init", str(d)]) == 0
     assert main(["init", str(d)]) == 1                 # exists -> refuse
     assert main(["init", str(d), "--force"]) == 0      # --force overwrites
+
+
+def test_lightweight_commands_dont_need_stage_deps(tmp_path, monkeypatch):
+    # simulate a bare install (reconstruction deps absent): registering stages would fail.
+    import openreco.cli as cli
+
+    def boom():
+        raise SystemExit("deps missing")
+    monkeypatch.setattr(cli, "_register_stages", boom)
+    # doctor and init must still work (they don't touch stage implementations)...
+    assert cli.main(["doctor"]) == 0
+    assert cli.main(["init", str(tmp_path / "p"), "--name", "x"]) == 0
+    # ...while run surfaces the missing-deps message instead of an opaque ImportError
+    with pytest.raises(SystemExit):
+        cli.main(["run", str(tmp_path / "p")])
