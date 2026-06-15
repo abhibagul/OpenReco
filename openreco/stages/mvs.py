@@ -14,6 +14,7 @@ Outputs (in cache dir):
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -92,13 +93,24 @@ class Mvs(Stage):
 
         if backend == "colmap_cuda":
             if compute.gpu_dense_available():
-                try:
-                    xyz, rgb, normals = self._cuda_dense(ctx, model_dir, image_dir)
-                    return "dense", xyz, rgb, normals
-                except Exception as exc:  # noqa: BLE001
-                    if forced and not ctx.params["allow_sparse_fallback"]:
-                        raise
-                    ctx.logger.warning("COLMAP CUDA dense failed (%r) — trying next backend", exc)
+                # try the chosen size, then progressively smaller — COLMAP's CUDA PatchMatch can hit
+                # "misaligned address" / OOM at larger image sizes that succeed when downscaled.
+                base = _QUALITY[ctx.params["quality"]]
+                sizes = [s for s in (base, 1600, 1000, 700) if s <= base] or [base]
+                sizes = sorted(set(sizes), reverse=True)
+                for i, ms in enumerate(sizes):
+                    try:
+                        xyz, rgb, normals = self._cuda_dense(ctx, model_dir, image_dir, max_size=ms)
+                        return "dense", xyz, rgb, normals
+                    except Exception as exc:  # noqa: BLE001
+                        more = i + 1 < len(sizes)
+                        if more:
+                            ctx.logger.warning("COLMAP CUDA dense failed at max_image_size=%d (%r) — "
+                                               "retrying at %d", ms, exc, sizes[i + 1])
+                        elif forced and not ctx.params["allow_sparse_fallback"]:
+                            raise
+                        else:
+                            ctx.logger.warning("COLMAP CUDA dense failed (%r) — trying next backend", exc)
             elif forced:
                 raise RuntimeError("dense_backend=colmap_cuda but no CUDA GPU + COLMAP binary "
                                    "(set OPENRECO_COLMAP or install the CUDA build)")
@@ -171,11 +183,14 @@ class Mvs(Stage):
                                 n_depths=int(ctx.params["planesweep_depths"]),
                                 n_neighbors=int(ctx.params["planesweep_neighbors"]))
 
-    def _cuda_dense(self, ctx, model_dir: Path, image_dir: str):
+    def _cuda_dense(self, ctx, model_dir: Path, image_dir: str, max_size: int | None = None):
         colmap = str(compute.find_colmap())
         ws = ctx.artifact_path("dense")
+        if ws.exists():                                   # clean slate so retries re-undistort fresh
+            shutil.rmtree(ws, ignore_errors=True)
         ws.mkdir(parents=True, exist_ok=True)
-        max_size = _QUALITY[ctx.params["quality"]]
+        if max_size is None:
+            max_size = _QUALITY[ctx.params["quality"]]
         geom = bool(ctx.params["geometric_consistency"])
 
         ctx.logger.info("GPU dense via %s (max_image_size=%d)", colmap, max_size)
