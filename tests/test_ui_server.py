@@ -694,6 +694,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"photoCtx" in appjs and b"/api/image_info" in appjs and b"lookThrough" in appjs  # photo right-click
     assert b"drawMapMeasures" in appjs and b"/api/to_world" in appjs and b"onMapClick" in appjs  # map measuring
     assert b"togglePhoto" in appjs and b"movePhoto" in appjs and b"estimateQuality" in appjs  # photo cluster
+    assert b"/api/compute" in appjs and b"renderCompute" in appjs        # compute/GPU status panel
     _, html2 = _get(base + "/")
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"#300a24" in html2                                           # Ubuntu-style console
@@ -770,6 +771,13 @@ def test_to_world_to_geo_roundtrip(tmp_path):
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_compute_endpoint(server):
+    base, _ = server
+    _, raw = _get(base + "/api/compute")
+    d = json.loads(raw)
+    assert "auto_dense_backend" in d and "cpu_count" in d and "torch_device" in d
 
 
 def test_to_world_requires_crs(server):

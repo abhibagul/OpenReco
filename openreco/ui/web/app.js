@@ -985,6 +985,23 @@ function openPrefs() {
   $('prefRotate').value = PREFS.rotate; $('prefZoom').value = PREFS.zoom; $('prefPan').value = PREFS.pan;
   $('prefLogMax').value = PREFS.logMax;
   $('prefsModal').classList.remove('hidden');
+  renderCompute();
+}
+async function renderCompute() {
+  const el = $('prefCompute'); el.textContent = 'probing…';
+  try {
+    const d = await (await fetch('/api/compute')).json();
+    const ok = (b) => b ? '<span style="color:var(--ok,#a6e3a1)">✓</span>' : '<span style="color:var(--muted)">—</span>';
+    const rows = [];
+    if (d.gpu_name) rows.push(`<b>GPU</b> ${d.gpu_name}${d.cuda_version ? ` · CUDA ${d.cuda_version}` : ''}${d.vram_mb ? ` · ${(d.vram_mb / 1024).toFixed(1)} GB` : ''}`);
+    else rows.push(`<b>GPU</b> none detected — CPU / plane-sweep fallback`);
+    rows.push(`${ok(d.colmap_cuda)} Dense MVS: CUDA COLMAP${d.colmap_bundled ? ' (bundled)' : d.colmap ? ' (system)' : ''}`);
+    rows.push(`${ok(!!d.pycolmap_version)} SfM / matching: pycolmap ${d.pycolmap_version || ''}`);
+    rows.push(`${ok(d.torch_device === 'cuda')} torch ${d.torch_version || '—'} · device ${d.torch_device || '—'}`);
+    rows.push(`<b>CPU</b> ${d.cpu_count} cores`);
+    rows.push(`<b>Auto dense backend</b> ${d.auto_dense_backend}`);
+    el.innerHTML = rows.join('<br>');
+  } catch (e) { el.textContent = 'compute probe failed: ' + e; }
 }
 function readPrefs() {
   PREFS = { units: $('prefUnits').value,

@@ -795,6 +795,12 @@ class _Handler(BaseHTTPRequestHandler):
             return self._raster_info(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/image_info":
             return self._image_info(parse_qs(u.query).get("path", [""])[0])
+        if route == "/api/compute":
+            from openreco import compute
+            try:
+                return self._send(200, compute.describe())
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": str(exc)})
         if route == "/api/estimate_quality":
             try:
                 return self._send(200, self.state.estimate_quality(parse_qs(u.query).get("chunk", [None])[0]))

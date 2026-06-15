@@ -40,6 +40,14 @@ def test_gpu_dense_available_when_both_present(tmp_path, monkeypatch):
     _clear()
 
 
+def test_describe_has_expected_keys():
+    d = compute.describe()
+    for k in ("nvidia_gpu", "colmap_cuda", "auto_dense_backend", "cpu_count",
+              "torch_device", "gpu_name", "vram_mb", "pycolmap_version", "colmap_bundled"):
+        assert k in d
+    assert isinstance(d["cpu_count"], int) and d["cpu_count"] >= 1
+
+
 def test_select_dense_backend_priority(monkeypatch):
     # colmap_cuda wins when available
     monkeypatch.setattr(compute, "colmap_has_cuda", lambda: True)

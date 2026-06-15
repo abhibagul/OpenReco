@@ -96,11 +96,34 @@ def select_dense_backend(prefer: str = "auto") -> str:
 
 
 def describe() -> dict:
-    """Human/JSON-friendly capability snapshot (for reports / the 'doctor')."""
-    return {
+    """Human/JSON-friendly capability snapshot (for reports / the 'doctor' / the Compute panel)."""
+    cm = find_colmap()
+    d = {
         "nvidia_gpu": has_nvidia_gpu(),
-        "colmap": str(find_colmap()) if find_colmap() else None,
+        "colmap": str(cm) if cm else None,
+        "colmap_bundled": bool(cm and _REPO_ROOT in cm.parents),
         "colmap_cuda": colmap_has_cuda(),
         "torch_device": torch_device(),
         "auto_dense_backend": select_dense_backend(),
+        "cpu_count": os.cpu_count() or 1,
+        "gpu_name": None,
+        "vram_mb": None,
+        "torch_version": None,
+        "cuda_version": None,
+        "pycolmap_version": None,
     }
+    try:
+        import torch
+        d["torch_version"] = torch.__version__
+        if torch.cuda.is_available():
+            d["gpu_name"] = torch.cuda.get_device_name(0)
+            d["vram_mb"] = int(torch.cuda.get_device_properties(0).total_memory // (1024 * 1024))
+            d["cuda_version"] = torch.version.cuda
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import pycolmap
+        d["pycolmap_version"] = getattr(pycolmap, "__version__", "present")
+    except Exception:  # noqa: BLE001
+        pass
+    return d
