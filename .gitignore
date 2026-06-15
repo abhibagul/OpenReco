@@ -17,6 +17,12 @@ aerialdata/gcps.csv
 # but DO keep the viewer's own template assets if any are added later
 !openreco/viewer/template/**
 
+# local end-to-end validation scratch (not part of the package)
+valproj/
+valproj_run.py
+valproj_run.log
+verify_transforms.py
+
 # Python
 *.egg-info/
 __pycache__/

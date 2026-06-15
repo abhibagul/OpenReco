@@ -831,18 +831,18 @@ function mValue(m) {
 function removeMeasure(id) {
   const i = measurements.findIndex(m => m.id === id); if (i < 0) return;
   scene.remove(measurements[i].group); measurements[i].group.clear();
-  measurements.splice(i, 1); renderMPanel(); persistMeasures();
+  measurements.splice(i, 1); renderMPanel(); persistMeasures(); drawOrthoMeasures();
 }
 function toggleMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m) return;
   m.visible = !m.visible; m.group.visible = m.visible;
   m.group.traverse(o => { if (o.isCSS2DObject && o.element) o.element.style.display = m.visible ? '' : 'none'; });
-  renderMPanel(); persistMeasures();
+  renderMPanel(); persistMeasures(); drawOrthoMeasures();
 }
 function renameMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m) return;
   const name = prompt('Rename measurement:', m.name); if (!name) return;
-  m.name = name.trim(); buildMeasure(m, false); renderMPanel(); persistMeasures();
+  m.name = name.trim(); buildMeasure(m, false); renderMPanel(); persistMeasures(); drawOrthoMeasures();
 }
 function focusMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m || !m.pts.length) return;
@@ -852,7 +852,7 @@ function focusMeasure(id) {
 }
 function clearAllMeasures() {
   measurements.forEach(m => { scene.remove(m.group); m.group.clear(); });
-  measurements = []; cancelDraft(); renderMPanel(); persistMeasures();
+  measurements = []; cancelDraft(); renderMPanel(); persistMeasures(); drawOrthoMeasures();
 }
 function renderMPanel() {
   const list = $('mpList'); if (!list) return;
@@ -1501,6 +1501,7 @@ function selectVtab(name) {
   $('viewbar').style.display = name === 'model' ? 'flex' : 'none';
   labelRenderer.domElement.style.display = showGz;     // 3D measurement labels live in the model view
   if (name !== 'model') { $('mpanel').classList.add('hidden'); $('profpanel').classList.add('hidden'); }
+  if (name === 'ortho') { openMPanel(); drawOrthoMeasures(); }
   if (name === 'map') showOnMap(mapRaster);
 }
 document.querySelectorAll('[data-vtab]').forEach(b => b.onclick = () => selectVtab(b.dataset.vtab));
@@ -1553,13 +1554,15 @@ function rasterView(layer, tifOverride, onReady) {
   selectVtab('ortho');
   const img = $('orthoimg'), cv = $('orthocanvas');
   cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);   // clear any prior overlay
+  orthoRInfo = null; orthoTif = tif;
+  orthoLoadInfo(tif);                                    // geotransform for pixel<->world mapping
   img.onload = () => {                                   // fit to viewport
     const w = $('center').clientWidth, h = $('center').clientHeight;
     oz.s = Math.min(w / img.naturalWidth, h / img.naturalHeight) * 0.95;
     oz.tx = (w - img.naturalWidth * oz.s) / 2; oz.ty = (h - img.naturalHeight * oz.s) / 2;
     cv.width = img.naturalWidth; cv.height = img.naturalHeight;
     applyOrtho();
-    if (onReady) onReady(img);
+    if (onReady) onReady(img); else drawOrthoMeasures();
   };
   img.src = `/api/raster_png?path=${encodeURIComponent(tif)}`;
   $('orthohint').textContent = `${layer.id} · ${tif.split(/[\\/]/).pop()} · scroll to zoom, drag to pan`;
@@ -1599,6 +1602,90 @@ async function contourView(L) {
     oz.tx = drag.tx + (e.clientX - drag.x); oz.ty = drag.ty + (e.clientY - drag.y); applyOrtho(); });
   view.addEventListener('pointerup', () => { drag = null; view.classList.remove('drag'); });
 })();
+
+// ---- 2D measuring on the ortho (planimetric, in true CRS meters) ----------
+// Picks convert ortho pixels -> CRS (via raster_info bounds) -> world (minus the georef origin,
+// Z=0 ≈ ground), so they feed the very same measurements store / panel / export as 3D picks.
+let orthoRInfo = null, orthoTif = null;
+async function orthoLoadInfo(tif) {
+  try { orthoRInfo = await (await fetch('/api/raster_info?path=' + encodeURIComponent(tif))).json(); }
+  catch (e) { orthoRInfo = null; }
+  if (orthoRInfo && orthoRInfo.error) orthoRInfo = null;
+  drawOrthoMeasures();
+}
+function orthoFracToWorld(fx, fy) {                       // fraction of the raster -> world Vector3
+  if (!orthoRInfo || !orthoRInfo.bounds) return null;
+  const [w, s, e, n] = orthoRInfo.bounds, o = GEO.origin || [0, 0, 0];
+  const E = w + fx * (e - w), N = n - fy * (n - s);
+  return new THREE.Vector3(E - o[0], N - o[1], 0);
+}
+function worldToOrthoFrac(p) {                            // world Vector3 -> fraction of the raster
+  if (!orthoRInfo || !orthoRInfo.bounds) return null;
+  const [w, s, e, n] = orthoRInfo.bounds, o = GEO.origin || [0, 0, 0];
+  const E = p.x + o[0], N = p.y + o[1];
+  return [(E - w) / (e - w), (n - N) / (n - s)];
+}
+function orthoEventFrac(ev) {
+  const r = $('orthocanvas').getBoundingClientRect();
+  const fx = (ev.clientX - r.left) / r.width, fy = (ev.clientY - r.top) / r.height;
+  return (fx < 0 || fx > 1 || fy < 0 || fy > 1) ? null : [fx, fy];
+}
+function drawOrthoMeasures() {
+  const cv = $('orthocanvas'); if (!cv || !cv.getContext) return;
+  const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height);
+  if (!orthoRInfo) return;
+  const lw = Math.max(1.5, cv.width / 900), dot = Math.max(3, cv.width / 350);
+  const draw = (m, isDraft) => {
+    const fr = m.pts.map(worldToOrthoFrac).filter(Boolean);
+    if (!fr.length) return;
+    const pix = fr.map(([fx, fy]) => [fx * cv.width, fy * cv.height]);
+    const col = hex(m.color);
+    g.lineWidth = lw; g.strokeStyle = col; g.fillStyle = col;
+    if (pix.length >= 2) {
+      g.beginPath(); g.moveTo(pix[0][0], pix[0][1]);
+      for (let i = 1; i < pix.length; i++) g.lineTo(pix[i][0], pix[i][1]);
+      if (m.type === 'area' || m.type === 'vol') {
+        g.closePath(); g.globalAlpha = 0.16; g.fill(); g.globalAlpha = 1;
+      }
+      g.stroke();
+    }
+    pix.forEach(([x, y]) => { g.beginPath(); g.arc(x, y, dot, 0, 7); g.fill(); });
+    // value label near the first vertex
+    let txt = '';
+    if (m.type === 'dist') txt = `${fmt(polylineLen(m.pts))} m`;
+    else if (m.type === 'area') txt = `${fmt(polygonArea(m.pts))} m²`;
+    else if (m.type === 'note') txt = m.name;
+    if (txt) {
+      g.font = `${Math.max(11, cv.width / 90)}px system-ui`;
+      const tx = pix[0][0] + dot * 2, ty = pix[0][1] - dot;
+      g.lineWidth = 3; g.strokeStyle = 'rgba(8,10,16,0.85)'; g.strokeText(txt, tx, ty);
+      g.fillStyle = '#fff'; g.fillText(txt, tx, ty);
+    }
+  };
+  measurements.forEach(m => { if (m.visible !== false && ['dist', 'area', 'note'].includes(m.type)) draw(m, false); });
+  if (draft && ['dist', 'area', 'note'].includes(draft.type) && draft.fromOrtho) draw(draft, true);
+}
+// ortho picking: a click (not a drag) drops a point when a measure tool is active
+$('orthocanvas').addEventListener('click', (ev) => {
+  if (!draft || !orthoRInfo) return;
+  if (!['dist', 'area', 'note'].includes(draft.type)) {
+    $('measure').textContent = 'volume / profile need the 3D view'; return;
+  }
+  const fr = orthoEventFrac(ev); if (!fr) return;
+  const p = orthoFracToWorld(fr[0], fr[1]); if (!p) return;
+  draft.fromOrtho = true;
+  draft.pts.push(p); buildMeasure(draft, true); drawOrthoMeasures(); hint();
+  if (draft.type === 'note') {
+    const text = prompt('Annotation text:', '');
+    if (text === null || !text.trim()) { cancelDraft(); drawOrthoMeasures(); return; }
+    draft.name = text.trim(); finishDraft().then(drawOrthoMeasures);
+  }
+});
+$('orthocanvas').addEventListener('dblclick', (ev) => {
+  if (draft && draft.fromOrtho && draft.pts.length >= (draft.type === 'dist' ? 2 : 3)) {
+    ev.preventDefault(); finishDraft().then(drawOrthoMeasures);
+  }
+});
 
 // ---- photos pane + GCP picking --------------------------------------------
 let PHOTOS = { images: [] };

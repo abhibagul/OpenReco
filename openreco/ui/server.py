@@ -733,6 +733,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._raster_png(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/geo_overlay":
             return self._geo_overlay(parse_qs(u.query).get("path", [""])[0])
+        if route == "/api/raster_info":
+            return self._raster_info(parse_qs(u.query).get("path", [""])[0])
         if route == "/api/browse":
             return self._send(200, self.state.browse(parse_qs(u.query).get("path", [None])[0]))
         if route == "/api/thumb":
@@ -1078,6 +1080,17 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, raster_to_png(p), "image/png")
         except Exception as exc:  # noqa: BLE001
             return self._send(400, {"error": repr(exc)})
+
+    def _raster_info(self, path):
+        """Geotransform (CRS bounds, EPSG, pixel size) for mapping ortho pixels to world coords."""
+        from openreco.io.raster import raster_info
+        p = Path(path)
+        if not path or not self._in_project(p) or not p.is_file():
+            return self._send(400, {"error": "valid in-project raster path required"})
+        try:
+            return self._send(200, raster_info(p))
+        except Exception as exc:  # noqa: BLE001
+            return self._send(400, {"error": str(exc)})
 
     def _in_project(self, p: Path) -> bool:
         root = self.state.project.manifest.project_dir.resolve()

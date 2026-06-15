@@ -139,6 +139,39 @@ def raster_to_overlay(src: Path) -> tuple[bytes, list[list[float]]]:
         tmp.unlink(missing_ok=True)
 
 
+def raster_info(src: Path) -> dict:
+    """Geo metadata for mapping image pixels to world coordinates: pixel size, projected CRS bounds
+    (west/south/east/north), EPSG, and lon/lat bounds. Lets the 2D ortho view convert a clicked
+    pixel to CRS E/N (and, via the georef origin, the world frame the 3D scene uses)."""
+    import rasterio
+
+    src = Path(src)
+    with rasterio.open(src) as s:
+        b = s.bounds
+        epsg = None
+        if s.crs is not None:
+            try:
+                epsg = int(s.crs.to_epsg())
+            except Exception:  # noqa: BLE001
+                epsg = None
+        info = {
+            "width": int(s.width), "height": int(s.height),
+            "res": [abs(float(s.res[0])), abs(float(s.res[1]))],
+            "bounds": [float(b.left), float(b.bottom), float(b.right), float(b.top)],
+            "crs_epsg": epsg, "crs": (str(s.crs) if s.crs else None),
+        }
+    if epsg and epsg != 4326:
+        from openreco.geo.crs import crs_to_geodetic
+        import numpy as np
+        xs = np.array([b.left, b.right])
+        ys = np.array([b.bottom, b.top])
+        ll = crs_to_geodetic(xs, ys, epsg)
+        info["lonlat_bounds"] = [float(ll[0, 0]), float(ll[0, 1]), float(ll[1, 0]), float(ll[1, 1])]
+    elif epsg == 4326:
+        info["lonlat_bounds"] = info["bounds"]
+    return info
+
+
 def _stretch(arr: np.ndarray, valid: np.ndarray | None = None) -> np.ndarray:
     """Percentile (2–98) contrast stretch to uint8; per-channel for RGB, single for grayscale."""
     a = arr.astype(np.float32)

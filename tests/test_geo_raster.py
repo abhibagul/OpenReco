@@ -9,7 +9,7 @@ pytest.importorskip("pyproj")
 pytest.importorskip("rasterio")
 
 from openreco.geo.crs import geodetic_to_crs, utm_epsg_for  # noqa: E402
-from openreco.io.raster import grid_topdown, write_geotiff  # noqa: E402
+from openreco.io.raster import grid_topdown, raster_info, write_geotiff  # noqa: E402
 
 
 def test_utm_zone_selection():
@@ -43,3 +43,18 @@ def test_grid_topdown_and_geotiff(tmp_path):
         assert ds.count == 1
         assert str(ds.crs) == "EPSG:32630"
         assert ds.width == dsm.shape[1] and ds.height == dsm.shape[0]
+
+
+def test_raster_info_bounds_and_lonlat(tmp_path):
+    # a small UTM 13N raster near the aerial site; raster_info should report projected + lon/lat bounds
+    dsm = np.zeros((20, 30), np.float32)
+    p = tmp_path / "ortho.tif"
+    write_geotiff(p, dsm, west=300000.0, north=4310000.0, res=0.5, crs_epsg=32613)
+    info = raster_info(p)
+    assert info["width"] == 30 and info["height"] == 20
+    assert info["crs_epsg"] == 32613
+    # west/east span 30 px * 0.5 m = 15 m; north/south 20 px * 0.5 = 10 m
+    w, s, e, n = info["bounds"]
+    assert abs((e - w) - 15.0) < 1e-6 and abs((n - s) - 10.0) < 1e-6
+    lon0, lat0, lon1, lat1 = info["lonlat_bounds"]
+    assert -108.5 < lon0 < -106.5 and 38.0 < lat0 < 40.0     # plausible Colorado lon/lat
