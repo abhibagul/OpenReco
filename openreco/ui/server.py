@@ -793,7 +793,7 @@ class _Handler(BaseHTTPRequestHandler):
         route = u.path
         if route in ("/", "/index.html"):
             return self._static("index.html")
-        if route in ("/app.js", "/viewer.js", "/style.css"):
+        if route in ("/app.js", "/viewer.js", "/style.css", "/guide.html"):
             return self._static(route.lstrip("/"))
         if route == "/api/stages":
             return self._send(200, stage_info())

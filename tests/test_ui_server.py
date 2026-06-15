@@ -43,6 +43,8 @@ def test_static_and_api_stages(server):
     assert b"OpenReco" in html
     _, appjs = _get(base + "/app.js")
     assert b"OrbitControls" in appjs
+    status, guide = _get(base + "/guide.html")          # in-app user guide ships & serves
+    assert status == 200 and b"User Guide" in guide and b"processing workflow" in guide
     _, raw = _get(base + "/api/stages")
     types = {s["type"] for s in json.loads(raw)}
     assert {"ingest", "sfm", "classify", "dummy_generate"} <= types
@@ -718,6 +720,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"#300a24" in html2                                           # Ubuntu-style console
     assert b"abhibagul" in html2 and b"Abhishek Bagul" in html2          # About: developer credit
     assert b"/api/jobs" in appjs and b"loadJobs" in appjs                # jobs history panel
+    assert b"showGuide" in appjs and b"guideFrame" in html2              # in-app user guide
     assert b"brUseFolder" in html2                                       # folder-pick for open/new project
 
 

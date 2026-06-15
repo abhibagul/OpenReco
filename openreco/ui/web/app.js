@@ -1019,7 +1019,14 @@ $('prefsCancel').onclick = () => $('prefsModal').classList.add('hidden');
 $('prefsReset').onclick = () => { PREFS = { ...PREFS_DEFAULTS }; openPrefs(); };
 function savePrefs() { try { localStorage.setItem('openreco.prefs', JSON.stringify(PREFS)); } catch (e) { /* ignore */ } }
 
-// ---- about + credits ------------------------------------------------------
+// ---- user guide + about + credits -----------------------------------------
+function showGuide() {
+  const f = $('guideFrame');
+  if (!f.src) f.src = '/guide.html';     // load once
+  $('guideModal').classList.remove('hidden');
+}
+$('guideClose').onclick = () => $('guideModal').classList.add('hidden');
+$('guideOpenTab').onclick = () => window.open('/guide.html', '_blank');
 function showAbout() {
   $('aboutVer').textContent = 'version ' + ((PROJECT && PROJECT.version) || '');
   $('aboutModal').classList.remove('hidden');
@@ -1574,6 +1581,7 @@ async function loadWorkflows() {
   menuEntry('m-tools', 'Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); }, null, 'pin');
   // Help
   $('m-help').innerHTML = '';
+  menuEntry('m-help', 'User guide', showGuide, 'how to use OpenReco (offline)', 'info');
   menuEntry('m-help', 'About OpenReco', showAbout, null, 'info');
   menuEntry('m-help', 'Credits & licenses', showCredits, 'open-source projects OpenReco is built on', 'layers');
   menuEntry('m-help', 'System / compute info', () => { openPrefs(); }, 'GPU, COLMAP & dependency status', 'wrench');

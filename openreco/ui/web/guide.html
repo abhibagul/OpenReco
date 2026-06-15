@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenReco — User Guide</title>
+<style>
+  :root { --bg:#0f1117; --panel:#171a22; --fg:#e9edf3; --muted:#98a1b2; --line:#262b36;
+          --accent:#5694ff; --ok:#3fc97f; --warn:#f0b429; --err:#ef6b6b;
+          --mono:"Ubuntu Mono","Cascadia Mono",ui-monospace,monospace; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:15px/1.65 "Segoe UI","Ubuntu",system-ui,sans-serif; }
+  .wrap { display:grid; grid-template-columns:248px 1fr; max-width:1100px; margin:0 auto; min-height:100vh; }
+  nav { position:sticky; top:0; align-self:start; height:100vh; overflow:auto; padding:22px 14px;
+        border-right:1px solid var(--line); background:var(--panel); }
+  nav h1 { font-size:16px; margin:0 0 2px; color:var(--accent); }
+  nav .v { color:var(--muted); font-size:12px; margin-bottom:14px; }
+  nav a { display:block; color:var(--muted); text-decoration:none; padding:4px 8px; border-radius:6px;
+          font-size:13px; }
+  nav a:hover { background:#ffffff10; color:var(--fg); }
+  main { padding:30px 40px 80px; max-width:780px; }
+  h2 { font-size:22px; margin:34px 0 10px; padding-top:8px; border-top:1px solid var(--line); }
+  h2:first-child { border-top:0; margin-top:0; }
+  h3 { font-size:16px; margin:20px 0 6px; color:#cdd6e6; }
+  p, li { color:#d7dde8; }
+  code { font-family:var(--mono); background:#0b0d12; border:1px solid var(--line); border-radius:5px;
+         padding:1px 6px; font-size:13px; color:#cfe0ff; }
+  pre { background:#0b0d12; border:1px solid var(--line); border-radius:8px; padding:12px 14px;
+        overflow:auto; font-family:var(--mono); font-size:13px; }
+  .tip, .warn { border-left:3px solid var(--accent); background:#5694ff14; padding:9px 14px;
+                border-radius:0 8px 8px 0; margin:12px 0; }
+  .warn { border-left-color:var(--warn); background:#f0b42914; }
+  kbd { font-family:var(--mono); background:#222; border:1px solid #333; border-bottom-width:2px;
+        border-radius:4px; padding:1px 6px; font-size:12px; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:14px; }
+  th, td { border:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  a { color:var(--accent); }
+  .step { padding-left:4px; }
+  footer { color:var(--muted); font-size:12px; margin-top:40px; border-top:1px solid var(--line); padding-top:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <h1>OpenReco</h1>
+  <div class="v">User Guide</div>
+  <a href="#intro">1 · Overview</a>
+  <a href="#start">2 · Getting started</a>
+  <a href="#project">3 · Projects &amp; photos</a>
+  <a href="#workflow">4 · The processing workflow</a>
+  <a href="#crs">5 · Coordinate systems &amp; GCPs</a>
+  <a href="#view">6 · Viewing results</a>
+  <a href="#measure">7 · Measurements &amp; notes</a>
+  <a href="#indices">8 · Vegetation indices</a>
+  <a href="#edit">9 · Cleaning &amp; editing</a>
+  <a href="#export">10 · Export, report &amp; jobs</a>
+  <a href="#prefs">11 · Preferences &amp; compute</a>
+  <a href="#trouble">12 · Troubleshooting</a>
+  <a href="#cli">13 · Command line</a>
+</nav>
+<main>
+
+<h2 id="intro">1 · Overview</h2>
+<p>OpenReco turns a set of overlapping photos into 3D and mapping products: a sparse/dense
+<b>point cloud</b>, a <b>3D mesh</b> with <b>texture</b>, a <b>digital elevation model (DSM)</b>, an
+<b>orthomosaic</b>, <b>contours</b>, and <b>vegetation indices</b> — which you can measure, annotate
+and export. It is a clean-room, open project built only on permissively-licensed software
+(see <i>Help ▸ Credits &amp; licenses</i>).</p>
+<p>The pipeline is a chain of <b>stages</b> (layers) shown in the Workspace tree. Each stage caches
+its result, so re-running only recomputes what changed.</p>
+
+<h2 id="start">2 · Getting started</h2>
+<p class="step"><b>Launch:</b> double-click <code>openreco.exe</code> — the app opens directly (no
+commands needed). A small console window opens alongside it showing live logs; leave it open while
+you work.</p>
+<p class="step"><b>Check your machine:</b> <i>Help ▸ System / compute info</i> (or
+<code>openreco doctor</code>) shows whether your GPU, the CUDA dense engine and all components are
+available.</p>
+<div class="tip"><b>GPU:</b> an NVIDIA GPU + driver gives fast dense reconstruction. Without one,
+OpenReco still runs on the CPU (slower, and dense detail is limited).</div>
+
+<h2 id="project">3 · Projects &amp; photos</h2>
+<p>A <b>project</b> is a folder that holds your pipeline and results.</p>
+<ol>
+  <li><b>File ▸ Open / new project</b> → <b>Browse</b> to a folder and click <b>Use this folder</b>.
+      An existing project opens; an empty folder becomes a new project.</li>
+  <li><b>Add photos:</b> right-click a chunk (or use the Workflow menu) ▸ <b>Add Photos</b> →
+      browse to your image folder, tick the photos, and add them.</li>
+</ol>
+<p>Right-click any photo thumbnail for: <b>Open / preview</b>, <b>Look through</b> (move the 3D
+camera to that shot), <b>Show info</b> (EXIF/GPS), <b>Enable/Disable</b>, <b>Move to another
+chunk</b>, <b>Estimate image quality</b> (sharpness), and <b>Remove</b>.</p>
+<div class="tip">Use <b>chunks</b> to keep separate flights/areas apart, then <i>Merge Chunks</i>
+later. Disable blurry photos (their sharpness shows on the thumbnail after <i>Estimate quality</i>).</div>
+
+<h2 id="workflow">4 · The processing workflow</h2>
+<p>Open the <b>Workflow</b> menu and run these in order (each adds a layer wired to the previous):</p>
+<table>
+<tr><th>Step</th><th>What it produces</th></tr>
+<tr><td><b>Align Photos</b></td><td>Camera positions + a sparse tie-point cloud (Structure-from-Motion).</td></tr>
+<tr><td><b>Georeference</b></td><td>Places the model in real-world coordinates using photo GPS or GCPs.</td></tr>
+<tr><td><b>Build Dense Cloud</b></td><td>A detailed point cloud (GPU PatchMatch, or CPU fallback).</td></tr>
+<tr><td><b>Build Model</b></td><td>A 3D mesh surface from the dense cloud.</td></tr>
+<tr><td><b>Build Texture</b></td><td>Photo-realistic texture baked onto the mesh.</td></tr>
+<tr><td><b>Build DEM / Orthomosaic</b></td><td>Top-down elevation raster &amp; stitched map image.</td></tr>
+<tr><td><b>Vegetation Indices / Contours</b></td><td>NDVI/ExG maps &amp; contour lines.</td></tr>
+</table>
+<p class="step"><b>Quality preset:</b> the toolbar dropdown (Low / Medium / High / Ultra) sets sensible
+parameters across all stages in one click. Start <b>Low</b> for a quick preview.</p>
+<p class="step"><b>Run:</b> press <b>Run</b> in the toolbar. OpenReco first <b>checks the wiring</b>
+and lists any problems; then it processes, streaming progress to the Console. Re-running is cheap —
+cached stages are skipped. Right-click a layer to <b>Run just that stage</b> or <b>Run up to here</b>.</p>
+<div class="tip">On a 4&nbsp;GB GPU, <b>Low/Medium</b> are the reliable dense settings. If dense fails
+with a CUDA error it automatically retries at a smaller size before falling back.</div>
+
+<h2 id="crs">5 · Coordinate systems &amp; GCPs</h2>
+<p>To get real-world coordinates, the project needs a <b>CRS</b> (coordinate reference system) and a
+georeference source:</p>
+<ul>
+  <li><b>GPS:</b> if your photos are GPS-tagged (most drones), add a <b>Georeference</b> step wired to
+      the chunk's photos — it auto-picks a UTM zone or uses the CRS you set (toolbar ▸ CRS).</li>
+  <li><b>GCPs (Ground Control Points):</b> for survey accuracy, open <b>Reference ▸ Markers</b>,
+      add markers, click their position in several photos, enter known coordinates, then
+      <b>Use these GCPs</b>.</li>
+</ul>
+<div class="warn"><b>If a model comes out un-georeferenced</b> (the map/volumes are off or local), the
+pre-run check warns you: the Georeference step has no GPS or GCP source. Wire the chunk's photos to
+it, or add GCPs.</div>
+
+<h2 id="view">6 · Viewing results</h2>
+<p>The viewport has four tabs (top-left): <b>Model</b> (3D), <b>Ortho</b> (2D map image),
+<b>Map</b> (web map), <b>Photo</b>.</p>
+<ul>
+  <li><b>Orbit</b> drag; <b>pan</b> right-drag/middle-drag; <b>zoom</b> wheel.</li>
+  <li><b>Navigation cube</b> (top-right): click a face/edge/corner to snap the view.</li>
+  <li><b>Point-cloud bar</b> (bottom): point size, color by <b>RGB</b> or <b>Elevation</b> (ramp),
+      and <b>EDL</b> depth shading for clarity.</li>
+  <li>Toggle layers with the <b>eye</b> icon in the Workspace tree; double-click a layer to open it
+      in the right view.</li>
+</ul>
+
+<h2 id="measure">7 · Measurements &amp; annotations</h2>
+<p>Use the measure tools in the toolbar (they work in the 3D, Ortho and Map views):</p>
+<table>
+<tr><th>Tool</th><th>How</th></tr>
+<tr><td><b>Distance</b></td><td>Click points along a path; double-click to finish.</td></tr>
+<tr><td><b>Area</b></td><td>Outline a polygon; double-click to finish.</td></tr>
+<tr><td><b>Volume</b> (stockpile)</td><td>Outline a footprint; double-click. Pick the base
+   (best-fit plane / lowest / mean) — reports cut/fill/net m³.</td></tr>
+<tr><td><b>Profile</b></td><td>Click points along a line; an elevation cross-section chart appears.</td></tr>
+<tr><td><b>Note</b></td><td>Click a point and type a label.</td></tr>
+</table>
+<p>All measurements appear in the floating <b>Measurements</b> panel (rename, show/hide, delete,
+click to focus). They are <b>saved with the project</b> and shown in 3D, on the ortho and on the map.
+Export them from the panel as <b>GeoJSON / DXF / CSV</b>; a profile exports a per-station CSV.</p>
+<div class="tip">Set display <b>units</b> (metre / feet) and decimal precision in
+<i>File ▸ Preferences ▸ Measurements</i>.</div>
+
+<h2 id="indices">8 · Vegetation indices</h2>
+<p><b>Workflow ▸ Vegetation Indices</b> (needs an Orthomosaic) computes plant-health maps:</p>
+<ul>
+  <li><b>RGB (ExG · VARI · GLI)</b> — works on ordinary RGB drone photos.</li>
+  <li><b>NDVI / GNDVI</b> — require a <b>near-infrared (NIR) band</b>, i.e. a multispectral camera;
+      set the <b>NIR band #</b> to match. On RGB-only data these are skipped.</li>
+</ul>
+<p>Each index is written as a GeoTIFF plus a colorized (red→green) image you can view and export.</p>
+
+<h2 id="edit">9 · Cleaning &amp; editing</h2>
+<ul>
+  <li><b>Clean Point Cloud / Clean Mesh</b> (Workflow) removes noise / small floating islands.</li>
+  <li><b>3D edit tools</b> (toolbar): box or lasso select, visible-only mode, then delete. Save edits
+      as a new layer (non-destructive — the original is kept).</li>
+</ul>
+
+<h2 id="export">10 · Export, report &amp; jobs</h2>
+<ul>
+  <li><b>Export a layer:</b> select it → the <b>Properties</b> pane ▸ Export → choose a format
+      (PLY/LAS/LAZ, OBJ/GLB/STL, GeoTIFF, GeoJSON/DXF, …).</li>
+  <li><b>Processing report:</b> <i>File ▸ Processing report (PDF)</i> — a summary with stats, GCP
+      accuracy and your measurements.</li>
+  <li><b>Jobs panel</b> (bottom dock): the history of every run — status, time, duration; click a row
+      to open that run's report.</li>
+</ul>
+
+<h2 id="prefs">11 · Preferences &amp; compute</h2>
+<p><i>File ▸ Preferences</i>: measurement <b>units</b> &amp; precision, default view, navigation
+speed, console size, and a <b>Compute</b> panel showing your GPU / CUDA-COLMAP / dependency status
+(the same as <code>openreco doctor</code>).</p>
+
+<h2 id="trouble">12 · Troubleshooting</h2>
+<table>
+<tr><th>Symptom</th><th>Fix</th></tr>
+<tr><td>Dense fails with a CUDA "misaligned address" error</td><td>It auto-retries smaller; if it
+   still fails, set the dense layer's <b>quality = Low</b> and re-run. Common on 4&nbsp;GB GPUs at high quality.</td></tr>
+<tr><td>"GPU: none detected" / dense is slow</td><td>Install/update your <b>NVIDIA driver</b>. Without
+   a GPU, OpenReco uses the CPU (sparse cloud).</td></tr>
+<tr><td>Map or 3D view is blank</td><td>The 3D/map libraries load from the internet — connect to the
+   network, or ask for an offline build.</td></tr>
+<tr><td>Model is "local" / not georeferenced</td><td>Add a <b>Georeference</b> step wired to the
+   chunk's photos (for GPS), or set GCPs. The pre-run check warns about this.</td></tr>
+<tr><td>Windows blocks the exe on first run</td><td>SmartScreen → <b>More info ▸ Run anyway</b>
+   (the build is unsigned).</td></tr>
+<tr><td>NDVI is empty / skipped</td><td>NDVI needs a NIR band (multispectral camera). On RGB photos use
+   ExG / VARI / GLI instead.</td></tr>
+</table>
+
+<h2 id="cli">13 · Command line (optional)</h2>
+<p>Power users can drive everything headless:</p>
+<pre>openreco doctor                         # GPU / COLMAP / dependency status
+openreco init myproj --images C:\photos --crs EPSG:32613
+openreco run  myproj                    # process headless
+openreco ui   myproj                    # open the app on a project
+openreco report myproj                  # locate the latest report</pre>
+
+<footer>OpenReco — open, reproducible photogrammetry. Developed by Abhishek Bagul
+(<a href="https://github.com/abhibagul" target="_blank" rel="noopener">github.com/abhibagul</a>).
+Built on open source — see Help ▸ Credits &amp; licenses.</footer>
+</main>
+</div>
+</body>
+</html>
