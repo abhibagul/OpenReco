@@ -159,7 +159,10 @@ def cmd_ui(args: argparse.Namespace) -> int:
 
     _register_stages()
 
-    proj = Project.open(args.project) if Path(args.project).exists() else Project.create(args.project)
+    # open an existing project (a dir with project.toml, or the toml itself), else create a new one
+    path = Path(args.project)
+    manifest = path if path.suffix == ".toml" else path / "project.toml"
+    proj = Project.open(args.project) if manifest.is_file() else Project.create(args.project)
     mode = "browser" if args.browser else "window" if args.window else "auto"
     launch(proj, host=args.host, port=args.port, mode=mode, open_browser=not args.no_browser)
     return 0

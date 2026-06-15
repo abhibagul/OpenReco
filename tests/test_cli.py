@@ -72,6 +72,26 @@ def test_bootstrap_noop_when_all_present(monkeypatch, capsys):
     assert "already installed" in capsys.readouterr().out
 
 
+def test_ui_creates_project_when_manifest_absent(tmp_path, monkeypatch):
+    # `openreco ui <dir>` on a folder without project.toml must create it, not crash
+    import openreco.ui.desktop as desktop
+    captured = {}
+    monkeypatch.setattr(desktop, "launch", lambda proj, **k: captured.setdefault("proj", proj))
+    d = tmp_path / "newproj"
+    d.mkdir()                                          # dir exists but has no project.toml
+    assert main(["ui", str(d), "--no-browser"]) == 0
+    assert captured["proj"].manifest.project_dir == d.resolve()
+
+
+def test_ui_opens_existing_project(tmp_path, monkeypatch):
+    import openreco.ui.desktop as desktop
+    assert main(["init", str(tmp_path / "p"), "--name", "keep"]) == 0
+    captured = {}
+    monkeypatch.setattr(desktop, "launch", lambda proj, **k: captured.setdefault("proj", proj))
+    assert main(["ui", str(tmp_path / "p")]) == 0
+    assert captured["proj"].manifest.name == "keep"
+
+
 def test_lightweight_commands_dont_need_stage_deps(tmp_path, monkeypatch):
     # simulate a bare install (reconstruction deps absent): registering stages would fail.
     import openreco.cli as cli
