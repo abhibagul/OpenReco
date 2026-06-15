@@ -27,6 +27,24 @@ const CAT_ORDER = ["Cameras", "Tie Points", "Markers", "Dense Cloud", "Point Clo
                    "3D Model", "Tiled Model", "DEM", "Orthomosaic", "Shapes", "Other"];
 
 const $ = (id) => document.getElementById(id);
+
+// ---- preferences (display units, precision, viewport, console) ------------
+const PREFS_DEFAULTS = { units: 'metre', measPrec: 2, coordPrec: 3, defaultView: 'model',
+  rotate: 1.0, zoom: 1.0, pan: 1.0, logMax: 1200 };
+let PREFS = { ...PREFS_DEFAULTS };
+const UNITS = {
+  metre: { f: 1, L: 'm', A: 'm²', V: 'm³' },
+  foot: { f: 3.280839895, L: 'ft', A: 'ft²', V: 'ft³' },
+  usfoot: { f: 3.2808333333, L: 'ft', A: 'ft²', V: 'ft³' },
+};
+const fmtN = (n, d) => Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
+function uLen(m) { const u = UNITS[PREFS.units] || UNITS.metre; return `${fmtN(m * u.f, PREFS.measPrec)} ${u.L}`; }
+function uArea(m2) { const u = UNITS[PREFS.units] || UNITS.metre; return `${fmtN(m2 * u.f * u.f, PREFS.measPrec)} ${u.A}`; }
+function uVol(m3) { const u = UNITS[PREFS.units] || UNITS.metre; return `${fmtN(m3 * u.f ** 3, PREFS.measPrec)} ${u.V}`; }
+function loadPrefs() {
+  try { PREFS = { ...PREFS_DEFAULTS, ...JSON.parse(localStorage.getItem('openreco.prefs') || '{}') }; }
+  catch (e) { PREFS = { ...PREFS_DEFAULTS }; }
+}
 // styled console: each entry gets a timestamp + colored level chip
 function classifyLog(m) {
   if (/^E\d{8}|\berror\b|\bfail|✗|⨯/i.test(m)) return 'err';
@@ -45,7 +63,7 @@ function log(m, level) {
                 + `<span class="ll">${lvl}</span>`;
   const msg = document.createElement('span'); msg.className = 'lm'; msg.textContent = m;
   row.appendChild(msg); el.appendChild(row);
-  while (el.childElementCount > 1200) el.removeChild(el.firstChild);
+  while (el.childElementCount > (PREFS.logMax || 1200)) el.removeChild(el.firstChild);
   if (near) el.scrollTop = el.scrollHeight;              // autoscroll only if already at bottom
 }
 
@@ -664,18 +682,18 @@ function buildMeasure(m, isDraft) {
   // floating labels
   if (m.type === 'dist' || m.type === 'prof') {
     for (let i = 1; i < pts.length; i++) {                                         // per-segment length
-      const lbl = mkLabel(`${fmt(pts[i].distanceTo(pts[i-1]))} m`, 'seg', col);
+      const lbl = mkLabel(uLen(pts[i].distanceTo(pts[i-1])), 'seg', col);
       lbl.position.copy(pts[i].clone().add(pts[i-1]).multiplyScalar(0.5)); m.group.add(lbl);
     }
     if (pts.length >= 2) {
-      const extra = (m.type === 'prof' && m.result) ? ` · Δ ${fmt(m.result.relief_m)} m` : '';
-      const lbl = mkLabel(`${m.name} · ${fmt(polylineLen(pts))} m${extra}`, 'tot', col);
+      const extra = (m.type === 'prof' && m.result) ? ` · Δ ${uLen(m.result.relief_m)}` : '';
+      const lbl = mkLabel(`${m.name} · ${uLen(polylineLen(pts))}${extra}`, 'tot', col);
       lbl.position.copy(pts[pts.length-1]); m.group.add(lbl);
     }
   } else if (pts.length >= 3) {
     let text;
-    if (m.type === 'area') text = `${m.name} · ${fmt(polygonArea(pts))} m²`;
-    else if (m.result) text = `${m.name} · ${fmt(m.result.net_m3)} m³`;
+    if (m.type === 'area') text = `${m.name} · ${uArea(polygonArea(pts))}`;
+    else if (m.result) text = `${m.name} · ${uVol(m.result.net_m3)}`;
     else text = isDraft ? `${m.name} · double-click to finish` : `${m.name} · …`;
     const lbl = mkLabel(text, 'tot', col); lbl.position.copy(centroid(pts)); m.group.add(lbl);
   }
@@ -706,9 +724,9 @@ function hint() {
   const n = draft.pts.length, need = draft.type === 'note' ? 1 : (draft.type === 'dist' || draft.type === 'prof') ? 2 : 3;
   let t;
   if (draft.type === 'note') t = 'Click a point on the model to drop an annotation';
-  else if (draft.type === 'dist') t = n < 1 ? 'Click points to measure distance' : `${fmt(polylineLen(draft.pts))} m — double-click / Enter to finish`;
-  else if (draft.type === 'prof') t = n < 2 ? 'Click points along the section line (≥2)' : `${fmt(polylineLen(draft.pts))} m path — double-click / Enter to draw profile`;
-  else t = n < need ? `Outline the ${draft.type === 'vol' ? 'footprint' : 'area'} (${n} pt) — Esc cancels` : `${fmt(polygonArea(draft.pts))} m² — double-click / Enter to finish`;
+  else if (draft.type === 'dist') t = n < 1 ? 'Click points to measure distance' : `${uLen(polylineLen(draft.pts))} — double-click / Enter to finish`;
+  else if (draft.type === 'prof') t = n < 2 ? 'Click points along the section line (≥2)' : `${uLen(polylineLen(draft.pts))} path — double-click / Enter to draw profile`;
+  else t = n < need ? `Outline the ${draft.type === 'vol' ? 'footprint' : 'area'} (${n} pt) — Esc cancels` : `${uArea(polygonArea(draft.pts))} — double-click / Enter to finish`;
   if (n) t += `   ·   ${enLabel(draft.pts.at(-1))}`;     // live geo coordinate of the last point
   $('measure').textContent = t; $('measure').classList.add('show');
 }
@@ -798,7 +816,7 @@ function showProfile(m) {
   if (!r || !r.samples) { panel.classList.add('hidden'); return; }
   curProfile = m;
   const sm = r.samples.filter(s => s.z != null);
-  $('proftitle').textContent = `${m.name} · ${fmt(r.length_m)} m · Δ ${fmt(r.relief_m)} m · slope ${fmt(r.slope_pct)}%`;
+  $('proftitle').textContent = `${m.name} · ${uLen(r.length_m)} · Δ ${uLen(r.relief_m)} · slope ${fmt(r.slope_pct)}%`;
   if (sm.length < 2) { svg.innerHTML = '<text x="10" y="22" class="axt">no surface under the line</text>'; panel.classList.remove('hidden'); return; }
   const W = 520, H = 150, mL = 46, mR = 12, mT = 12, mB = 26;
   const dmax = r.length_m || 1, zmin = r.z_min, zmax = r.z_max, zr = (zmax - zmin) || 1;
@@ -823,9 +841,9 @@ function showProfile(m) {
 function mIcon(t) { return t === 'dist' ? 'ruler' : t === 'area' ? 'square' : t === 'prof' ? 'chart' : t === 'note' ? 'pin' : 'box'; }
 function mValue(m) {
   if (m.type === 'note') return 'note';
-  if (m.type === 'dist' || m.type === 'prof') return `${fmt(m.value ?? polylineLen(m.pts))} m`;
-  if (m.type === 'area') return `${fmt(m.value ?? polygonArea(m.pts))} m²`;
-  if (m.result) return `${fmt(m.result.net_m3)} m³`;
+  if (m.type === 'dist' || m.type === 'prof') return uLen(m.value ?? polylineLen(m.pts));
+  if (m.type === 'area') return uArea(m.value ?? polygonArea(m.pts));
+  if (m.result) return uVol(m.result.net_m3);
   return m.error ? '⚠' : '…';
 }
 function removeMeasure(id) {
@@ -864,8 +882,8 @@ function renderMPanel() {
   list.innerHTML = '';
   measurements.forEach(m => {
     const row = document.createElement('div'); row.className = 'mrow' + (m.visible ? '' : ' off');
-    if (m.type === 'vol' && m.result) row.title = `cut ${fmt(m.result.cut_m3)} m³ · fill ${fmt(m.result.fill_m3)} m³ · area ${fmt(m.result.area_m2)} m² · base ${m.result.base} @ ${m.result.base_elevation}`;
-    else if (m.type === 'area') row.title = `perimeter ${fmt(perimeter(m.pts))} m · ${m.pts.length} vertices`;
+    if (m.type === 'vol' && m.result) row.title = `cut ${uVol(m.result.cut_m3)} · fill ${uVol(m.result.fill_m3)} · area ${uArea(m.result.area_m2)} · base ${m.result.base} @ ${m.result.base_elevation}`;
+    else if (m.type === 'area') row.title = `perimeter ${uLen(perimeter(m.pts))} · ${m.pts.length} vertices`;
     else if (m.type === 'dist') row.title = `${m.pts.length} points · ${m.pts.length - 1} segments`;
     else if (m.type === 'prof' && m.result) row.title = `relief ${fmt(m.result.relief_m)} m · slope ${fmt(m.result.slope_pct)}% · click to view chart`;
     else if (m.type === 'note' && m.pts[0]) row.title = `${m.name}\n${enLabel(m.pts[0])}`;
@@ -892,9 +910,9 @@ async function loadGeo() {
 }
 function toEN(p) { const o = GEO.origin || [0, 0, 0]; return [p.x + o[0], p.y + o[1], p.z + o[2]]; }
 function enLabel(p) {
-  const e = toEN(p);
-  return GEO.has_geo ? `E ${fmt(e[0])}  N ${fmt(e[1])}  Z ${fmt(e[2])} m`
-                     : `x ${fmt(p.x)}  y ${fmt(p.y)}  z ${fmt(p.z)}`;
+  const e = toEN(p), d = PREFS.coordPrec;
+  return GEO.has_geo ? `E ${fmtN(e[0], d)}  N ${fmtN(e[1], d)}  Z ${fmtN(e[2], d)} m`
+                     : `x ${fmtN(p.x, d)}  y ${fmtN(p.y, d)}  z ${fmtN(p.z, d)}`;
 }
 function resultFor(m) {                            // ensure every type has a metrics object to persist
   if (m.result) return m.result;
@@ -945,6 +963,35 @@ $('mpDxf').onclick = () => exportMeasures('dxf');
 $('mpCsv').onclick = () => exportMeasures('csv');
 $('profCsv').onclick = () => { if (curProfile) window.open(
   `/api/measurements_export?fmt=csv&id=${encodeURIComponent(curProfile.id)}&chunk=${encodeURIComponent(curProfile.chunk || ACTIVE_CHUNK)}`, '_blank'); };
+
+// ---- preferences dialog ---------------------------------------------------
+function applyPrefs() {
+  controls.rotateSpeed = PREFS.rotate; controls.zoomSpeed = PREFS.zoom; controls.panSpeed = PREFS.pan;
+  measurements.forEach(m => buildMeasure(m, false));   // re-render labels with new units/precision
+  renderMPanel(); drawOrthoMeasures();
+  if (curProfile) showProfile(curProfile);
+}
+function openPrefs() {
+  $('prefUnits').value = PREFS.units; $('prefMeasPrec').value = PREFS.measPrec;
+  $('prefCoordPrec').value = PREFS.coordPrec; $('prefDefaultView').value = PREFS.defaultView;
+  $('prefRotate').value = PREFS.rotate; $('prefZoom').value = PREFS.zoom; $('prefPan').value = PREFS.pan;
+  $('prefLogMax').value = PREFS.logMax;
+  $('prefsModal').classList.remove('hidden');
+}
+function readPrefs() {
+  PREFS = { units: $('prefUnits').value,
+    measPrec: Math.max(0, Math.min(6, parseInt($('prefMeasPrec').value, 10) || 0)),
+    coordPrec: Math.max(0, Math.min(8, parseInt($('prefCoordPrec').value, 10) || 0)),
+    defaultView: $('prefDefaultView').value,
+    rotate: parseFloat($('prefRotate').value), zoom: parseFloat($('prefZoom').value),
+    pan: parseFloat($('prefPan').value),
+    logMax: Math.max(200, Math.min(8000, parseInt($('prefLogMax').value, 10) || 1200)) };
+}
+$('prefsOk').onclick = () => { readPrefs(); savePrefs(); applyPrefs(); $('prefsModal').classList.add('hidden');
+  log('preferences applied', 'ok'); };
+$('prefsCancel').onclick = () => $('prefsModal').classList.add('hidden');
+$('prefsReset').onclick = () => { PREFS = { ...PREFS_DEFAULTS }; openPrefs(); };
+function savePrefs() { try { localStorage.setItem('openreco.prefs', JSON.stringify(PREFS)); } catch (e) { /* ignore */ } }
 
 // ---- data + workspace tree ------------------------------------------------
 async function loadStages() {
@@ -1412,6 +1459,8 @@ async function loadWorkflows() {
   menuEntry('m-file', 'Set coordinate system…', openCrsPicker, null, 'globe');
   menuSep('m-file');
   menuEntry('m-file', 'Processing report (PDF)', () => window.open('/api/report', '_blank'), null, 'chart');
+  menuSep('m-file');
+  menuEntry('m-file', 'Preferences…', openPrefs, null, 'wrench');
   // Workflow menu = the familiar operations
   $('m-workflow').innerHTML = '';
   WORKFLOWS.forEach(op => menuEntry('m-workflow', op.op, () => openOp(op), op.desc, OP_ICON[op.stage] || 'play'));
@@ -1652,8 +1701,8 @@ function drawOrthoMeasures() {
     pix.forEach(([x, y]) => { g.beginPath(); g.arc(x, y, dot, 0, 7); g.fill(); });
     // value label near the first vertex
     let txt = '';
-    if (m.type === 'dist') txt = `${fmt(polylineLen(m.pts))} m`;
-    else if (m.type === 'area') txt = `${fmt(polygonArea(m.pts))} m²`;
+    if (m.type === 'dist') txt = uLen(polylineLen(m.pts));
+    else if (m.type === 'area') txt = uArea(polygonArea(m.pts));
     else if (m.type === 'note') txt = m.name;
     if (txt) {
       g.font = `${Math.max(11, cv.width / 90)}px system-ui`;
@@ -2091,6 +2140,8 @@ function setupSplitters() {
 }
 
 // ---- boot ----
-(async () => { setupSplitters(); resize(); await loadStages(); await loadWorkflows(); await loadPresets();
+(async () => { loadPrefs(); setupSplitters(); resize(); await loadStages(); await loadWorkflows(); await loadPresets();
   await loadProject(); await loadMarkers(); await loadGeo(); await loadMeasurements();
+  applyPrefs();
+  if (PREFS.defaultView && PREFS.defaultView !== 'model') selectVtab(PREFS.defaultView);
   log(`OpenReco ready · project "${PROJECT.name}" · ${PROJECT.layers.length} layer(s)`, 'ok'); })();

@@ -689,6 +689,8 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"/api/detect_markers" in appjs and b"/api/marker_template" in appjs  # auto markers
     assert b"const ic =" in appjs                                        # line-icon helper
     assert b"loadPresets" in appjs and b"/api/preset" in appjs           # quality presets
+    assert b"openPrefs" in appjs and b"uLen" in appjs                    # preferences: units/precision
+    assert b"/api/raster_info" in appjs and b"drawOrthoMeasures" in appjs  # 2D ortho measuring
     _, html2 = _get(base + "/")
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"#300a24" in html2                                           # Ubuntu-style console

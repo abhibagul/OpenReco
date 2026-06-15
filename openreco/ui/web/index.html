@@ -299,6 +299,11 @@
             border:1px solid var(--line); border-radius:var(--radius); padding:20px;
             width:470px; max-height:84vh; overflow:auto; box-shadow:0 20px 60px #000c; }
   .dialog h2 { font-size:16px; margin:0 0 5px; }
+  .dialog h3 { margin:14px 0 6px; }
+  .prow { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:5px 0; font-size:13px; }
+  .prow > span { color:var(--muted); }
+  .prow select, .prow input[type=number] { width:170px; }
+  .prow input[type=range] { width:170px; }
   .chk { display:flex; gap:7px; align-items:center; margin:3px 0; }
   .crsrow { padding:7px 9px; border-radius:5px; cursor:pointer; } .crsrow:hover { background:var(--hover); }
   .brdir { padding:6px 9px; border-radius:5px; cursor:pointer; display:flex; align-items:center; gap:8px; }
@@ -583,6 +588,28 @@
 </div></div>
 
 <!-- CRS picker dialog -->
+<div id="prefsModal" class="modal hidden"><div class="dialog" style="width:440px">
+  <h2>Preferences</h2>
+  <h3>Measurements</h3>
+  <div class="prow"><span>Units</span><select id="prefUnits">
+    <option value="metre">Metre (m)</option>
+    <option value="foot">International foot (ft)</option>
+    <option value="usfoot">US survey foot (ft)</option></select></div>
+  <div class="prow"><span>Measurement precision</span><input id="prefMeasPrec" type="number" min="0" max="6" step="1"></div>
+  <div class="prow"><span>Coordinate precision</span><input id="prefCoordPrec" type="number" min="0" max="8" step="1"></div>
+  <h3>Viewport</h3>
+  <div class="prow"><span>Default view</span><select id="prefDefaultView">
+    <option value="model">Model</option><option value="ortho">Ortho</option>
+    <option value="map">Map</option><option value="photo">Photo</option></select></div>
+  <div class="prow"><span>Orbit speed</span><input id="prefRotate" type="range" min="0.2" max="2.5" step="0.1"></div>
+  <div class="prow"><span>Zoom speed</span><input id="prefZoom" type="range" min="0.2" max="2.5" step="0.1"></div>
+  <div class="prow"><span>Pan speed</span><input id="prefPan" type="range" min="0.2" max="2.5" step="0.1"></div>
+  <h3>Console</h3>
+  <div class="prow"><span>Max log lines</span><input id="prefLogMax" type="number" min="200" max="8000" step="100"></div>
+  <div class="row" style="margin-top:16px"><button id="prefsReset">Reset defaults</button><span class="sp"></span>
+    <button id="prefsCancel">Cancel</button><button class="run" id="prefsOk">Apply</button></div>
+</div></div>
+
 <div id="crsModal" class="modal hidden"><div class="dialog">
   <h2>Set coordinate system</h2>
   <div class="muted">Search EPSG by name or code (e.g. "WGS 84", "UTM 13N", "32613").</div>
