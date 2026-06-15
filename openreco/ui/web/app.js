@@ -1083,7 +1083,7 @@ const CAT_ICON = { Cameras:'camera', "Tie Points":'dots', "Dense Cloud":'cloud',
   Markers:'pin', Other:'box' };
 const OP_ICON = { ingest:'image', sfm:'camera', georef:'globe', mvs:'cloud', merge_chunks:'box',
   mesh:'triangle', texture:'image', dsm:'layers', ortho:'map', classify:'mountain', contours:'hex',
-  tiles:'grid', clean:'eraser' };
+  tiles:'grid', clean:'eraser', indices:'chart' };
 const collapsed = new Set();           // node ids that are collapsed (everything expanded by default)
 const isOpen = (id) => !collapsed.has(id);
 function toggle(id) { if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id); renderWorkspace(); }

@@ -90,6 +90,18 @@ OPERATIONS: list[dict[str, Any]] = [
         "fields": [{"label": "Resolution (m/px)", "param": "resolution_m", "type": "float", "default": 0.5}],
     },
     {
+        "op": "Vegetation Indices", "stage": "indices",
+        "desc": "Vegetation indices (NDVI / ExG / VARI …) from the orthomosaic — agriculture/health maps.",
+        "fields": [
+            {"label": "Indices", "param": "indices", "type": "enum", "default": "RGB (ExG · VARI · GLI)",
+             "options": {
+                 "RGB (ExG · VARI · GLI)": ["exg", "vari", "gli"],
+                 "RGB + NDVI · GNDVI (needs NIR)": ["exg", "vari", "gli", "ndvi", "gndvi"],
+                 "NDVI only (needs NIR)": ["ndvi"]}},
+            {"label": "NIR band #", "param": "nir_band", "type": "int", "default": 4},
+        ],
+    },
+    {
         "op": "Classify Points", "stage": "classify",
         "desc": "Classify the dense cloud into ground / building / vegetation.",
         "fields": [
@@ -173,6 +185,7 @@ OP_NEEDS: dict[str, list[str]] = {
     "Clean Mesh": ["mesh"],
     "Build Tiled Model": ["mesh"],
     "Build Contours": ["dsm"],
+    "Vegetation Indices": ["ortho"],
     "Merge Chunks": ["points"],
 }
 for _o in OPERATIONS:

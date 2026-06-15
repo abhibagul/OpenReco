@@ -42,6 +42,16 @@ def test_project_add_operation(tmp_path):
     assert s.id == "align" and s.type == "sfm" and s.params["max_image_size"] == 1000
 
 
+def test_vegetation_indices_operation():
+    ops = {o["op"] for o in operations()}
+    assert "Vegetation Indices" in ops                  # surfaced in the Workflow menu
+    s = to_stage("Vegetation Indices", {"Indices": "RGB + NDVI · GNDVI (needs NIR)", "NIR band #": 5})
+    assert s["stage_type"] == "indices"
+    assert s["params"]["indices"] == ["exg", "vari", "gli", "ndvi", "gndvi"]
+    assert s["params"]["nir_band"] == 5
+    assert to_stage("Vegetation Indices")["params"]["indices"] == ["exg", "vari", "gli"]
+
+
 def test_validate_clean_pipeline_has_no_issues(tmp_path):
     p = (Project.create(tmp_path, name="ok", crs="EPSG:32613")
          .add_stage("ing", "ingest", params={"image_dir": "imgs"})
