@@ -18,3 +18,32 @@ id = "mvs1"
 type = "mvs"
 inputs = ["ingest1", "sfm1"]
 params = { quality = "low", geometric_consistency = true, planesweep_max_dim = 600, dense_backend = "auto" }
+
+[[stage]]
+id = "mesh1"
+type = "mesh"
+inputs = ["mvs1"]
+params = { poisson_depth = 9, method = "poisson" }
+
+[[stage]]
+id = "clean1"
+type = "clean"
+inputs = ["mesh1"]
+params = { mode = "mesh", min_component_ratio = 0.1 }
+
+[[stage]]
+id = "clean2"
+type = "clean"
+inputs = ["clean1"]
+params = { mode = "mesh", min_component_ratio = 0.02 }
+
+[[stage]]
+id = "mesh1_edit1"
+type = "import_mesh"
+params = { path = "D:\\openreco\\testproj\\edits\\mesh1_edit1.ply" }
+
+[[stage]]
+id = "dsm2"
+type = "dsm"
+inputs = ["mvs1", "clean2"]
+params = { resolution_m = 1 }

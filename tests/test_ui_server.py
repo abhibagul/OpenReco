@@ -207,6 +207,7 @@ def test_frontend_has_workspace_chunks(server):
     assert b"/api/edit_cloud" in appjs and b"selectInPoly" in appjs       # 3D edit (box)
     assert b"/api/edit_mesh" in appjs and b"lassoBtn" in appjs and b"frontMostFilter" in appjs  # lasso/mesh/depth
     assert b"/api/cesium" in appjs                                        # Cesium 3D-Tiles viewer
+    assert b"styleCloud" in appjs and b"RAMPS" in appjs and b"initEDL" in appjs  # point-cloud view controls
     assert b"setupSplitters" in appjs and b"snapView" in appjs and b"gridline" in appjs  # infinite grid shader
     assert b"runPipeline" in appjs and b"camera.up.set(0, 0, 1)" in appjs   # Z-up world
     assert b"rotateGizmo" in appjs and b"contourView" in appjs               # navcube nav + contour overlay

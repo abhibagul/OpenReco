@@ -97,6 +97,10 @@ function resize() {
   renderer.setSize(w, h, false);
   const eo = $('editoverlay'); if (eo) { eo.width = w; eo.height = h; }   // selection overlay (CSS px)
   camera.aspect = w / h; camera.updateProjectionMatrix();
+  if (composer) {                                  // keep the EDL post-process buffers in sync
+    composer.setSize(w, h); composer._rt.depthTexture.image.width = w; composer._rt.depthTexture.image.height = h;
+    composer._edl.uniforms.uTexel.value.set(1 / w, 1 / h);
+  }
 }
 addEventListener('resize', resize);
 // track the actual size of the viewport pane — fires on pane-splitter drags, dock resize, window, etc.
@@ -211,10 +215,88 @@ document.querySelectorAll('#gizmoNav .gn').forEach(b => b.onclick = () => rotate
     u.uFade.value = Math.max(30, camera.position.distanceTo(controls.target) * 4.5);
     grid.position.x = controls.target.x; grid.position.y = controls.target.y;
   }
-  renderer.render(scene, camera);
+  if (edlOn && composer) composer.render(); else renderer.render(scene, camera);
   gizmoCube.quaternion.copy(camera.quaternion).invert();   // cube mirrors the main camera
   gizmoR.render(gizmoScene, gizmoCam);
 })();
+
+// ---- point-cloud display controls (size / color-by / ramp / eye-dome) ------
+let pointSize = 1.5, colorMode = 'rgb', rampName = 'viridis';
+const RAMPS = {
+  grayscale: [[0, [40, 40, 40]], [1, [240, 240, 240]]],
+  viridis: [[0, [68, 1, 84]], [0.25, [59, 82, 139]], [0.5, [33, 145, 140]], [0.75, [94, 201, 98]], [1, [253, 231, 37]]],
+  turbo: [[0, [48, 18, 59]], [0.25, [65, 105, 225]], [0.5, [27, 207, 212]], [0.75, [250, 186, 57]], [1, [165, 30, 20]]],
+  terrain: [[0, [44, 107, 158]], [0.3, [46, 139, 87]], [0.55, [194, 178, 128]], [0.8, [139, 90, 43]], [1, [245, 245, 245]]],
+};
+function ramp(name, t) {
+  const s = RAMPS[name] || RAMPS.viridis; t = Math.max(0, Math.min(1, t));
+  for (let i = 1; i < s.length; i++) if (t <= s[i][0]) {
+    const [t0, c0] = s[i - 1], [t1, c1] = s[i], f = (t - t0) / (t1 - t0 || 1);
+    return [c0[0] + (c1[0] - c0[0]) * f, c0[1] + (c1[1] - c0[1]) * f, c0[2] + (c1[2] - c0[2]) * f];
+  }
+  return s[s.length - 1][1];
+}
+function styleCloud(o) {                         // apply size + color mode to one Points object
+  o.material.size = pointSize;
+  const geo = o.geometry, pos = geo.getAttribute('position');
+  if (colorMode === 'elev') {
+    let zmin = Infinity, zmax = -Infinity;
+    for (let i = 0; i < pos.count; i++) { const z = pos.getZ(i); if (z < zmin) zmin = z; if (z > zmax) zmax = z; }
+    const span = (zmax - zmin) || 1, arr = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) { const c = ramp(rampName, (pos.getZ(i) - zmin) / span);
+      arr[i*3] = c[0]/255; arr[i*3+1] = c[1]/255; arr[i*3+2] = c[2]/255; }
+    geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    o.material.vertexColors = true; o.material.color.set(0xffffff);
+  } else if (o.userData.origColor) {            // restore original RGB
+    geo.setAttribute('color', new THREE.BufferAttribute(o.userData.origColor.slice(), 3));
+    o.material.vertexColors = true; o.material.color.set(0xffffff);
+  }
+  o.material.needsUpdate = true;
+}
+function styleAllClouds() {
+  let pts = 0;
+  objects.forEach((o, id) => { if (o.isPoints && visible.has(id)) { styleCloud(o);
+    pts += o.geometry.getAttribute('position').count; } });
+  $('vbcount').textContent = pts ? `${pts.toLocaleString()} pts` : '';
+}
+$('vbSize').oninput = () => { pointSize = parseFloat($('vbSize').value);
+  objects.forEach((o, id) => { if (o.isPoints && visible.has(id)) o.material.size = pointSize; }); };
+$('vbColor').onchange = () => { colorMode = $('vbColor').value; styleAllClouds(); };
+$('vbRamp').onchange = () => { rampName = $('vbRamp').value; if (colorMode === 'elev') styleAllClouds(); };
+// Eye-dome lighting via a depth post-process (lazy composer; toggles cleanly)
+let edlOn = false, composer = null, edlReady = false;
+async function initEDL() {
+  if (composer || edlReady) return;
+  edlReady = true;
+  try {
+    const [{ EffectComposer }, { RenderPass }, { ShaderPass }] = await Promise.all([
+      import('three/addons/postprocessing/EffectComposer.js'),
+      import('three/addons/postprocessing/RenderPass.js'),
+      import('three/addons/postprocessing/ShaderPass.js'),
+    ]);
+    const w = $('center').clientWidth, h = $('center').clientHeight;
+    const rt = new THREE.WebGLRenderTarget(w, h, { depthTexture: new THREE.DepthTexture(w, h) });
+    composer = new EffectComposer(renderer, rt);
+    composer.addPass(new RenderPass(scene, camera));
+    const edl = new ShaderPass({
+      uniforms: { tDiffuse: { value: null }, tDepth: { value: rt.depthTexture },
+                  uTexel: { value: new THREE.Vector2(1/w, 1/h) }, uStrength: { value: 8.0 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+      fragmentShader: `varying vec2 vUv; uniform sampler2D tDiffuse, tDepth; uniform vec2 uTexel; uniform float uStrength;
+        void main(){ vec4 c = texture2D(tDiffuse, vUv); float d = texture2D(tDepth, vUv).r;
+          if (d >= 1.0) { gl_FragColor = c; return; }
+          float s = 0.0;
+          for (int i=0;i<8;i++){ vec2 o = uTexel * vec2(float((i%3)-1), float((i/3)-1)) * 2.0;
+            float dn = texture2D(tDepth, vUv+o).r; s += max(0.0, d - dn); }
+          float sh = exp(-uStrength * s * 4000.0);
+          gl_FragColor = vec4(c.rgb * sh, c.a); }`,
+    });
+    edl.renderToScreen = true; composer.addPass(edl); composer._edl = edl; composer._rt = rt;
+  } catch (e) { composer = null; edlOn = false; $('vbEdl').classList.remove('on');
+    log('eye-dome lighting unavailable: ' + e, 'warn'); }
+}
+$('vbEdl').onclick = async () => { edlOn = !edlOn; $('vbEdl').classList.toggle('on', edlOn);
+  if (edlOn) await initEDL(); };
 
 function frameAll() {
   const box = new THREE.Box3();
@@ -252,9 +334,12 @@ function loadObject(layer) {
       } else {
         // points / gaussian splats (splat .ply has no faces) -> render as colored points
         o = new THREE.Points(geo, new THREE.PointsMaterial({
-          size: v.splat ? 2 : 1, sizeAttenuation: false, vertexColors: !!geo.getAttribute('color') }));
+          size: pointSize, sizeAttenuation: false, vertexColors: !!geo.getAttribute('color') }));
+        const col = geo.getAttribute('color');
+        o.userData.origColor = col ? col.array.slice() : null;   // keep for RGB/elevation toggle
       }
       if (!geo.getAttribute('color')) o.material.color.set(0x89b4fa);
+      if (o.isPoints) styleCloud(o);
       resolve(o);
     }, undefined, () => resolve(null));
   });
@@ -279,6 +364,7 @@ async function setVisible(layer, on) {
     visible.delete(layer.id);
     if (objects.has(layer.id)) objects.get(layer.id).visible = false;
   }
+  styleAllClouds();           // refresh point count + apply current size/color to shown clouds
   renderWorkspace();
 }
 
@@ -1098,9 +1184,10 @@ function selectVtab(name) {
   $('orthoview').classList.toggle('show', name === 'ortho');
   $('mapview').classList.toggle('show', name === 'map');
   $('c').style.display = name === 'model' ? 'block' : 'none';
-  // orientation cube only belongs to the 3D view
+  // orientation cube + point-cloud view-bar only belong to the 3D view
   const showGz = name === 'model' ? 'block' : 'none';
   $('gizmo').style.display = showGz; $('gizmoNav').style.display = showGz;
+  $('viewbar').style.display = name === 'model' ? 'flex' : 'none';
   if (name === 'map') showOnMap(mapRaster);
 }
 document.querySelectorAll('[data-vtab]').forEach(b => b.onclick = () => selectVtab(b.dataset.vtab));
