@@ -167,6 +167,15 @@
           display:inline-flex; }
   .mbtn:hover { background:var(--hover); color:var(--fg); }
   .mbtn .ic { width:14px; height:14px; }
+  /* cross-section profile chart (floating, bottom-center) */
+  #profpanel { position:absolute; left:50%; bottom:54px; transform:translateX(-50%); width:540px;
+               max-width:calc(100% - 24px); z-index:9; background:var(--panel); backdrop-filter:var(--blur);
+               -webkit-backdrop-filter:var(--blur); border:1px solid var(--line); border-radius:12px;
+               box-shadow:var(--shadow); overflow:hidden; }
+  #profpanel .mp-head { font-size:11px; }
+  #profsvg { display:block; width:100%; height:150px; }
+  #profsvg .ax { stroke:var(--line); stroke-width:1; }
+  #profsvg .axt { fill:var(--muted); font-size:9px; font-family:var(--mono,monospace); }
   /* tabs (soft pill segmented) */
   .tabs { display:flex; gap:5px; padding:7px 7px 5px; background:transparent; position:sticky; top:0; z-index:2;background:#1b1e27; }
   .tabs button { background:none; border:0; border-radius:var(--r-sm); padding:6px 14px; color:var(--muted);
@@ -363,6 +372,7 @@
       <button class="tgl iconbtn" id="distBtn" title="Measure distance"><svg class="ic"><use href="#i-ruler"/></svg></button>
       <button class="tgl iconbtn" id="areaBtn" title="Measure area"><svg class="ic"><use href="#i-square"/></svg></button>
       <button class="tgl iconbtn" id="volBtn" title="Measure volume — outline a footprint, double-click to compute"><svg class="ic"><use href="#i-box"/></svg></button>
+      <button class="tgl iconbtn" id="profBtn" title="Cross-section profile — click start &amp; end of a line"><svg class="ic"><use href="#i-chart"/></svg></button>
       <select id="volBase" title="Volume base surface" style="display:none">
         <option value="plane">Base: best-fit plane</option>
         <option value="min">Base: lowest point</option>
@@ -474,6 +484,15 @@
         <button id="mpClose" class="iconbtn" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div id="mpList"></div>
+    </div>
+    <div id="profpanel" class="hidden">
+      <div class="mp-head">
+        <svg class="ic"><use href="#i-chart"/></svg>
+        <span id="proftitle">Cross-section</span>
+        <span style="flex:1"></span>
+        <button id="profClose" class="iconbtn" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <svg id="profsvg" viewBox="0 0 520 150" preserveAspectRatio="none"></svg>
     </div>
   </div>
   <!-- right: properties -->

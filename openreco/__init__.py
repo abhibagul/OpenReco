@@ -14,7 +14,8 @@ def __getattr__(name: str):
         from openreco import api
 
         return getattr(api, name)
-    if name in ("measure_volume", "measure_profile", "measure_volume_region"):
+    if name in ("measure_volume", "measure_profile", "measure_volume_region",
+                "measure_profile_region"):
         from openreco import measure
 
         return getattr(measure, name)

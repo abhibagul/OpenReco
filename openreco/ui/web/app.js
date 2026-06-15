@@ -601,7 +601,7 @@ const MCOLORS = [0x5694ff, 0xf9e2af, 0xa6e3a1, 0xf38ba8, 0xcba6f7, 0xfab387, 0x9
 let measurements = [];            // committed measurements (each: id,type,name,color,pts,group,visible,result,value)
 let draft = null;                 // measurement currently being drawn
 let measureMode = null;           // null | 'dist' | 'area' | 'vol' (active tool)
-const mSeq = { dist: 0, area: 0, vol: 0 };
+const mSeq = { dist: 0, area: 0, vol: 0, prof: 0 };
 const raycaster = new THREE.Raycaster(); raycaster.params.Points.threshold = 0.5;
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 const fmt = (n, d = 2) => Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
@@ -635,7 +635,7 @@ function mkLabel(text, cls, color) {
 // (re)build a measurement's THREE group: vertex handles + line + fill + floating labels
 function buildMeasure(m, isDraft) {
   m.group.clear();
-  const col = m.color, pts = m.pts, closed = m.type !== 'dist';
+  const col = m.color, pts = m.pts, closed = m.type === 'area' || m.type === 'vol';
   if (!pts.length) return;
   m.group.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts),     // vertex handles
     new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, color: col })));
@@ -656,13 +656,14 @@ function buildMeasure(m, isDraft) {
       opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })));
   }
   // floating labels
-  if (m.type === 'dist') {
+  if (m.type === 'dist' || m.type === 'prof') {
     for (let i = 1; i < pts.length; i++) {                                         // per-segment length
       const lbl = mkLabel(`${fmt(pts[i].distanceTo(pts[i-1]))} m`, 'seg', col);
       lbl.position.copy(pts[i].clone().add(pts[i-1]).multiplyScalar(0.5)); m.group.add(lbl);
     }
     if (pts.length >= 2) {
-      const lbl = mkLabel(`${m.name} · ${fmt(polylineLen(pts))} m`, 'tot', col);
+      const extra = (m.type === 'prof' && m.result) ? ` · Δ ${fmt(m.result.relief_m)} m` : '';
+      const lbl = mkLabel(`${m.name} · ${fmt(polylineLen(pts))} m${extra}`, 'tot', col);
       lbl.position.copy(pts[pts.length-1]); m.group.add(lbl);
     }
   } else if (pts.length >= 3) {
@@ -680,9 +681,10 @@ function setTool(type) {
   $('distBtn').classList.toggle('on', type === 'dist');
   $('areaBtn').classList.toggle('on', type === 'area');
   $('volBtn').classList.toggle('on', type === 'vol');
+  $('profBtn').classList.toggle('on', type === 'prof');
   $('volBase').style.display = type === 'vol' ? '' : 'none';
 }
-function defName(type) { mSeq[type]++; return { dist: 'Distance', area: 'Area', vol: 'Volume' }[type] + ' ' + mSeq[type]; }
+function defName(type) { mSeq[type]++; return { dist: 'Distance', area: 'Area', vol: 'Volume', prof: 'Profile' }[type] + ' ' + mSeq[type]; }
 function startMeasure(type) {
   if (draft) cancelDraft();
   if (measureMode === type) { setTool(null); $('measure').classList.remove('show'); return; }   // toggle off
@@ -694,9 +696,10 @@ function startMeasure(type) {
 }
 function hint() {
   if (!draft) { $('measure').classList.remove('show'); return; }
-  const n = draft.pts.length, need = draft.type === 'dist' ? 2 : 3;
+  const n = draft.pts.length, need = (draft.type === 'dist' || draft.type === 'prof') ? 2 : 3;
   let t;
   if (draft.type === 'dist') t = n < 1 ? 'Click points to measure distance' : `${fmt(polylineLen(draft.pts))} m — double-click / Enter to finish`;
+  else if (draft.type === 'prof') t = n < 1 ? 'Click the start of the section line' : 'Click the end point to draw the profile';
   else t = n < need ? `Outline the ${draft.type === 'vol' ? 'footprint' : 'area'} (${n} pt) — Esc cancels` : `${fmt(polygonArea(draft.pts))} m² — double-click / Enter to finish`;
   $('measure').textContent = t; $('measure').classList.add('show');
 }
@@ -707,7 +710,7 @@ function cancelDraft() {
 }
 async function finishDraft() {
   if (!draft) return;
-  const need = draft.type === 'dist' ? 2 : 3;
+  const need = (draft.type === 'dist' || draft.type === 'prof') ? 2 : 3;
   // the finishing double-click's 2nd press adds a duplicate vertex — drop coincident trailing points
   while (draft.pts.length > need && draft.pts.at(-1).distanceToSquared(draft.pts.at(-2)) < 1e-4) draft.pts.pop();
   if (draft.pts.length < need) { log(`measurement needs at least ${need} points`, 'warn'); return; }
@@ -716,7 +719,19 @@ async function finishDraft() {
   if (m.type === 'dist') m.value = polylineLen(m.pts);
   else if (m.type === 'area') m.value = polygonArea(m.pts);
   else if (m.type === 'vol') { await computeVolume(m); buildMeasure(m, false); }
+  else if (m.type === 'prof') { m.value = polylineLen(m.pts); await computeProfile(m); buildMeasure(m, false); showProfile(m); }
   renderMPanel();
+}
+async function computeProfile(m) {
+  if (!m.layerId) { log('profile: could not tell which layer — click on a mesh/cloud', 'warn'); m.error = 'no layer'; return; }
+  try {
+    const r = await fetch('/api/measure_profile', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layer: m.layerId, from: [m.pts[0].x, m.pts[0].y], to: [m.pts[1].x, m.pts[1].y] }) });
+    const d = await r.json();
+    if (!r.ok) { log(`profile failed: ${d.error || r.status}`, 'err'); m.error = d.error || ('HTTP ' + r.status); return; }
+    m.result = d;
+    log(`${m.name}: ${fmt(d.length_m)} m · relief ${fmt(d.relief_m)} m · slope ${fmt(d.slope_pct)}%`, 'ok');
+  } catch (err) { log(`profile error: ${err}`, 'err'); m.error = String(err); }
 }
 async function computeVolume(m) {
   if (!m.layerId) { log('volume: could not tell which layer — click on a mesh/cloud', 'warn'); m.error = 'no layer'; return; }
@@ -733,14 +748,16 @@ async function computeVolume(m) {
 $('distBtn').onclick = () => startMeasure('dist');
 $('areaBtn').onclick = () => startMeasure('area');
 $('volBtn').onclick = () => startMeasure('vol');
+$('profBtn').onclick = () => startMeasure('prof');
 $('volBase').onchange = () => { if (draft) draft.volBase = $('volBase').value; };
 $('clearMeasBtn').onclick = () => clearAllMeasures();
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!draft || e.button !== 0) return;
   const hit = pickModel(e);
   if (!hit) return;
-  if (draft.type === 'vol') draft.layerId = layerIdForObject(hit.object) || draft.layerId;
+  if (draft.type === 'vol' || draft.type === 'prof') draft.layerId = layerIdForObject(hit.object) || draft.layerId;
   draft.pts.push(hit.point.clone()); buildMeasure(draft, true); hint();
+  if (draft.type === 'prof' && draft.pts.length >= 2) finishDraft();   // a profile is a single line
 });
 renderer.domElement.addEventListener('dblclick', (e) => { if (draft) { e.preventDefault(); finishDraft(); } });
 addEventListener('keydown', (e) => {
@@ -755,9 +772,38 @@ addEventListener('keydown', (e) => {
 // ---- measurements panel ---------------------------------------------------
 function openMPanel() { $('mpanel').classList.remove('hidden'); }
 $('mpClose').onclick = () => $('mpanel').classList.add('hidden');
-function mIcon(t) { return t === 'dist' ? 'ruler' : t === 'area' ? 'square' : 'box'; }
+$('profClose').onclick = () => $('profpanel').classList.add('hidden');
+// draw an elevation cross-section as an inline SVG area chart
+function showProfile(m) {
+  const panel = $('profpanel'), svg = $('profsvg');
+  const r = m && m.result;
+  if (!r || !r.samples) { panel.classList.add('hidden'); return; }
+  const sm = r.samples.filter(s => s.z != null);
+  $('proftitle').textContent = `${m.name} · ${fmt(r.length_m)} m · Δ ${fmt(r.relief_m)} m · slope ${fmt(r.slope_pct)}%`;
+  if (sm.length < 2) { svg.innerHTML = '<text x="10" y="22" class="axt">no surface under the line</text>'; panel.classList.remove('hidden'); return; }
+  const W = 520, H = 150, mL = 46, mR = 12, mT = 12, mB = 26;
+  const dmax = r.length_m || 1, zmin = r.z_min, zmax = r.z_max, zr = (zmax - zmin) || 1;
+  const sx = (d) => mL + (d / dmax) * (W - mL - mR);
+  const sy = (z) => mT + (1 - (z - zmin) / zr) * (H - mT - mB);
+  const line = sm.map((s, i) => `${i ? 'L' : 'M'}${sx(s.dist_m).toFixed(1)},${sy(s.z).toFixed(1)}`).join(' ');
+  const fill = `${line} L${sx(sm.at(-1).dist_m).toFixed(1)},${H - mB} L${sx(sm[0].dist_m).toFixed(1)},${H - mB} Z`;
+  const col = hex(m.color);
+  let g = `<line class="ax" x1="${mL}" y1="${H - mB}" x2="${W - mR}" y2="${H - mB}"/>`
+        + `<line class="ax" x1="${mL}" y1="${mT}" x2="${mL}" y2="${H - mB}"/>`;
+  for (let k = 0; k <= 2; k++) {                       // 3 elevation gridlines + labels
+    const z = zmin + (zr * k) / 2, y = sy(z);
+    g += `<line class="ax" x1="${mL}" y1="${y.toFixed(1)}" x2="${W - mR}" y2="${y.toFixed(1)}" opacity="0.4"/>`
+       + `<text class="axt" x="${mL - 5}" y="${(y + 3).toFixed(1)}" text-anchor="end">${z.toFixed(1)}</text>`;
+  }
+  g += `<text class="axt" x="${mL}" y="${H - 8}">0</text>`
+     + `<text class="axt" x="${W - mR}" y="${H - 8}" text-anchor="end">${fmt(dmax)} m</text>`;
+  svg.innerHTML = `<path d="${fill}" fill="${col}" fill-opacity="0.18"/>`
+                + `<path d="${line}" fill="none" stroke="${col}" stroke-width="1.6"/>${g}`;
+  panel.classList.remove('hidden');
+}
+function mIcon(t) { return t === 'dist' ? 'ruler' : t === 'area' ? 'square' : t === 'prof' ? 'chart' : 'box'; }
 function mValue(m) {
-  if (m.type === 'dist') return `${fmt(m.value ?? polylineLen(m.pts))} m`;
+  if (m.type === 'dist' || m.type === 'prof') return `${fmt(m.value ?? polylineLen(m.pts))} m`;
   if (m.type === 'area') return `${fmt(m.value ?? polygonArea(m.pts))} m²`;
   if (m.result) return `${fmt(m.result.net_m3)} m³`;
   return m.error ? '⚠' : '…';
@@ -801,6 +847,7 @@ function renderMPanel() {
     if (m.type === 'vol' && m.result) row.title = `cut ${fmt(m.result.cut_m3)} m³ · fill ${fmt(m.result.fill_m3)} m³ · area ${fmt(m.result.area_m2)} m² · base ${m.result.base} @ ${m.result.base_elevation}`;
     else if (m.type === 'area') row.title = `perimeter ${fmt(perimeter(m.pts))} m · ${m.pts.length} vertices`;
     else if (m.type === 'dist') row.title = `${m.pts.length} points · ${m.pts.length - 1} segments`;
+    else if (m.type === 'prof' && m.result) row.title = `relief ${fmt(m.result.relief_m)} m · slope ${fmt(m.result.slope_pct)}% · click to view chart`;
     row.innerHTML =
       `<span class="msw" style="background:${hex(m.color)}"></span>`
       + `<svg class="ic mt"><use href="#i-${mIcon(m.type)}"/></svg>`
@@ -808,7 +855,7 @@ function renderMPanel() {
       + `<span class="mval">${mValue(m)}</span>`
       + `<button class="mbtn" data-act="eye" title="Show / hide">${ic('eye')}</button>`
       + `<button class="mbtn" data-act="del" title="Delete">${ic('trash')}</button>`;
-    row.querySelector('.mname').onclick = () => focusMeasure(m.id);
+    row.querySelector('.mname').onclick = () => { focusMeasure(m.id); if (m.type === 'prof') showProfile(m); };
     row.querySelector('.mname').ondblclick = () => renameMeasure(m.id);
     row.querySelector('[data-act=eye]').onclick = () => toggleMeasure(m.id);
     row.querySelector('[data-act=del]').onclick = () => removeMeasure(m.id);
@@ -1298,6 +1345,8 @@ async function loadWorkflows() {
   menuEntry('m-tools', 'Measure area', () => startMeasure('area'), null, 'square');
   menuEntry('m-tools', 'Measure volume (stockpile)', () => startMeasure('vol'),
     'outline a footprint on the model, double-click to compute cut/fill', 'box');
+  menuEntry('m-tools', 'Cross-section profile', () => startMeasure('prof'),
+    'click the start & end of a line to chart elevation along it', 'chart');
   menuEntry('m-tools', 'Measurements panel', () => { openMPanel(); renderMPanel(); }, null, 'layers');
   menuSep('m-tools');
   menuEntry('m-tools', 'Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); }, null, 'pin');
@@ -1366,7 +1415,7 @@ function selectVtab(name) {
   $('gizmo').style.display = showGz; $('gizmoNav').style.display = showGz;
   $('viewbar').style.display = name === 'model' ? 'flex' : 'none';
   labelRenderer.domElement.style.display = showGz;     // 3D measurement labels live in the model view
-  if (name !== 'model') $('mpanel').classList.add('hidden');
+  if (name !== 'model') { $('mpanel').classList.add('hidden'); $('profpanel').classList.add('hidden'); }
   if (name === 'map') showOnMap(mapRaster);
 }
 document.querySelectorAll('[data-vtab]').forEach(b => b.onclick = () => selectVtab(b.dataset.vtab));

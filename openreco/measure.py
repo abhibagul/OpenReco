@@ -175,6 +175,53 @@ def measure_volume_region(xyz: np.ndarray, polygon, base: str | float = "plane",
     }
 
 
+def measure_profile_region(xyz: np.ndarray, p_from, p_to, n: int = 200,
+                           radius: float | None = None) -> dict[str, Any]:
+    """Elevation cross-section along p_from -> p_to sampled directly from a point set.
+
+    `xyz` is (N,3) in metric world coordinates (a mesh's vertices or a dense cloud); the line
+    endpoints are in the same frame (as picked in the 3D view). Each of `n` samples takes the
+    nearest point's elevation; samples whose nearest point is farther than `radius` (a coverage
+    gap) are returned as null. Returns per-sample dist/x/y/z plus length/min/max/relief/slope.
+    """
+    from scipy.spatial import cKDTree
+
+    xyz = np.asarray(xyz, dtype=np.float64)
+    if len(xyz) < 2:
+        raise ValueError("not enough points to sample a profile")
+    a = np.asarray(p_from, dtype=np.float64)[:2]
+    b = np.asarray(p_to, dtype=np.float64)[:2]
+    seg = b - a
+    seg_len = float(np.hypot(seg[0], seg[1]))
+    if seg_len <= 0:
+        raise ValueError("profile endpoints coincide")
+    t = np.linspace(0.0, 1.0, max(int(n), 2))
+    xs = a[0] + t * seg[0]
+    ys = a[1] + t * seg[1]
+    step = seg_len / (len(t) - 1)
+    if radius is None:
+        radius = max(step * 5.0, 1e-6)
+
+    tree = cKDTree(xyz[:, :2])
+    dist, idx = tree.query(np.column_stack([xs, ys]), k=1)
+    zs = np.where(dist <= radius, xyz[idx, 2], np.nan)
+    dvals = t * seg_len
+    samples = [{"dist_m": round(float(d), 3), "x": round(float(x), 3), "y": round(float(y), 3),
+                "z": (round(float(z), 3) if np.isfinite(z) else None)}
+               for d, x, y, z in zip(dvals, xs, ys, zs)]
+    finite = zs[np.isfinite(zs)]
+    relief = float(finite.max() - finite.min()) if finite.size else None
+    return {
+        "length_m": round(seg_len, 3),
+        "samples": samples,
+        "z_min": round(float(finite.min()), 3) if finite.size else None,
+        "z_max": round(float(finite.max()), 3) if finite.size else None,
+        "relief_m": round(relief, 3) if relief is not None else None,
+        "slope_pct": round(relief / seg_len * 100.0, 2) if relief is not None and seg_len else None,
+        "covered": int(finite.size),
+    }
+
+
 def measure_profile(dsm_path: str | Path, p_from: tuple[float, float],
                     p_to: tuple[float, float], n: int = 200) -> dict[str, Any]:
     """Elevation cross-section along the segment p_from -> p_to (both in the DSM's CRS units).

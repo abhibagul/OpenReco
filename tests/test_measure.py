@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from openreco.measure import measure_volume_region
+from openreco.measure import measure_profile_region, measure_volume_region
 
 
 def _grid_points(nx, ny, step, zfn):
@@ -48,6 +48,25 @@ def test_region_pyramid_above_plane_base():
 def test_region_too_few_points_raises():
     with pytest.raises(ValueError):
         measure_volume_region(np.zeros((1, 3)), [[0, 0], [1, 0], [1, 1]], cell_size=0.5)
+
+
+def test_profile_ramp_relief_and_slope():
+    # surface tilting in x: z = 2*x over a 10 m line -> relief 20 m, slope 200%
+    pts = _grid_points(101, 11, 0.1, lambda x, y: 2.0 * x)
+    r = measure_profile_region(pts, [0.0, 0.5], [10.0, 0.5], n=50)
+    assert r["length_m"] == pytest.approx(10.0, rel=1e-3)
+    assert r["z_min"] == pytest.approx(0.0, abs=0.3)
+    assert r["z_max"] == pytest.approx(20.0, abs=0.3)
+    assert r["relief_m"] == pytest.approx(20.0, abs=0.5)
+    assert r["slope_pct"] == pytest.approx(200.0, abs=5.0)
+    assert len(r["samples"]) == 50
+    assert r["covered"] > 40
+
+
+def test_profile_coincident_endpoints_raise():
+    pts = _grid_points(10, 10, 1.0, lambda x, y: np.zeros_like(x))
+    with pytest.raises(ValueError):
+        measure_profile_region(pts, [1.0, 1.0], [1.0, 1.0])
 
 
 pytest.importorskip("rasterio")

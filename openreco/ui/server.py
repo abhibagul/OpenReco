@@ -476,26 +476,41 @@ class AppState:
         self.project.save()
         return {"ok": True, "id": new_id, "kept_faces": int(len(faces2)), "removed_faces": int(rem.size)}
 
-    def measure_volume(self, layer_id: str, polygon: list, base: str | float = "plane") -> dict:
-        """Polygon-bounded cut/fill volume of a layer's surface (interactive stockpile measurement).
-        Uses the layer's mesh vertices if present, else its dense/point cloud; both are in the same
-        world frame the viewport picks in, so the polygon comes straight from the 3D view."""
+    def _layer_xyz(self, layer_id: str):
+        """A layer's surface points (mesh vertices preferred, else dense/point cloud) + the source
+        kind. Both are in the world frame the viewport picks in, so picked coords map directly."""
         from openreco.io.pointcloud import read_mesh_ply, read_ply
-        from openreco.measure import measure_volume_region
-        if len(polygon) < 3:
-            raise ValueError("draw at least 3 points to outline the region")
         art = self._last_run().get(layer_id, {}).get("artifacts", {})
         mesh = art.get("mesh")
         if mesh and Path(mesh).is_file():
             xyz, _, _ = read_mesh_ply(Path(mesh))
-        else:
-            ply = art.get("points") or art.get("merged")
-            if not ply or not Path(ply).is_file():
-                raise ValueError(f"layer {layer_id!r} has no mesh or point cloud (run it first)")
-            xyz, _, _ = read_ply(Path(ply))
+            return xyz, "mesh"
+        ply = art.get("points") or art.get("merged")
+        if not ply or not Path(ply).is_file():
+            raise ValueError(f"layer {layer_id!r} has no mesh or point cloud (run it first)")
+        xyz, _, _ = read_ply(Path(ply))
+        return xyz, "cloud"
+
+    def measure_volume(self, layer_id: str, polygon: list, base: str | float = "plane") -> dict:
+        """Polygon-bounded cut/fill volume of a layer's surface (interactive stockpile measurement)."""
+        from openreco.measure import measure_volume_region
+        if len(polygon) < 3:
+            raise ValueError("draw at least 3 points to outline the region")
+        xyz, source = self._layer_xyz(layer_id)
         res = measure_volume_region(xyz, polygon, base=base)
         res["layer"] = layer_id
-        res["source"] = "mesh" if (mesh and Path(mesh).is_file()) else "cloud"
+        res["source"] = source
+        return res
+
+    def measure_profile(self, layer_id: str, p_from, p_to, n: int = 200) -> dict:
+        """Elevation cross-section along p_from -> p_to, sampled from a layer's surface."""
+        from openreco.measure import measure_profile_region
+        if not p_from or not p_to:
+            raise ValueError("a profile needs two endpoints")
+        xyz, source = self._layer_xyz(layer_id)
+        res = measure_profile_region(xyz, p_from, p_to, n=n)
+        res["layer"] = layer_id
+        res["source"] = source
         return res
 
     def detect_markers(self, chunk: str | None, dictionary: str) -> dict:
@@ -707,6 +722,12 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 return self._send(200, self.state.measure_volume(body.get("layer", ""),
                                   body.get("polygon", []), body.get("base", "plane")))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": str(exc)})
+        if u.path == "/api/measure_profile":
+            try:
+                return self._send(200, self.state.measure_profile(body.get("layer", ""),
+                                  body.get("from"), body.get("to"), int(body.get("n", 200))))
             except Exception as exc:  # noqa: BLE001
                 return self._send(400, {"error": str(exc)})
         if u.path == "/api/use_gcps":
