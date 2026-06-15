@@ -692,6 +692,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"openPrefs" in appjs and b"uLen" in appjs                    # preferences: units/precision
     assert b"/api/raster_info" in appjs and b"drawOrthoMeasures" in appjs  # 2D ortho measuring
     assert b"photoCtx" in appjs and b"/api/image_info" in appjs and b"lookThrough" in appjs  # photo right-click
+    assert b"drawMapMeasures" in appjs and b"/api/to_world" in appjs and b"onMapClick" in appjs  # map measuring
     _, html2 = _get(base + "/")
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"#300a24" in html2                                           # Ubuntu-style console
@@ -750,6 +751,35 @@ def test_measurements_export_formats(server):
     assert b"area_m2" in raw and b"Pad" in raw and b"inlet pipe" in raw
     _, raw = _get(base + "/api/measurements_export?fmt=dxf")
     assert b"LWPOLYLINE" in raw and b"POINT" in raw
+
+
+def test_to_world_to_geo_roundtrip(tmp_path):
+    # a project with a projected CRS (origin defaults to 0) -> map picks convert and round-trip
+    proj = Project.create(tmp_path, name="geo", crs="EPSG:32613").add_stage("a", "sfm")
+    httpd = serve(proj, port=0)
+    port = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{port}"
+    try:
+        s, b = _post(base + "/api/to_world", {"lonlat": [[-107.9194, 38.9023]]})
+        assert s == 200 and len(b["world"]) == 1
+        s, b = _post(base + "/api/to_geo", {"world": [b["world"][0]]})
+        lon, lat = b["lonlat"][0]
+        assert abs(lon - (-107.9194)) < 1e-5 and abs(lat - 38.9023) < 1e-5
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_to_world_requires_crs(server):
+    base, _ = server                                    # the default project has no CRS
+    req = urllib.request.Request(base + "/api/to_world",
+        data=json.dumps({"lonlat": [[0, 0]]}).encode(), method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        raise AssertionError("expected HTTP 400")
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
 
 
 def test_image_info_endpoint(server, tmp_path):

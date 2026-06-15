@@ -799,6 +799,12 @@ addEventListener('keydown', (e) => {
   if (!draft) return;
   const t = document.activeElement && document.activeElement.tagName;
   if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
+  if (draft.fromMap) {       // map drafts use lat/lng points + server conversion on finish
+    if (e.key === 'Enter') finishMapDraft();
+    else if (e.key === 'Escape') cancelMapDraft();
+    else if (e.key === 'Backspace') { e.preventDefault(); mapDraftPts.pop(); drawMapDraft(); }
+    return;
+  }
   if (e.key === 'Enter') finishDraft();
   else if (e.key === 'Escape') cancelDraft();
   else if (e.key === 'Backspace') { e.preventDefault(); draft.pts.pop(); buildMeasure(draft, true); hint(); }
@@ -849,18 +855,18 @@ function mValue(m) {
 function removeMeasure(id) {
   const i = measurements.findIndex(m => m.id === id); if (i < 0) return;
   scene.remove(measurements[i].group); measurements[i].group.clear();
-  measurements.splice(i, 1); renderMPanel(); persistMeasures(); drawOrthoMeasures();
+  measurements.splice(i, 1); renderMPanel(); persistMeasures(); drawOrthoMeasures(); drawMapMeasures();
 }
 function toggleMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m) return;
   m.visible = !m.visible; m.group.visible = m.visible;
   m.group.traverse(o => { if (o.isCSS2DObject && o.element) o.element.style.display = m.visible ? '' : 'none'; });
-  renderMPanel(); persistMeasures(); drawOrthoMeasures();
+  renderMPanel(); persistMeasures(); drawOrthoMeasures(); drawMapMeasures();
 }
 function renameMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m) return;
   const name = prompt('Rename measurement:', m.name); if (!name) return;
-  m.name = name.trim(); buildMeasure(m, false); renderMPanel(); persistMeasures(); drawOrthoMeasures();
+  m.name = name.trim(); buildMeasure(m, false); renderMPanel(); persistMeasures(); drawOrthoMeasures(); drawMapMeasures();
 }
 function focusMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m || !m.pts.length) return;
@@ -870,7 +876,7 @@ function focusMeasure(id) {
 }
 function clearAllMeasures() {
   measurements.forEach(m => { scene.remove(m.group); m.group.clear(); });
-  measurements = []; cancelDraft(); renderMPanel(); persistMeasures(); drawOrthoMeasures();
+  measurements = []; cancelDraft(); renderMPanel(); persistMeasures(); drawOrthoMeasures(); drawMapMeasures();
 }
 function renderMPanel() {
   const list = $('mpList'); if (!list) return;
@@ -923,7 +929,8 @@ function resultFor(m) {                            // ensure every type has a me
 function serializeMeasures() {
   return measurements.map(m => ({ id: m.id, type: m.type, name: m.name, color: m.color,
     chunk: m.chunk || ACTIVE_CHUNK, layer: m.layerId || null, visible: m.visible,
-    points: m.pts.map(p => [p.x, p.y, p.z]), result: resultFor(m), value: m.value }));
+    points: m.pts.map(p => [p.x, p.y, p.z]), latlng: m.latlng || null,
+    result: resultFor(m), value: m.value }));
 }
 let _saveT = null;
 function persistMeasures() {
@@ -943,7 +950,8 @@ async function loadMeasurements() {
   saved.forEach(s => {
     const m = { id: s.id, type: s.type, name: s.name, color: s.color, chunk: s.chunk,
       layerId: s.layer || null, visible: s.visible !== false, result: s.result || null, value: s.value,
-      volBase: 'plane', pts: (s.points || []).map(a => new THREE.Vector3(a[0], a[1], a[2])),
+      volBase: 'plane', latlng: s.latlng || null,
+      pts: (s.points || []).map(a => new THREE.Vector3(a[0], a[1], a[2])),
       group: new THREE.Group() };
     scene.add(m.group); buildMeasure(m, false);
     if (!m.visible) { m.group.visible = false;
@@ -1551,8 +1559,10 @@ function selectVtab(name) {
   labelRenderer.domElement.style.display = showGz;     // 3D measurement labels live in the model view
   if (name !== 'model') { $('mpanel').classList.add('hidden'); $('profpanel').classList.add('hidden'); }
   if (name === 'ortho') { openMPanel(); drawOrthoMeasures(); }
-  if (name === 'map') showOnMap(mapRaster);
+  if (name === 'map') { openMPanel(); showOnMap(mapRaster); setTimeout(drawMapMeasures, 60); }
+  curVtab = name;
 }
+let curVtab = 'model';
 document.querySelectorAll('[data-vtab]').forEach(b => b.onclick = () => selectVtab(b.dataset.vtab));
 
 // ---- web map: place a georeferenced ortho/DEM on an OpenStreetMap basemap ----
@@ -1562,6 +1572,8 @@ function initMap() {
   lmap = L.map('leaflet', { zoomControl: false, attributionControl: false }).setView([0, 0], 2);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(lmap);
   L.control.zoom({ position: 'bottomright' }).addTo(lmap);
+  lmap.on('click', onMapClick);
+  lmap.on('dblclick', onMapDblClick);
 }
 async function showOnMap(layer) {
   initMap(); setTimeout(() => lmap.invalidateSize(), 30);
@@ -1581,6 +1593,90 @@ async function showOnMap(layer) {
   log(`${layer.id} placed on the map`, 'ok');
 }
 $('mapOpacity').oninput = () => { if (lover) lover.setOpacity(parseFloat($('mapOpacity').value)); };
+
+// ---- 2D measuring / annotating on the map (lat-lon, true geodesic) --------
+// Map picks are WGS84; on finish we convert them to world coords (/api/to_world) so they join the
+// same measurements store / panel / 3D / export. Existing measurements are drawn via /api/to_geo.
+let mapDraftPts = [];            // [L.LatLng] of the in-progress draft
+let mapDraftLayer = null;        // temporary Leaflet layer for the draft
+const mapLayers = [];            // committed Leaflet layers (cleared/redrawn together)
+function onMapClick(e) {
+  if (!draft || !['dist', 'area', 'note'].includes(draft.type)) return;
+  draft.fromMap = true; lmap.doubleClickZoom.disable();
+  mapDraftPts.push(e.latlng); drawMapDraft();
+  if (draft.type === 'dist' && mapDraftPts.length >= 2) {
+    let d = 0; for (let i = 1; i < mapDraftPts.length; i++) d += lmap.distance(mapDraftPts[i], mapDraftPts[i - 1]);
+    $('measure').textContent = `${uLen(d)} — double-click to finish`; $('measure').classList.add('show');
+  } else { $('measure').textContent = `${draft.type}: ${mapDraftPts.length} pt — double-click to finish`; $('measure').classList.add('show'); }
+  if (draft.type === 'note') {
+    const text = prompt('Annotation text:', '');
+    if (text === null || !text.trim()) { cancelMapDraft(); return; }
+    draft.name = text.trim(); finishMapDraft();
+  }
+}
+function onMapDblClick(e) {
+  if (draft && draft.fromMap && mapDraftPts.length >= (draft.type === 'dist' ? 2 : 3)) finishMapDraft();
+}
+function drawMapDraft() {
+  if (mapDraftLayer) { lmap.removeLayer(mapDraftLayer); mapDraftLayer = null; }
+  if (!mapDraftPts.length) return;
+  const col = hex(draft.color);
+  const g = L.layerGroup();
+  if (draft.type === 'area') L.polygon(mapDraftPts, { color: col, weight: 2, fillOpacity: 0.15 }).addTo(g);
+  else if (mapDraftPts.length >= 2) L.polyline(mapDraftPts, { color: col, weight: 2 }).addTo(g);
+  mapDraftPts.forEach(p => L.circleMarker(p, { radius: 4, color: col, fillOpacity: 1 }).addTo(g));
+  mapDraftLayer = g.addTo(lmap);
+}
+function cancelMapDraft() {
+  if (mapDraftLayer) { lmap.removeLayer(mapDraftLayer); mapDraftLayer = null; }
+  mapDraftPts = []; lmap.doubleClickZoom.enable(); cancelDraft();
+}
+async function finishMapDraft() {
+  const need = draft.type === 'dist' ? 2 : draft.type === 'note' ? 1 : 3;
+  if (mapDraftPts.length < need) { log(`need at least ${need} point(s)`, 'warn'); return; }
+  const lonlat = mapDraftPts.map(p => [p.lng, p.lat]);
+  let world;
+  try {
+    const r = await fetch('/api/to_world', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chunk: ACTIVE_CHUNK, lonlat }) });
+    const d = await r.json();
+    if (!r.ok) { log(`map measure failed: ${d.error}`, 'err'); cancelMapDraft(); return; }
+    world = d.world;
+  } catch (e) { log('map measure error: ' + e, 'err'); cancelMapDraft(); return; }
+  draft.pts = world.map(a => new THREE.Vector3(a[0], a[1], a[2]));
+  draft.latlng = mapDraftPts.map(p => [p.lat, p.lng]);
+  if (mapDraftLayer) { lmap.removeLayer(mapDraftLayer); mapDraftLayer = null; }
+  mapDraftPts = []; lmap.doubleClickZoom.enable();
+  await finishDraft();
+  drawMapMeasures();
+}
+async function drawMapMeasures() {
+  if (!lmap) return;
+  mapLayers.forEach(l => lmap.removeLayer(l)); mapLayers.length = 0;
+  for (const m of measurements) {
+    if (m.visible === false || !m.pts.length) continue;
+    let ll = m.latlng || m._latlng;
+    if (!ll && GEO.has_geo) {                       // convert world -> lat/lon once, then cache
+      try {
+        const r = await fetch('/api/to_geo', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chunk: m.chunk || ACTIVE_CHUNK, world: m.pts.map(p => [p.x, p.y, p.z]) }) });
+        const d = await r.json();
+        if (r.ok) ll = m._latlng = d.lonlat.map(a => [a[1], a[0]]);   // [lat,lng]
+      } catch (e) { /* skip */ }
+    }
+    if (!ll || !ll.length) continue;
+    const col = hex(m.color), g = L.layerGroup();
+    const val = mValue(m);
+    if (m.type === 'note') {
+      L.circleMarker(ll[0], { radius: 6, color: col, fillOpacity: 1 }).bindTooltip(m.name, { permanent: false }).addTo(g);
+    } else if (m.type === 'area' || m.type === 'vol') {
+      L.polygon(ll, { color: col, weight: 2, fillOpacity: 0.15 }).bindTooltip(`${m.name} · ${val}`).addTo(g);
+    } else {
+      L.polyline(ll, { color: col, weight: 2 }).bindTooltip(`${m.name} · ${val}`).addTo(g);
+    }
+    mapLayers.push(g.addTo(lmap));
+  }
+}
 
 // ---- Ortho 2D raster view (pan/zoom a server-rendered PNG of any GeoTIFF) --
 // raster products that render as 2D layers: prefer a .tif (ortho/DSM), else an index .tif

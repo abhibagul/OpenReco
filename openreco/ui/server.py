@@ -817,6 +817,10 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.state.save_measurements(body.get("measurements", [])))
             except Exception as exc:  # noqa: BLE001
                 return self._send(400, {"error": str(exc)})
+        if u.path == "/api/to_world":
+            return self._to_world(body)
+        if u.path == "/api/to_geo":
+            return self._to_geo(body)
         if u.path == "/api/use_gcps":
             return self._use_gcps(body)
         if u.path == "/api/add_photos":
@@ -1007,6 +1011,39 @@ class _Handler(BaseHTTPRequestHandler):
         if not p.is_file():
             return self._send(404, {"error": "not found"})
         self._send(200, p.read_bytes(), _CT.get(p.suffix.lower(), "application/octet-stream"))
+
+    def _to_world(self, body):
+        """Map picks: WGS84 [lon,lat] -> world coords (projected CRS minus the georef origin, Z=0)."""
+        import numpy as np
+
+        from openreco.geo.crs import geodetic_to_crs
+        geo = self.state.geo_for_chunk(body.get("chunk"))
+        epsg, origin = geo.get("crs_epsg"), geo.get("origin") or [0.0, 0.0, 0.0]
+        if not epsg:
+            return self._send(400, {"error": "project has no projected CRS — georeference first"})
+        ll = body.get("lonlat") or []
+        if not ll:
+            return self._send(200, {"world": []})
+        arr = np.asarray(ll, dtype=float)
+        en = geodetic_to_crs(arr[:, 1], arr[:, 0], np.zeros(len(arr)), int(epsg))
+        world = [[float(en[i, 0] - origin[0]), float(en[i, 1] - origin[1]), 0.0] for i in range(len(en))]
+        return self._send(200, {"world": world})
+
+    def _to_geo(self, body):
+        """Draw existing measurements on the map: world coords -> WGS84 [lon,lat]."""
+        import numpy as np
+
+        from openreco.geo.crs import crs_to_geodetic
+        geo = self.state.geo_for_chunk(body.get("chunk"))
+        epsg, origin = geo.get("crs_epsg"), geo.get("origin") or [0.0, 0.0, 0.0]
+        if not epsg:
+            return self._send(400, {"error": "project has no projected CRS"})
+        w = body.get("world") or []
+        if not w:
+            return self._send(200, {"lonlat": []})
+        arr = np.asarray(w, dtype=float)
+        ll = crs_to_geodetic(arr[:, 0] + origin[0], arr[:, 1] + origin[1], int(epsg))
+        return self._send(200, {"lonlat": [[float(ll[i, 0]), float(ll[i, 1])] for i in range(len(ll))]})
 
     def _image_info(self, path):
         """Full EXIF/metadata for one source photo (dimensions, camera, focal, GPS, blur)."""
