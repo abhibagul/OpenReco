@@ -226,6 +226,38 @@ class AppState:
         return {"name": m.name, "crs": m.crs, "project_dir": str(m.project_dir),
                 "chunks": m.chunk_names(), "layers": layers, "version": __version__}
 
+    def jobs(self, limit: int = 50) -> dict:
+        """Processing-run history for the Jobs panel: each past run (runs/<ts>/run.json) summarized
+        as time, status, duration and per-status stage counts, newest first."""
+        runs_dir = self.project.manifest.runs_dir
+        out: list[dict] = []
+        if runs_dir.is_dir():
+            run_dirs = sorted((d for d in runs_dir.iterdir() if d.is_dir()),
+                              key=lambda d: d.name, reverse=True)
+            for d in run_dirs[:limit]:
+                rj = d / "run.json"
+                if not rj.is_file():
+                    continue
+                try:
+                    data = json.loads(rj.read_text(encoding="utf-8"))
+                except Exception:  # noqa: BLE001
+                    continue
+                stages = data.get("stages", [])
+                counts: dict[str, int] = {}
+                for s in stages:
+                    counts[s.get("status", "?")] = counts.get(s.get("status", "?"), 0) + 1
+                out.append({
+                    "run_id": d.name,
+                    "started": data.get("started"),
+                    "finished": data.get("finished"),
+                    "ok": data.get("ok", False),
+                    "seconds": round(sum(s.get("seconds", 0) for s in stages), 1),
+                    "stages": len(stages),
+                    "counts": counts,
+                    "report": str(d / "report.html"),
+                })
+        return {"jobs": out}
+
     def images_for_chunk(self, chunk: str | None) -> dict:
         """Source images of a chunk's ingest layer(s) — for the Photos pane + GCP picking.
 
@@ -805,6 +837,8 @@ class _Handler(BaseHTTPRequestHandler):
         if route == "/api/validate":
             from openreco.workflow import validate_pipeline
             return self._send(200, {"issues": validate_pipeline(self.state.project.manifest.stages)})
+        if route == "/api/jobs":
+            return self._send(200, self.state.jobs())
         if route == "/api/estimate_quality":
             try:
                 return self._send(200, self.state.estimate_quality(parse_qs(u.query).get("chunk", [None])[0]))

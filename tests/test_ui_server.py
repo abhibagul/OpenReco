@@ -77,6 +77,22 @@ def test_run_streams_events_and_updates_status(server):
     assert statuses["total"] in ("executed", "cached")
 
 
+def test_jobs_history_records_runs(server):
+    base, _ = server
+    assert json.loads(_get(base + "/api/jobs")[1])["jobs"] == []      # none before any run
+    status, _ = _post(base + "/api/run", {})
+    assert status == 202
+    with urllib.request.urlopen(base + "/api/events", timeout=20) as r:  # drain to completion
+        for raw in r:
+            if raw.decode().strip().startswith("event: eof"):
+                break
+    jobs = json.loads(_get(base + "/api/jobs")[1])["jobs"]
+    assert len(jobs) >= 1
+    j = jobs[0]
+    assert {"run_id", "started", "ok", "seconds", "stages", "counts", "report"} <= set(j)
+    assert j["stages"] >= 1
+
+
 def test_file_sandbox_rejects_outside_project(server):
     base, _ = server
     req = base + "/api/file?path=" + urllib.request.quote("C:/Windows/system32/drivers/etc/hosts")
@@ -701,6 +717,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"backdrop-filter" in html2 and b'id="i-play"' in html2       # glass theme + icon sprite
     assert b"#300a24" in html2                                           # Ubuntu-style console
     assert b"abhibagul" in html2 and b"Abhishek Bagul" in html2          # About: developer credit
+    assert b"/api/jobs" in appjs and b"loadJobs" in appjs                # jobs history panel
     assert b"brUseFolder" in html2                                       # folder-pick for open/new project
 
 

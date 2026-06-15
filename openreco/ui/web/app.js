@@ -1502,6 +1502,7 @@ async function runPipeline(body = {}) {
   };
   es.addEventListener('eof', async () => { es.close(); $('status').textContent = 'done';
     setTimeout(progHide, 1600);
+    loadJobs();                          // a run just finished — refresh the Jobs history
     const reshow = [...visible];
     const camChunks = reshow.filter(id => id.startsWith('cameras:')).map(id => id.slice(8));
     reshow.forEach(id => { if (objects.has(id)) { scene.remove(objects.get(id)); objects.delete(id); } });
@@ -1625,6 +1626,27 @@ function selectDock(name) {
   document.querySelectorAll('[data-dtab]').forEach(b => b.classList.toggle('on', b.dataset.dtab === name));
   ['console','photos','jobs'].forEach(n => $('dt-' + n).classList.toggle('hidden', n !== name));
   if (name === 'photos') loadPhotos();
+  if (name === 'jobs') loadJobs();
+}
+async function loadJobs() {
+  const el = $('jobs'); if (!el) return;
+  let jobs = [];
+  try { jobs = (await (await fetch('/api/jobs')).json()).jobs || []; }
+  catch (e) { el.innerHTML = '<div class="muted">jobs unavailable</div>'; return; }
+  if (!jobs.length) { el.innerHTML = '<div class="muted">No processing runs yet — press Run to start one.</div>'; return; }
+  el.innerHTML = '';
+  jobs.forEach(j => {
+    const when = j.started ? new Date(j.started).toLocaleString() : j.run_id;
+    const counts = Object.entries(j.counts || {}).map(([k, v]) => `${v} ${k}`).join(' · ');
+    const row = document.createElement('div'); row.className = 'jobrow';
+    row.innerHTML =
+      `<span class="jb ${j.ok ? 'ok' : 'err'}">${j.ok ? 'OK' : 'FAILED'}</span>`
+      + `<span class="jt">${when}</span>`
+      + `<span class="jd muted">${j.seconds}s · ${j.stages} stage(s)${counts ? ' · ' + counts : ''}</span>`
+      + `<button class="mbtn jrep" title="Open this run's report">${ic('chart')}</button>`;
+    row.querySelector('.jrep').onclick = () => window.open('/api/file?path=' + encodeURIComponent(j.report), '_blank');
+    el.appendChild(row);
+  });
 }
 document.querySelectorAll('[data-dtab]').forEach(b => b.onclick = () => selectDock(b.dataset.dtab));
 function selectVtab(name) {

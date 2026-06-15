@@ -121,7 +121,7 @@
   .leaflet-container { background:#0a0810; }
   #editoverlay { position:absolute; inset:0; z-index:7; pointer-events:none; }
   #center.selecting { cursor:crosshair; }
-  #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:650; }
+  #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:50; }
   #vtabs button { background:#2a2330cc; }
   #vtabs button.on { background:var(--accent); color:var(--accent-fg); }
   #measure { position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:9;
@@ -312,6 +312,14 @@
   .credit a:hover { text-decoration:underline; }
   .credit .lic { color:var(--muted); font-variant-numeric:tabular-nums; }
   .credit .what { color:var(--fg); }
+  /* jobs (run history) panel */
+  .jobrow { display:flex; align-items:center; gap:10px; padding:6px 8px; border-radius:8px; font-size:12px; }
+  .jobrow:hover { background:var(--hover); }
+  .jobrow .jb { font-weight:700; font-size:10px; padding:1px 7px; border-radius:5px; }
+  .jobrow .jb.ok { color:var(--ok); background:rgba(63,201,127,.14); }
+  .jobrow .jb.err { color:var(--err); background:rgba(239,107,107,.14); }
+  .jobrow .jt { font-weight:600; }
+  .jobrow .jd { flex:1; }
   .chk { display:flex; gap:7px; align-items:center; margin:3px 0; }
   .crsrow { padding:7px 9px; border-radius:5px; cursor:pointer; } .crsrow:hover { background:var(--hover); }
   .brdir { padding:6px 9px; border-radius:5px; cursor:pointer; display:flex; align-items:center; gap:8px; }
@@ -538,7 +546,7 @@
     <div id="dockbody">
       <div id="dt-console"><div id="log"></div></div>
       <div id="dt-photos" class="hidden"><div id="photos" class="muted" style="padding:10px">Run ingest to list source photos.</div></div>
-      <div id="dt-jobs" class="hidden pad"><div id="jobs" class="muted">No jobs yet.</div></div>
+      <div id="dt-jobs" class="hidden pad"><div id="jobs" class="muted">No processing runs yet — press Run to start one.</div></div>
     </div>
   </div>
 </div>
