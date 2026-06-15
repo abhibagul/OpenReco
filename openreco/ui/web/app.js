@@ -90,6 +90,8 @@ scene.add(grid);
 
 const axes = new THREE.AxesHelper(1); scene.add(axes);
 let helpers = true;
+// eye-dome lighting state — declared here (above resize/loop) to avoid a temporal-dead-zone ReferenceError
+let edlOn = false, composer = null, edlReady = false;
 function resize() {
   const w = $('center').clientWidth, h = $('center').clientHeight;
   if (!w || !h) return;
@@ -264,7 +266,7 @@ $('vbSize').oninput = () => { pointSize = parseFloat($('vbSize').value);
 $('vbColor').onchange = () => { colorMode = $('vbColor').value; styleAllClouds(); };
 $('vbRamp').onchange = () => { rampName = $('vbRamp').value; if (colorMode === 'elev') styleAllClouds(); };
 // Eye-dome lighting via a depth post-process (lazy composer; toggles cleanly)
-let edlOn = false, composer = null, edlReady = false;
+// (edlOn/composer/edlReady declared earlier, near resize(), to avoid a TDZ error)
 async function initEDL() {
   if (composer || edlReady) return;
   edlReady = true;
