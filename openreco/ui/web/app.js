@@ -70,7 +70,7 @@ function log(m, level) {
 // ---- 3D viewport ----------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
 renderer.setPixelRatio(devicePixelRatio);
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0e14);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xeef2fb);  // light "paper" ground
 const camera = new THREE.PerspectiveCamera(55, 1, 0.01, 1e7);
 camera.up.set(0, 0, 1);                 // Z-up world (matches survey/ENU data: X east, Y north, Z up)
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -88,7 +88,7 @@ const grid = new THREE.Mesh(
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
     extensions: { derivatives: true },          // enable fwidth() for the grid AA
     uniforms: { uCam: { value: new THREE.Vector3() }, uFade: { value: 100.0 },
-                uMinor: { value: new THREE.Color(0x3a4252) }, uMajor: { value: new THREE.Color(0x5a657c) } },
+                uMinor: { value: new THREE.Color(0xc7d8f5) }, uMajor: { value: new THREE.Color(0x9db8e6) } },
     vertexShader: `varying vec3 vW;
       void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vW = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp; }`,
