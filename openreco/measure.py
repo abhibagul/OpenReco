@@ -58,6 +58,123 @@ def measure_volume(dsm_path: str | Path, base: str | float = "min") -> dict[str,
     }
 
 
+def _point_in_poly(pts_xy: np.ndarray, poly: np.ndarray) -> np.ndarray:
+    """Vectorized even-odd ray-cast test. pts_xy: (N,2), poly: (M,2) ring. Returns (N,) bool."""
+    x, y = pts_xy[:, 0], pts_xy[:, 1]
+    inside = np.zeros(len(pts_xy), dtype=bool)
+    n = len(poly)
+    j = n - 1
+    for i in range(n):
+        xi, yi = poly[i]
+        xj, yj = poly[j]
+        cond = (yi > y) != (yj > y)
+        denom = yj - yi
+        if denom == 0:
+            denom = 1e-12
+        xints = (xj - xi) * (y - yi) / denom + xi
+        inside ^= cond & (x < xints)
+        j = i
+    return inside
+
+
+def _boundary_cells(mask: np.ndarray) -> np.ndarray:
+    """Cells in `mask` that touch a non-mask cell or the grid edge (4-neighbourhood)."""
+    b = np.zeros_like(mask)
+    b[:-1, :] |= mask[:-1, :] & ~mask[1:, :]
+    b[1:, :] |= mask[1:, :] & ~mask[:-1, :]
+    b[:, :-1] |= mask[:, :-1] & ~mask[:, 1:]
+    b[:, 1:] |= mask[:, 1:] & ~mask[:, :-1]
+    b[0, :] |= mask[0, :]
+    b[-1, :] |= mask[-1, :]
+    b[:, 0] |= mask[:, 0]
+    b[:, -1] |= mask[:, -1]
+    return b & mask
+
+
+def measure_volume_region(xyz: np.ndarray, polygon, base: str | float = "plane",
+                          cell_size: float | None = None) -> dict[str, Any]:
+    """Polygon-bounded cut/fill volume of a surface (the interactive "stockpile" measurement).
+
+    `xyz` is an (N,3) point set in metric world coordinates (a mesh's vertices or a dense cloud).
+    `polygon` is a list of [x, y] (or [x, y, z]) vertices in the same frame outlining the footprint.
+    The top surface is gridded as the max Z per cell. `base` is the reference the volume is taken
+    above: "plane" (best-fit plane through the footprint boundary — handles sloped ground), "mean",
+    "min", or an explicit elevation. Returns cut/fill/net m**3, the measured area, and grid info.
+    """
+    xyz = np.asarray(xyz, dtype=np.float64)
+    poly = np.asarray(polygon, dtype=np.float64)[:, :2]
+    if len(poly) < 3:
+        raise ValueError("polygon needs at least 3 vertices")
+    minx, miny = poly.min(0)
+    maxx, maxy = poly.max(0)
+    span = float(max(maxx - minx, maxy - miny))
+    if span <= 0:
+        raise ValueError("polygon has zero extent")
+    if cell_size is None:
+        cell_size = max(span / 200.0, 1e-6)
+    cell_size = float(cell_size)
+
+    inb = ((xyz[:, 0] >= minx) & (xyz[:, 0] <= maxx)
+           & (xyz[:, 1] >= miny) & (xyz[:, 1] <= maxy))
+    pts = xyz[inb]
+    if len(pts) < 3:
+        raise ValueError("not enough surface points inside the region")
+
+    nx = max(int(np.ceil((maxx - minx) / cell_size)), 1)
+    ny = max(int(np.ceil((maxy - miny) / cell_size)), 1)
+    ix = np.clip(((pts[:, 0] - minx) / cell_size).astype(int), 0, nx - 1)
+    iy = np.clip(((pts[:, 1] - miny) / cell_size).astype(int), 0, ny - 1)
+    grid = np.full((ny, nx), -np.inf)
+    np.maximum.at(grid, (iy, ix), pts[:, 2])      # top surface = highest point per cell
+    filled = np.isfinite(grid)
+
+    cx = minx + (np.arange(nx) + 0.5) * cell_size
+    cy = miny + (np.arange(ny) + 0.5) * cell_size
+    cxg, cyg = np.meshgrid(cx, cy)
+    inside = _point_in_poly(np.column_stack([cxg.ravel(), cyg.ravel()]), poly).reshape(ny, nx)
+    use = inside & filled
+    if not use.any():
+        raise ValueError("no surface cells fall inside the region")
+
+    zc = grid[use]
+    xc, yc = cxg[use], cyg[use]
+    if base == "plane":
+        bnd = _boundary_cells(use)
+        if int(bnd.sum()) >= 3:
+            a = np.column_stack([cxg[bnd], cyg[bnd], np.ones(int(bnd.sum()))])
+            coef, *_ = np.linalg.lstsq(a, grid[bnd], rcond=None)
+            base_z = coef[0] * xc + coef[1] * yc + coef[2]
+            base_label = "plane"
+        else:
+            base_z = np.full(zc.shape, float(zc.min()))
+            base_label = "min"
+    elif base == "mean":
+        base_z = float(zc.mean())
+        base_label = "mean"
+    elif base == "min":
+        base_z = float(zc.min())
+        base_label = "min"
+    else:
+        base_z = float(base)
+        base_label = "fixed"
+
+    cell = cell_size * cell_size
+    diff = zc - base_z
+    cut = float(np.clip(diff, 0, None).sum() * cell)
+    fill = float(np.clip(-diff, 0, None).sum() * cell)
+    base_summary = float(np.mean(base_z)) if isinstance(base_z, np.ndarray) else float(base_z)
+    return {
+        "base": base_label,
+        "base_elevation": round(base_summary, 4),
+        "cut_m3": round(cut, 3),
+        "fill_m3": round(fill, 3),
+        "net_m3": round(cut - fill, 3),
+        "area_m2": round(cell * int(use.sum()), 3),
+        "cells": int(use.sum()),
+        "cell_size_m": round(cell_size, 6),
+    }
+
+
 def measure_profile(dsm_path: str | Path, p_from: tuple[float, float],
                     p_to: tuple[float, float], n: int = 200) -> dict[str, Any]:
     """Elevation cross-section along the segment p_from -> p_to (both in the DSM's CRS units).

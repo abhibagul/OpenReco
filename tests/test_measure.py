@@ -1,10 +1,54 @@
 """Volume measurement — verified against analytic shapes on synthetic DSMs.
-Needs rasterio (slice dep) -> skips in CI without it."""
+The DSM-based tests need rasterio (slice dep) -> skip in CI without it; the
+polygon-bounded region tests are pure numpy and always run."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
+
+from openreco.measure import measure_volume_region
+
+
+def _grid_points(nx, ny, step, zfn):
+    """A regular XY lawn of points with elevation zfn(x, y) — a synthetic surface."""
+    xs = np.arange(nx) * step
+    ys = np.arange(ny) * step
+    gx, gy = np.meshgrid(xs, ys)
+    gx, gy = gx.ravel(), gy.ravel()
+    return np.column_stack([gx, gy, zfn(gx, gy)])
+
+
+def test_region_flat_slab_above_zero():
+    # flat surface at z=5; a 9x9 m footprint, base 0 -> ~5 * 81 = 405 m^3
+    pts = _grid_points(41, 41, 0.25, lambda x, y: np.full_like(x, 5.0))
+    poly = [[0.5, 0.5], [9.5, 0.5], [9.5, 9.5], [0.5, 9.5]]
+    r = measure_volume_region(pts, poly, base=0.0, cell_size=0.5)
+    assert r["area_m2"] == pytest.approx(81.0, rel=0.05)
+    assert r["cut_m3"] == pytest.approx(405.0, rel=0.05)
+    assert r["fill_m3"] == pytest.approx(0.0, abs=1e-6)
+    assert r["net_m3"] == pytest.approx(405.0, rel=0.05)
+
+
+def test_region_pyramid_above_plane_base():
+    # cone/pyramid on flat ground at z=100; best-fit plane base sits at the ground,
+    # so the measured volume is just the mound above it (positive, no fill).
+    def zfn(x, y):
+        d = np.hypot(x - 5.0, y - 5.0)
+        return 100.0 + np.clip(5.0 - d, 0, None)        # 5 m peak, radius 5
+    pts = _grid_points(101, 101, 0.1, zfn)
+    poly = [[0.5, 0.5], [9.5, 0.5], [9.5, 9.5], [0.5, 9.5]]
+    r = measure_volume_region(pts, poly, base="plane", cell_size=0.25)
+    assert r["base"] == "plane"
+    assert r["base_elevation"] == pytest.approx(100.0, abs=0.3)
+    assert r["fill_m3"] == pytest.approx(0.0, abs=5.0)   # tiny plane-fit residual only
+    assert r["cut_m3"] > 50.0                            # a real mound, not noise
+
+
+def test_region_too_few_points_raises():
+    with pytest.raises(ValueError):
+        measure_volume_region(np.zeros((1, 3)), [[0, 0], [1, 0], [1, 1]], cell_size=0.5)
+
 
 pytest.importorskip("rasterio")
 

@@ -589,21 +589,34 @@ addEventListener('pointerup', (e) => {
   selectInPoly(poly, d.shift);
 });
 
-// ---- measurement (distance / area) ----------------------------------------
-let measureMode = null;           // null | 'dist' | 'area'
+// ---- measurement (distance / area / volume) -------------------------------
+let measureMode = null;           // null | 'dist' | 'area' | 'vol'
 let measurePts = [];
+let volLayerId = null;            // layer the volume polygon is being drawn on
 const raycaster = new THREE.Raycaster(); raycaster.params.Points.threshold = 0.5;
 function setMeasure(mode) {
   measureMode = (measureMode === mode) ? null : mode;
-  measurePts = []; measureGroup.clear();
+  measurePts = []; measureGroup.clear(); volLayerId = null;
   $('distBtn').classList.toggle('on', measureMode === 'dist');
   $('areaBtn').classList.toggle('on', measureMode === 'area');
+  $('volBtn').classList.toggle('on', measureMode === 'vol');
+  $('volBase').style.display = measureMode === 'vol' ? '' : 'none';
   $('measure').classList.toggle('show', !!measureMode);
-  $('measure').textContent = measureMode ? `Click points on the model (${measureMode})` : '';
+  $('measure').textContent = measureMode === 'vol'
+    ? 'Outline the footprint on the model — double-click to compute volume'
+    : (measureMode ? `Click points on the model (${measureMode})` : '');
 }
 $('distBtn').onclick = () => setMeasure('dist');
 $('areaBtn').onclick = () => setMeasure('area');
-$('clearMeasBtn').onclick = () => { measurePts = []; measureGroup.clear(); $('measure').textContent = ''; };
+$('volBtn').onclick = () => setMeasure('vol');
+$('volBase').onchange = () => { if (measureMode === 'vol' && measurePts.length >= 3) computeVolume(); };
+$('clearMeasBtn').onclick = () => { measurePts = []; measureGroup.clear(); volLayerId = null; $('measure').textContent = ''; };
+// map a raycast hit back to the layer id that owns the hit THREE object
+function layerIdForObject(obj) {
+  for (const [id, o] of objects) { if (o === obj) return id;
+    let p = obj; while (p) { if (p === o) return id; p = p.parent; } }
+  return null;
+}
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!measureMode || e.button !== 0) return;
   const r = renderer.domElement.getBoundingClientRect();
@@ -612,17 +625,36 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   const targets = [...objects.entries()].filter(([id]) => visible.has(id)).map(([, o]) => o);
   const hit = raycaster.intersectObjects(targets, true)[0];
   if (!hit) return;
+  if (measureMode === 'vol') volLayerId = layerIdForObject(hit.object) || volLayerId;
   measurePts.push(hit.point.clone());
-  const dot = new THREE.Mesh(new THREE.SphereGeometry(0), new THREE.MeshBasicMaterial());
   measureGroup.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints([hit.point]),
     new THREE.PointsMaterial({ size: 8, sizeAttenuation: false, color: 0xf9e2af })));
   redrawMeasure();
 });
+renderer.domElement.addEventListener('dblclick', (e) => {
+  if (measureMode === 'vol' && measurePts.length >= 3) { e.preventDefault(); computeVolume(); }
+});
+async function computeVolume() {
+  if (!volLayerId) { $('measure').textContent = 'volume: could not tell which layer — click on a mesh/cloud'; return; }
+  const base = $('volBase').value;
+  $('measure').textContent = `computing volume (${volLayerId}, base: ${base})…`;
+  try {
+    const r = await fetch('/api/measure_volume', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layer: volLayerId, base, polygon: measurePts.map(p => [p.x, p.y, p.z]) }) });
+    const d = await r.json();
+    if (!r.ok) { $('measure').textContent = `volume failed: ${d.error || r.status}`; return; }
+    $('measure').textContent =
+      `net: ${d.net_m3.toLocaleString()} m³  ·  cut: ${d.cut_m3.toLocaleString()}  fill: ${d.fill_m3.toLocaleString()}  ` +
+      `· area ${d.area_m2.toLocaleString()} m²  · base ${d.base} @ ${d.base_elevation}  (${d.source}, ${d.cells} cells)`;
+    log(`volume[${volLayerId}] net=${d.net_m3} m³ cut=${d.cut_m3} fill=${d.fill_m3} area=${d.area_m2} m²`, 'ok');
+  } catch (err) { $('measure').textContent = `volume error: ${err}`; }
+}
 function redrawMeasure() {
   // keep only the marker points; rebuild the connecting line + readout
   [...measureGroup.children].filter(c => c.isLine).forEach(c => measureGroup.remove(c));
+  const closed = measureMode === 'area' || measureMode === 'vol';
   if (measurePts.length >= 2) {
-    const pts = measureMode === 'area' ? [...measurePts, measurePts[0]] : measurePts;
+    const pts = closed ? [...measurePts, measurePts[0]] : measurePts;
     measureGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
       new THREE.LineBasicMaterial({ color: 0xf9e2af })));
   }
@@ -632,6 +664,10 @@ function redrawMeasure() {
     txt = `distance: ${d.toFixed(3)} m  (${measurePts.length} pts)`;
   } else if (measureMode === 'area' && measurePts.length >= 3) {
     txt = `area: ${polygonArea(measurePts).toFixed(3)} m²  ·  perimeter: ${perimeter(measurePts).toFixed(3)} m`;
+  } else if (measureMode === 'vol') {
+    txt = measurePts.length >= 3
+      ? `footprint: ${measurePts.length} pts, ${polygonArea(measurePts).toFixed(2)} m² — double-click to compute volume`
+      : `outline the footprint (${measurePts.length} pt)`;
   } else {
     txt = `picked ${measurePts.length} point(s)`;
   }
@@ -1124,6 +1160,8 @@ async function loadWorkflows() {
   $('m-tools').innerHTML = '';
   menuEntry('m-tools', 'Measure distance', () => setMeasure('dist'), null, 'ruler');
   menuEntry('m-tools', 'Measure area', () => setMeasure('area'), null, 'square');
+  menuEntry('m-tools', 'Measure volume (stockpile)', () => setMeasure('vol'),
+    'outline a footprint on the model, double-click to compute cut/fill', 'box');
   menuSep('m-tools');
   menuEntry('m-tools', 'Markers / GCPs', () => { selectLeft('reference'); loadMarkers(); }, null, 'pin');
   // Help

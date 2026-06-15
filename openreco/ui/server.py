@@ -476,6 +476,28 @@ class AppState:
         self.project.save()
         return {"ok": True, "id": new_id, "kept_faces": int(len(faces2)), "removed_faces": int(rem.size)}
 
+    def measure_volume(self, layer_id: str, polygon: list, base: str | float = "plane") -> dict:
+        """Polygon-bounded cut/fill volume of a layer's surface (interactive stockpile measurement).
+        Uses the layer's mesh vertices if present, else its dense/point cloud; both are in the same
+        world frame the viewport picks in, so the polygon comes straight from the 3D view."""
+        from openreco.io.pointcloud import read_mesh_ply, read_ply
+        from openreco.measure import measure_volume_region
+        if len(polygon) < 3:
+            raise ValueError("draw at least 3 points to outline the region")
+        art = self._last_run().get(layer_id, {}).get("artifacts", {})
+        mesh = art.get("mesh")
+        if mesh and Path(mesh).is_file():
+            xyz, _, _ = read_mesh_ply(Path(mesh))
+        else:
+            ply = art.get("points") or art.get("merged")
+            if not ply or not Path(ply).is_file():
+                raise ValueError(f"layer {layer_id!r} has no mesh or point cloud (run it first)")
+            xyz, _, _ = read_ply(Path(ply))
+        res = measure_volume_region(xyz, polygon, base=base)
+        res["layer"] = layer_id
+        res["source"] = "mesh" if (mesh and Path(mesh).is_file()) else "cloud"
+        return res
+
     def detect_markers(self, chunk: str | None, dictionary: str) -> dict:
         """Auto-detect coded targets across a chunk's photos -> GCP markers (id -> observations)."""
         import numpy as np
@@ -681,6 +703,12 @@ class _Handler(BaseHTTPRequestHandler):
                                   body.get("removed", []), body.get("chunk", "Chunk 1")))
             except Exception as exc:  # noqa: BLE001
                 return self._send(400, {"error": repr(exc)})
+        if u.path == "/api/measure_volume":
+            try:
+                return self._send(200, self.state.measure_volume(body.get("layer", ""),
+                                  body.get("polygon", []), body.get("base", "plane")))
+            except Exception as exc:  # noqa: BLE001
+                return self._send(400, {"error": str(exc)})
         if u.path == "/api/use_gcps":
             return self._use_gcps(body)
         if u.path == "/api/add_photos":

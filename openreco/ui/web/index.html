@@ -331,6 +331,12 @@
     <div class="tgroup" role="group" aria-label="Measure">
       <button class="tgl iconbtn" id="distBtn" title="Measure distance"><svg class="ic"><use href="#i-ruler"/></svg></button>
       <button class="tgl iconbtn" id="areaBtn" title="Measure area"><svg class="ic"><use href="#i-square"/></svg></button>
+      <button class="tgl iconbtn" id="volBtn" title="Measure volume — outline a footprint, double-click to compute"><svg class="ic"><use href="#i-box"/></svg></button>
+      <select id="volBase" title="Volume base surface" style="display:none">
+        <option value="plane">Base: best-fit plane</option>
+        <option value="min">Base: lowest point</option>
+        <option value="mean">Base: mean level</option>
+      </select>
       <button class="iconbtn" id="clearMeasBtn" title="Clear measurements"><svg class="ic"><use href="#i-eraser"/></svg></button>
     </div>
     <div class="tgroup" role="group" aria-label="Edit point cloud / mesh">
