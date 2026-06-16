@@ -59,14 +59,14 @@ def _stage_id(stages, stype, default=None):
     return default or stype
 
 
-def _img_tag(path, max_dim) -> str:
+def _img_tag(path, max_dim, colormap=None) -> str:
     """A base64 <img> of a GeoTIFF artifact (self-contained), or '' if unavailable."""
     import base64
     if not path:
         return ""
     try:
         from openreco.io.raster import raster_to_png
-        b64 = base64.b64encode(raster_to_png(Path(path), max_dim=max_dim)).decode()
+        b64 = base64.b64encode(raster_to_png(Path(path), max_dim=max_dim, colormap=colormap)).decode()
         return f"<img src='data:image/png;base64,{b64}' alt='preview'>"
     except Exception:  # noqa: BLE001
         return ""
@@ -232,7 +232,7 @@ def report_html(d: dict, measurements=None) -> str:
         "sum_meta": (f"started {_e(d.get('started') or '')}<br>{total:.1f} s total · "
                      f"{len(stages)} stages · {len(chunks) or 1} chunk(s)"),
         "cards": _cards(stages), "survey": _survey(stages),
-        "dem": _img_tag(dsm_p, 1400),
+        "dem": _img_tag(dsm_p, 1400, colormap="turbo"),
         "dem_cap": _e(f"{dsm_id} · {crs if crs != 'LOCAL' else 'local frame'} · {dw}×{dh} px"),
         "qa_suffix": qa_suffix, "qa_rows": qa_rows,
         "measures": _measures(measurements),

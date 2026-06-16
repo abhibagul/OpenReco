@@ -73,12 +73,39 @@ def reproject_geotiff(src: Path, dst: Path, dst_epsg: int) -> None:
                           resampling=Resampling.bilinear)
 
 
-def raster_to_png(path: Path, max_dim: int = 2000) -> bytes:
+# colour ramps for single-band rasters (elevation / index). Stops: (t, (r,g,b)).
+_RAMPS = {
+    "turbo": [(0, (48, 18, 59)), (0.25, (65, 105, 225)), (0.5, (27, 207, 212)),
+              (0.75, (250, 186, 57)), (1, (165, 30, 20))],
+    "viridis": [(0, (68, 1, 84)), (0.25, (59, 82, 139)), (0.5, (33, 145, 140)),
+                (0.75, (94, 201, 98)), (1, (253, 231, 37))],
+    "terrain": [(0, (44, 107, 158)), (0.3, (46, 139, 87)), (0.55, (194, 178, 128)),
+                (0.8, (139, 90, 43)), (1, (245, 245, 245))],
+}
+
+
+def ramp_css(name: str = "turbo") -> str:
+    """CSS linear-gradient(90deg, …) for a ramp — so report legends match the colorized raster."""
+    stops = _RAMPS.get(name, _RAMPS["turbo"])
+    return "linear-gradient(90deg," + ",".join(f"rgb({r},{g},{b}) {int(t * 100)}%" for t, (r, g, b) in stops) + ")"
+
+
+def _colorize(t: np.ndarray, name: str) -> np.ndarray:
+    """Map a 0..1 array to RGB uint8 via the named ramp."""
+    stops = _RAMPS.get(name, _RAMPS["turbo"])
+    ts = [s[0] for s in stops]
+    out = np.zeros((*t.shape, 3), np.uint8)
+    for c in range(3):
+        out[..., c] = np.clip(np.interp(t, ts, [s[1][c] for s in stops]), 0, 255).astype(np.uint8)
+    return out
+
+
+def raster_to_png(path: Path, max_dim: int = 2000, colormap: str | None = None) -> bytes:
     """Render a GeoTIFF to PNG bytes for the 2D viewer (browsers can't show GeoTIFF directly).
 
     RGB(A) rasters (ortho) pass through; single-band rasters (DSM / vegetation index) get a 2–98
-    percentile grayscale stretch with nodata made transparent. Large rasters are downscaled so the
-    2D canvas stays responsive. Returns PNG bytes."""
+    percentile stretch with nodata transparent — grayscale, or colorized when `colormap` is set
+    ("turbo" / "viridis" / "terrain"). Large rasters are downscaled. Returns PNG bytes."""
     import io
 
     import rasterio
@@ -100,9 +127,15 @@ def raster_to_png(path: Path, max_dim: int = 2000) -> bytes:
             valid = np.isfinite(band)
             if nodata is not None:
                 valid &= band != nodata
-            gray = _stretch(band, valid)
             alpha = np.where(valid, 255, 0).astype(np.uint8)
-            img = Image.fromarray(np.dstack([gray, gray, gray, alpha]))   # RGBA
+            if colormap:
+                lo, hi = (np.percentile(band[valid], [2, 98]) if valid.any() else (0.0, 1.0))
+                norm = np.clip((band - lo) / ((hi - lo) or 1.0), 0, 1)
+                rgb = _colorize(norm, colormap)
+                img = Image.fromarray(np.dstack([rgb, alpha]))
+            else:
+                gray = _stretch(band, valid)
+                img = Image.fromarray(np.dstack([gray, gray, gray, alpha]))   # RGBA
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
