@@ -1,5 +1,15 @@
 # OpenReco
 
+[![CI](https://github.com/abhibagul/OpenReco/actions/workflows/ci.yml/badge.svg)](https://github.com/abhibagul/OpenReco/actions/workflows/ci.yml)
+[![Build Binaries](https://github.com/abhibagul/OpenReco/actions/workflows/build-binaries.yml/badge.svg)](https://github.com/abhibagul/OpenReco/actions/workflows/build-binaries.yml)
+[![License: MIT](https://img.shields.io/github/license/abhibagul/OpenReco)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/abhibagul/OpenReco)](https://github.com/abhibagul/OpenReco/releases)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
+
+<a href="https://abhibagul.github.io/OpenReco/" target="_blank">
+<img src="https://abhibagul.github.io/OpenReco/site_assets/app-full.png" style="width: 100%;max-width:100%">
+</a>
+
 **An open-source photogrammetry & 3D reconstruction platform** — drone/aerial photos →
 georeferenced point cloud, mesh, DSM/DTM, orthomosaic, contours, and a shareable 3D web view.
 
@@ -45,11 +55,30 @@ reproducible and auditable). Same engine drives the **CLI** and the **Python API
 - **Reproducible project format:** a `project.toml` "pipeline-as-code" manifest + an HTML
   processing report (registration, reprojection error, GPS/GCP residuals, overlap, reproducibility).
 
+<p align="center">
+  <img src="https://abhibagul.github.io/OpenReco/site_assets/shot-model.png" alt="Textured dense point cloud and mesh reconstructed by OpenReco" width="100%">
+  <br>
+  <em>Dense MVS → mesh → texture, run end-to-end from drone photos.</em>
+</p>
+
 ### Validated on real data
 - **11-image** close-range set (Sceaux Castle): 11/11 registered, 0.63 px reprojection error.
 - **48-image** UAV set (Colorado): 48/48 registered; auto-picked **EPSG:32613 (UTM 13N)**;
   GPS RMS **2.74 m**, GCP RMS **0.04 m**; true-elevation DSM (mean 1902 m); 38 contour levels;
   21.3 M m³ volume over 6.4 ha. GeoTIFFs open correctly georeferenced in QGIS.
+
+<table>
+<tr>
+<td width="50%">
+<img src="https://abhibagul.github.io/OpenReco/site_assets/dem.png" alt="Digital surface model (DSM) elevation raster" width="100%">
+<p align="center"><em>DSM — the raster the contours and volume are computed from.</em></p>
+</td>
+<td width="50%">
+<img src="https://abhibagul.github.io/OpenReco/site_assets/ortho.png" alt="Georeferenced orthomosaic" width="100%">
+<p align="center"><em>Orthomosaic GeoTIFF, opens correctly georeferenced in QGIS.</em></p>
+</td>
+</tr>
+</table>
 
 ## Install options
 
@@ -132,6 +161,12 @@ out = proj.run()                       # cache-aware; re-run is a no-op
 out.ok, out.stage("sfm").metrics, out.report
 openreco.measure_volume("aerialdata/output/dsm.tif", base="min")
 ```
+
+<p align="center">
+  <img src="https://abhibagul.github.io/OpenReco/site_assets/shot-measure.png" alt="Volume and elevation profile measurement panel" width="80%">
+  <br>
+  <em>Cut/fill volume and elevation profile, computed straight off the DSM.</em>
+</p>
 
 ## Neural branch (3D Gaussian Splatting)
 
