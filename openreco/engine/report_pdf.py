@@ -367,7 +367,7 @@ def write_report_pdf(data: dict[str, Any] | None, measurements=None) -> bytes:
         doc.image(ortho if ortho is not None else dsm, 760, caption=cap)
     yb = doc.H - 56
     doc.d.text((doc.M, yb), _trunc(doc, f"{proj} · started {started}", doc.lab, 560), font=doc.lab, fill=SOFT)
-    doc.rtext("openreco.app", doc.lab, SOFT, yb)
+    doc.rtext("created using openreco", doc.lab, SOFT, yb)
 
     # ===== page 2 · project summary =====
     doc._new()

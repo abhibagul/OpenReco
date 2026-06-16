@@ -38,7 +38,7 @@ def _auth(obj) -> str | None:
 
 def crs_info(crs) -> dict[str, Any]:
     """Full component breakdown of any coordinate reference system (EPSG code / WKT / PROJ / name).
-    Mirrors a industry-standard CRS dialog: name, kind, datum, ellipsoid, prime meridian, units, axes,
+    Mirrors a familiar CRS dialog: name, kind, datum, ellipsoid, prime meridian, units, axes,
     and (for projected CRS) the projection method + base geographic CRS."""
     c = _as_crs(crs)
     ax = c.axis_info[0] if c.axis_info else None

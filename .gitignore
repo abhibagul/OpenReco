@@ -42,6 +42,11 @@ venv/
 tools/
 
 # brand design source (large bundler artifacts kept locally, not committed)
-design_template.html
+design_template*.html
+*(standalone).html
+homepagenew.html
 OpenReco Brand Guidelines (standalone).html
 build.txt
+# stray local working copies, not part of the package
+*-old.js
+* copy.html

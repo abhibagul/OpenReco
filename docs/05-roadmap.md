@@ -4,9 +4,9 @@ Sizing is for **one developer**, in ideal focused weeks (calendar will be longer
 
 ## North star (product vision)
 
-Match **every** the reference photogrammetry suite capability and exceed it — each feature working *better*, on
+Match **every** commercial photogrammetry suites capability and exceed it — each feature working *better*, on
 **any hardware** (NVIDIA/AMD/Apple-Silicon GPU **and** CPU-only, with graceful fallback), wrapped
-in a **layered desktop UI** that surpasses the reference tool's. Pillars, in priority order:
+in a **layered desktop UI** that surpasses a pro tool's. Pillars, in priority order:
 
 1. **Hardware-agnostic compute** — today: CUDA dense (external COLMAP binary) + CPU fallback. Next:
    AMD/Apple-Silicon GPU paths (Vulkan/Metal via wgpu, or HIP/Metal COLMAP builds), auto-selected.
@@ -14,8 +14,8 @@ in a **layered desktop UI** that surpasses the reference tool's. Pillars, in pri
    models, DSM/DTM/ortho, classification, LiDAR fusion, multispectral/NDVI, panoramas, 4D — plus
    our neural 3DGS branch. (See per-phase items below; most geometry/survey items are ✅.)
 3. ◑ **Desktop UI with layers** — **shipped & growing**: `openreco ui` (native window via pywebview,
-   else browser) with a **industry-standard layout** — menu bar (File / Workflow / Model / Tools /
-   Help), toolbar, **Workspace/Reference** left tabs, a **industry-standard Workspace tree**
+   else browser) with a **familiar layout** — menu bar (File / Workflow / Model / Tools /
+   Help), toolbar, **Workspace/Reference** left tabs, a **familiar Workspace tree**
    (Workspace → Chunks → category nodes → items) with expand/collapse carets, the active chunk
    in bold (double-click to activate), data-count badges (points / faces / images), per-layer
    **visibility (👁) toggles**, and **right-click context menus** — chunks: set-active / add photos /
@@ -50,7 +50,7 @@ in a **layered desktop UI** that surpasses the reference tool's. Pillars, in pri
    project as a **layer tree** (chunks, cameras, tie/dense points, mesh, texture, DSM/DTM, ortho,
    contours, splats), a 3D/ortho/photo workspace, parameter panels driven by each stage's
    `params_schema`, a job queue over the DAG engine, and live progress — but *better* than
-   the reference tool via our reproducible pipeline-as-code (every UI action edits the manifest; undo =
+   commercial suites via our reproducible pipeline-as-code (every UI action edits the manifest; undo =
    diff; re-run = cache-aware). Effort ≈ a phase of its own (≈2–4 months).
 4. **Reproducibility & openness as the moat** — already ahead: pipeline-as-code, content-addressed
    caching, run diffing, headless CLI + Python API, permissive/MIT.

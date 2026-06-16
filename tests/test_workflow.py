@@ -1,4 +1,4 @@
-"""Familiar workflow layer: industry-standard operations -> OpenReco stages/params."""
+"""Familiar workflow layer: common operations -> OpenReco stages/params."""
 
 from __future__ import annotations
 

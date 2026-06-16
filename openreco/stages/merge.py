@@ -1,6 +1,6 @@
 """Align & merge chunks — combine separate reconstructions into one cloud (ICP).
 
-industry-standard "Align Chunks" + "Merge Chunks": takes the point clouds of two or more chunks
+familiar "Align Chunks" + "Merge Chunks": takes the point clouds of two or more chunks
 (each an independent reconstruction), registers every other chunk onto the first (reference) with
 ICP, and outputs a single merged cloud + per-chunk alignment report. The merged cloud is itself a
 "points" layer, so it can feed meshing/DSM/etc. downstream. Reuses openreco.register_cloud.

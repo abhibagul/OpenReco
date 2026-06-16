@@ -5,7 +5,7 @@ crs = "EPSG:32613"
 [[stage]]
 id = "ingest1"
 type = "ingest"
-params = { image_dir = "C:\\Users\\abbyb\\Downloads\\example_building\\images", blur_relative = 0.15 }
+params = { image_dir = "C:\\Users\\abbyb\\Downloads\\example_building\\images", blur_relative = 0.15, exclude = [] }
 
 [[stage]]
 id = "sfm1"
@@ -47,3 +47,56 @@ id = "dsm2"
 type = "dsm"
 inputs = ["mvs1", "clean2"]
 params = { resolution_m = 1 }
+
+[[stage]]
+id = "ortho1"
+type = "ortho"
+inputs = ["mvs1", "clean2"]
+params = { resolution_m = 0.5 }
+
+[[stage]]
+id = "contours1"
+type = "contours"
+inputs = ["mvs1", "mesh1", "dsm2", "ortho1"]
+params = { interval_m = 10 }
+
+[[stage]]
+id = "georef1"
+type = "georef"
+inputs = ["ingest1", "mvs1"]
+params = { method = "auto" }
+
+[[stage]]
+id = "indices1"
+type = "indices"
+inputs = ["ortho1"]
+params = { indices = ["exg", "vari", "gli"], nir_band = 4 }
+
+[[stage]]
+id = "mvs1_edit1"
+type = "import_cloud"
+params = { path = "D:\\openreco\\testproj\\edits\\mvs1_edit1.ply", crs_epsg = 0, origin = [0.0, 0.0, 0.0] }
+
+[[stage]]
+id = "sfm2"
+type = "sfm"
+inputs = ["ingest1"]
+params = { max_image_size = 700, matcher = "exhaustive", max_num_features = 3000, camera_mode = "auto", mapper = "incremental" }
+
+[[stage]]
+id = "dsm1"
+type = "dsm"
+inputs = ["mvs1_edit1"]
+params = { resolution_m = 1 }
+
+[[stage]]
+id = "ortho2"
+type = "ortho"
+inputs = ["mvs1_edit1"]
+params = { resolution_m = 0.5 }
+
+[[stage]]
+id = "indices2"
+type = "indices"
+inputs = ["ortho2"]
+params = { indices = ["exg", "vari", "gli"], nir_band = 4 }

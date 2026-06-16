@@ -1,8 +1,8 @@
-"""Familiar workflow layer — industry-standard operations + field names mapped to OpenReco stages.
+"""Familiar workflow layer — common operations + field names mapped to OpenReco stages.
 
 Clean-room: this maps widely-used, *functional* photogrammetry option labels (Accuracy, Quality,
 Face count, Texture size, …) onto OpenReco's own stages/parameters so the workflow feels familiar.
-It contains no the reference tool code, assets, or trademarks — just descriptive field names and our own
+It contains no third-party code, assets, or trademarks — just descriptive field names and our own
 parameter translation. The UI presents these operations; `to_stage()` converts a chosen operation
 + field values into a stage spec the engine runs.
 """
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# Each operation: a familiar name, the OpenReco stage it builds, and fields with familiar labels.
+# Each operation: a friendly name, the OpenReco stage it builds, and fields with familiar labels.
 # An "enum" field maps a friendly choice -> the underlying parameter value.
 OPERATIONS: list[dict[str, Any]] = [
     {

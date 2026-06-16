@@ -1,7 +1,7 @@
 """Clean / filter — remove noise from a dense point cloud or a mesh.
 
 Point clouds: statistical outlier removal (SOR) — drop points whose mean distance to their k
-nearest neighbours exceeds the global mean + std_ratio·std (the standard the reference tool/PCL filter).
+nearest neighbours exceeds the global mean + std_ratio·std (the standard PCL filter).
 Meshes: connected-component filtering — drop small floating islands, keeping components with at
 least `min_component_ratio` of the largest component's face count.
 

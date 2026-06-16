@@ -22,11 +22,33 @@
           --console-bg:#ffffff; --console-fg:#2a3a52; --btn:#f3f6fc; --btn-h:#e7eefb;
           --radius:12px; --r-sm:8px; --blur:saturate(1.05) blur(8px); --shadow:0 6px 22px rgba(20,45,90,.09);
           --left-w:300px; --right-w:330px; --dock-h:190px; --hdr-h:62px;
-          --disp:"Space Grotesk","Segoe UI","Ubuntu",system-ui,sans-serif;
-          --mono:"JetBrains Mono","Ubuntu Mono","Cascadia Mono",ui-monospace,monospace; }
+          --disp:"Space Grotesk",system-ui,sans-serif;
+          --mono:"JetBrains Mono","Ubuntu Mono","Cascadia Mono",ui-monospace,monospace;
+        --ink: #0B1A2B;
+    --ink-2: #13283f;
+    --cobalt: #1D4ED8;
+    --azure: #3B82F6;
+    --sky: #7FB0FF;
+    --paper: #F5F7FB;
+    --white: #fff;
+    --sub: #5B6B82;
+    --faint: #8595AB;
+    --line: rgba(11, 26, 43, .10);
+    --line-2: rgba(11, 26, 43, .07);
+    --grid: rgba(29, 78, 216, .06);
+    --ok: #16A34A;
+    --hover: rgba(29, 78, 216, .06);
+    --sel: rgba(29, 78, 216, .10);
+    --disp: 'Space Grotesk', sans-serif;
+    --mono: 'JetBrains Mono', monospace; }
   * { box-sizing: border-box; }
+  #presetSel{
+        background: var(--white);
+    font-size: 13px;
+    font-family: var(--disp);
+  }
   html,body { margin:0; height:100%; color:var(--fg); overflow:hidden; background:var(--bg);
-              font:13px/1.55 "Segoe UI","Ubuntu",system-ui,sans-serif; }
+              font:13px/1.55 var(--disp); }
   /* paper ground + soft cobalt/azure wash */
   body::before { content:""; position:fixed; inset:0; z-index:-2; pointer-events:none;
     background:radial-gradient(900px 620px at 8% -8%, rgba(59,130,246,.07), transparent 60%),
@@ -37,37 +59,58 @@
     background-image:linear-gradient(rgba(29,78,216,.045) 1px, transparent 1px),
                      linear-gradient(90deg, rgba(29,78,216,.045) 1px, transparent 1px);
     background-size:36px 36px; }
+    .mMenu svg {
+    color: #163ca7;
+}
+.brand{
+      font-weight: 600;
+    font-size: 20px;
+    letter-spacing: -.03em;
+}
   @keyframes flow { 0%{background-position:0% 0%} 100%{background-position:100% 100%} }
   ::-webkit-scrollbar { width:9px; height:9px; }
-  ::-webkit-scrollbar-thumb { background:rgba(20,40,80,.18); border-radius:6px; }
-  ::-webkit-scrollbar-thumb:hover { background:rgba(20,40,80,.32); }
+  ::-webkit-scrollbar-thumb { 
+    /* background:rgba(20,40,80,.18); */
+    background:#e6ecfb;
+     border-radius:0px;
+     }
+  ::-webkit-scrollbar-thumb:hover { background:#a9b0c4; }
   ::-webkit-scrollbar-track { background:transparent; }
   .ic { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.8;
         stroke-linecap:round; stroke-linejoin:round; flex:0 0 auto; vertical-align:-3px; }
   #app { display:grid;
          grid-template-columns:var(--left-w) 1fr var(--right-w);
-         grid-template-rows:28px 34px 1fr var(--dock-h);
+         grid-template-rows:46px 52px 1fr var(--dock-h);
          grid-template-areas:"menu menu menu" "tool tool tool" "left center right" "dock dock dock";
          height:100vh; }
   /* drag handles */
   .split { position:fixed; z-index:50; }
   .split::after { content:""; position:absolute; background:transparent; }
   .split:hover::after, .split.drag::after { background:var(--accent); }
-  .split.v { width:11px; top:var(--hdr-h); bottom:var(--dock-h); cursor:col-resize; }
+  .split.v { width:11px; 
+    top: 99px;
+    /* top:var(--hdr-h);  */
+    bottom:var(--dock-h); cursor:col-resize; }
   .split.v::after { top:0; bottom:0; left:4px; width:3px; }
   .split.h { height:11px; left:0; right:0; bottom:calc(var(--dock-h) - 5px); cursor:row-resize; }
   .split.h::after { left:0; right:0; top:4px; height:3px; }
   #splitL { left:calc(var(--left-w) - 5px); } #splitR { right:calc(var(--right-w) - 5px); }
   /* menu bar (translucent) — raised stacking context so dropdowns sit above the glass panes */
-  #menubar { grid-area:menu; position:relative; z-index:70; display:flex; align-items:stretch;
+  #menubar { grid-area:menu; position:relative; z-index:70; display:flex; align-items:center;
              background:var(--chrome); color:var(--fg); border-bottom:1px solid var(--line);
              backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); }
   #menubar > b { color:var(--fg); padding:0 12px 0 14px; display:flex; align-items:center; gap:7px;
                  font-family:var(--disp); font-weight:700; font-size:14px; letter-spacing:.3px; }
-  #menubar > b .logo { width:20px; height:20px; }
+  #menubar > b .logo { width:34px; height:34px; }
   #menubar > b .lr { color:var(--accent); }   /* "Reco" accent in the wordmark */
-  .mItem { position:relative; padding:0 12px; display:flex; align-items:center; cursor:pointer; font-size:12.5px; }
-  .mItem:hover { background:var(--hover); }
+  .mItem { position:relative; padding:0 12px; display:flex; align-items:center; cursor:pointer; font-size:12.5px; padding: 3px 14px;
+
+    border-radius: 7px;
+    color: #13283f;
+    font-size: 13px;
+    font-weight: 500; }
+  .mItem:hover {    background: var(--hover);
+    color: var(--cobalt); }
   .mMenu { position:absolute; top:30px; left:0; background:var(--panel); border:1px solid var(--line);
            backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur);
            border-radius:var(--radius); z-index:60; min-width:230px; padding:6px; box-shadow:var(--shadow); }
@@ -83,12 +126,38 @@
              background:var(--panel2); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur);
              border-bottom:1px solid var(--line); }
   #toolbar .sp { flex:1; } .vsep { width:1px; height:18px; background:var(--line); margin:0 5px; }
-  #toolbar #pname { font-family:var(--disp); font-weight:600; color:var(--fg); font-size:13px; letter-spacing:.2px; }
+  #toolbar #pname { font-family:var(--disp); font-weight:600; color:var(--fg); font-size:13px; letter-spacing:.2px;     font-weight: 600;
+    font-size: 14px;
+    letter-spacing: -.01em;
+    white-space: nowrap;}
+    button{font-family:var(--disp); }
   .iconbtn { padding:6px; }
   #presetSel { width:auto; max-width:230px; }
-  .tgroup { display:flex; align-items:center; gap:2px; background:var(--btn); border:1px solid var(--line);
-            border-radius:var(--r-sm); padding:2px; }
+  .tgroup { display:flex; align-items:center; gap:2px; 
+    /* background:var(--btn); border:1px solid var(--line); */
+            /* border-radius:var(--r-sm);  */
+                border-left: 1px solid var(--line);
+    padding-left: 12px;
+    margin-left: 5px;
+            padding:2px; }
   .tgroup button { border:0; background:transparent; border-radius:6px; }
+  .tgroup button:hover {
+    background: var(--hover);
+    color: var(--cobalt);
+}
+
+.tgroup .ic {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex: 0 0 auto;
+    vertical-align: -3px;
+    color: rgb(91, 107, 130);
+}
   .tgroup button:hover { background:var(--btn-h); }
   button { background:var(--btn); color:var(--fg); border:1px solid var(--line); padding:6px 12px;
            border-radius:var(--r-sm); cursor:pointer; font-size:12.5px; display:inline-flex;
@@ -100,16 +169,67 @@
   button.tgl.on { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
   button:disabled { opacity:.5; cursor:default; }
   /* panes as floating glass cards */
-  #left,#right,#center,#dock { min-width:0; min-height:0; margin:7px; border:1px solid var(--line);
-    border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  #left,#right,#center,#dock { min-width:0; min-height:0;
+     /* margin:7px; */
+      /* border:1px solid var(--line); */
+    /* border-radius:var(--radius); */
+     box-shadow:var(--shadow); overflow:hidden; }
+     #left { border-right:1px solid var(--line); } #right { border-left:1px solid var(--line); }
+     #dock{ border-top:1px solid var(--line); }
   #left,#right { background:var(--panel); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); overflow:auto; }
-  #left { grid-area:left; } #right { grid-area:right; padding:12px; }
+  #left { grid-area:left; } #right { grid-area:right;padding-top: 0px; }
+  #params{
+    padding: 12px;
+  }
+  div#right > h3 {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    padding: 16px 15px;
+    margin: 0px ;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .18em;
+    color: var(--cobalt);
+    text-transform: uppercase;
+}
+button#newChunk {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--ink-2);
+    background: var(--white);
+}
+
+button#newChunk:hover{
+        border-color: var(--cobalt);
+    color: var(--cobalt);
+}
+b.activechunkname {
+        color: var(--ink);
+    font-weight: 600;
+}
+
+span#activeChunk {
+        font-family: var(--mono);
+    font-size: 11px;
+    color: var(--sub);
+    letter-spacing: .04em;
+}
   #center { grid-area:center; position:relative; background:#eef2fb; }
   #c { position:absolute; inset:0; width:100%; height:100%; display:block; }
   /* empty-state: faint brand logo + hint, shown when no layer is displayed */
   #modelEmpty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
                 justify-content:center; gap:16px; pointer-events:none; z-index:3; color:var(--muted);
-                font-family:var(--disp); letter-spacing:.05em; font-size:13px; text-transform:uppercase; }
+                font-family:var(--disp); letter-spacing:.05em; font-size:13px; text-transform:uppercase; background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;}
   #modelEmpty svg { width:96px; height:96px; opacity:.3; }
   .emptyart { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
               padding:42px 10px; color:var(--muted); text-align:center; font-family:var(--disp); }
@@ -140,9 +260,36 @@
   .leaflet-container { background:#eef2fb; }
   #editoverlay { position:absolute; inset:0; z-index:7; pointer-events:none; }
   #center.selecting { cursor:crosshair; }
-  #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:50; }
-  #vtabs button { background:rgba(255,255,255,.92); border:1px solid var(--line); color:var(--fg); }
-  #vtabs button.on { background:var(--accent); color:var(--accent-fg); }
+  /* #vtabs { position:absolute; top:8px; left:8px; display:flex; gap:4px; z-index:50; } */
+  #vtabs {      display: flex;
+    gap: 4px;
+    z-index: 50;
+    align-items: center;
+    background: #fff;
+    border-bottom: 1px solid var(--line); 
+  padding: 0 10px}
+  #vtabs button { 
+    background: transparent;
+    border: none;
+    /* border:1px solid var(--line);  */
+  padding: 7px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--sub);
+    letter-spacing: .01em;
+   }
+   #vtabs button:hover {
+    background: var(--hover);
+    color: var(--ink);
+}
+.mMenu > div > span {
+        color: var(--ink-2);
+    font-size: 13px;
+    font-weight: 500;
+}
+  #vtabs button.on {     background: var(--sel);
+    color: var(--cobalt);}
   div#m-file > div, 
 div#m-tools > div, 
 div#m-help > div, 
@@ -184,6 +331,9 @@ div#m-model > div .t{
                 background:rgba(255,255,255,.9); border-color:var(--line); }
   .mlabel.note { transform:translate(-50%,-115%); max-width:240px; white-space:normal;
                  border-width:1px 1px 1px 3px; }
+                 input[type="range"]{
+    accent-color: #1d4ed8;
+}
   /* measurements list panel (floating, top-right of the viewport) */
   #mpanel { position:absolute; top:8px; right:8px; width:268px; z-index:9; display:flex; flex-direction:column;
             max-height:calc(100% - 70px); background:var(--panel); backdrop-filter:var(--blur);
@@ -220,7 +370,7 @@ div#m-model > div .t{
   #profsvg .ax { stroke:var(--line); stroke-width:1; }
   #profsvg .axt { fill:var(--muted); font-size:9px; font-family:var(--mono,monospace); }
   /* tabs (soft pill segmented) */
-  .tabs { display:flex; gap:5px; padding:7px 7px 5px; position:sticky; top:0; z-index:2; background:var(--panel); border-bottom:1px solid var(--line); }
+  .tabs { display:flex; gap:5px; padding:7px 7px 5px; position:sticky; top:0; z-index:2; background:var(--panel); border-bottom:1px solid var(--line);     padding: 10px 7px;}
   .tabs button { background:none; border:0; border-radius:var(--r-sm); padding:6px 14px; color:var(--muted);
                  font-weight:500; transition:background .18s,color .18s; }
   .tabs button:hover { background:var(--hover); color:var(--fg); }
@@ -327,8 +477,16 @@ div#m-model > div .t{
   #photos .th .rm { position:absolute; top:3px; right:3px; padding:2px; background:#000a; color:#fff;
                     border-radius:5px; opacity:0; }
   #photos .th:hover .rm { opacity:1; } #photos .th .rm:hover { background:var(--err); }
-  #photos .th .q { position:absolute; top:3px; left:3px; padding:1px 5px; font-size:10px; font-weight:600;
-                   background:#000a; color:var(--accent); border-radius:5px; }
+  #photos .th .q { position: absolute;
+    top: 3px;
+    left: 3px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 600;
+    background: #fff;
+    color: var(--cobalt);
+    border-radius: 5px;
+    border: 1px solid var(--line); }
   /* modal + dropdown */
   .hidden { display:none !important; }
   .modal { position:fixed; inset:0; background:#000a; display:flex; align-items:center; justify-content:center; z-index:80; }
@@ -363,6 +521,41 @@ div#m-model > div .t{
   .brth { width:96px; border:2px solid transparent; border-radius:6px; cursor:pointer; overflow:hidden; background:var(--panel2); }
   .brth.sel { border-color:var(--accent); } .brth img { width:100%; height:64px; object-fit:cover; display:block; }
   .brth div { font-size:10px; padding:2px 3px; color:var(--muted); white-space:nowrap; overflow:hidden; }
+  .dot{    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--cobalt);display: block;}
+    span.pnamewrap {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+#crsBtn{
+      display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--white);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-2);
+}
+#crsBtn .ic{
+    color: var(--azure);
+}
+.innerwrapcenter{
+  padding: 20px;
+  position: relative;
+}
+#center{
+   grid-area: center;
+    position: relative;
+    background: #eef2fb;
+    display: grid;
+    grid-template-rows: 50px auto;
+}
 </style>
 </head>
 <body>
@@ -432,7 +625,7 @@ div#m-model > div .t{
 <div id="app">
   <!-- menu bar -->
   <div id="menubar">
-    <b title="OpenReco"><svg class="logo" viewBox="0 0 100 100"><use href="#i-logo"/></svg>Open<span class="lr">Reco</span></b>
+    <b title="OpenReco"><svg class="logo" viewBox="0 0 100 100"><use href="#i-logo"/></svg><span class="brand">openreco</span></b>
     <div class="mItem" data-menu="file">File<div class="mMenu hidden" id="m-file"></div></div>
     <div class="mItem" data-menu="workflow">Workflow<div class="mMenu hidden" id="m-workflow"></div></div>
     <div class="mItem" data-menu="model">Model<div class="mMenu hidden" id="m-model"></div></div>
@@ -441,10 +634,10 @@ div#m-model > div .t{
   </div>
   <!-- toolbar -->
   <div id="toolbar">
-    <span id="pname"></span>
+    <span class="pnamewrap"><span class="dot" data-om-id="60c6a75a:34"></span><span id="pname"></span></span>
     <span class="sp"></span>
     <button class="run" id="runBtn"><svg class="ic"><use href="#i-play"/></svg> Run</button>
-    <button id="crsBtn" title="Coordinate system"><svg class="ic"><use href="#i-globe"/></svg> <span id="crsLabel">CRS</span></button>
+    <button id="crsBtn" title="Coordinate system"><svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-om-id="60c6a75a:41"><circle cx="12" cy="12" r="9" data-om-id="60c6a75a:42"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" data-om-id="60c6a75a:43"></path></svg> <span id="crsLabel">CRS</span></button>
     <select id="presetSel" title="Quality / speed preset — sets sensible parameters across all stages"></select>
     <div class="tgroup" role="group" aria-label="Measure">
       <button class="tgl iconbtn" id="distBtn" title="Measure distance"><svg class="ic"><use href="#i-ruler"/></svg></button>
@@ -524,63 +717,65 @@ div#m-model > div .t{
       <button data-vtab="map">Map</button>
       <button data-vtab="photo">Photo</button>
     </div>
-    <canvas id="c"></canvas>
-    <div id="modelEmpty"><svg viewBox="0 0 100 100"><use href="#i-logo"/></svg>
-      <div>Model view · select a layer to display</div></div>
-    <canvas id="editoverlay"></canvas>
-    <canvas id="gizmo" title="Navigation cube — click a face, edge or corner to snap the view"></canvas>
-    <div id="gizmoNav">
-      <button class="gn" data-rot="rollL" title="Roll left"><svg class="ic"><use href="#i-rot-ccw"/></svg></button>
-      <button class="gn" data-rot="up" title="Rotate up"><svg class="ic"><use href="#i-chev-up"/></svg></button>
-      <button class="gn" data-rot="rollR" title="Roll right"><svg class="ic"><use href="#i-rot-cw"/></svg></button>
-      <button class="gn" data-rot="left" title="Rotate left"><svg class="ic"><use href="#i-chev-left"/></svg></button>
-      <button class="gn" data-rot="home" title="Home / iso view"><svg class="ic"><use href="#i-home"/></svg></button>
-      <button class="gn" data-rot="right" title="Rotate right"><svg class="ic"><use href="#i-chev-right"/></svg></button>
-      <button class="gn" data-rot="down" title="Rotate down" style="grid-column:2"><svg class="ic"><use href="#i-chev-down"/></svg></button>
-    </div>
-    <div id="imgview"><div id="imgwrap"></div><div id="imghint"></div></div>
-    <div id="orthoview"><img id="orthoimg" alt=""><canvas id="orthocanvas"></canvas><div id="orthohint"></div></div>
-    <div id="mapview"><div id="leaflet"></div>
-      <div id="mapctl"><label style="margin:0">overlay <input id="mapOpacity" type="range" min="0" max="1" step="0.05" value="0.85" style="width:90px; vertical-align:middle"></label></div>
-    </div>
-    <div id="measure"></div>
-    <div id="viewbar">
-      <span id="vbcount" class="muted"></span>
-      <span class="vbsep"></span>
-      <label>size <input id="vbSize" type="range" min="1" max="8" step="0.5" value="1.5"></label>
-      <label>color
-        <select id="vbColor"><option value="rgb">RGB</option><option value="elev">Elevation</option></select>
-      </label>
-      <select id="vbRamp" title="Elevation ramp">
-        <option value="viridis">viridis</option><option value="turbo">turbo</option>
-        <option value="terrain">terrain</option><option value="grayscale">grayscale</option>
-      </select>
-      <button class="tgl iconbtn" id="vbEdl" title="Eye-dome lighting (depth shading)">EDL</button>
-    </div>
-    <div id="mpanel" class="hidden">
-      <div class="mp-head">
-        <svg class="ic"><use href="#i-ruler"/></svg>
-        <span>Measurements</span><span id="mpCount" class="muted"></span>
-        <span style="flex:1"></span>
-        <button id="mpClose" class="iconbtn" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+    <div id="innerwrapcenter" class="innerwrapcenter">
+      <canvas id="c"></canvas>
+      <div id="modelEmpty"><svg viewBox="0 0 100 100"><use href="#i-logo"/></svg>
+        <div>Model view · select a layer to display</div></div>
+      <canvas id="editoverlay"></canvas>
+      <canvas id="gizmo" title="Navigation cube — click a face, edge or corner to snap the view"></canvas>
+      <div id="gizmoNav">
+        <button class="gn" data-rot="rollL" title="Roll left"><svg class="ic"><use href="#i-rot-ccw"/></svg></button>
+        <button class="gn" data-rot="up" title="Rotate up"><svg class="ic"><use href="#i-chev-up"/></svg></button>
+        <button class="gn" data-rot="rollR" title="Roll right"><svg class="ic"><use href="#i-rot-cw"/></svg></button>
+        <button class="gn" data-rot="left" title="Rotate left"><svg class="ic"><use href="#i-chev-left"/></svg></button>
+        <button class="gn" data-rot="home" title="Home / iso view"><svg class="ic"><use href="#i-home"/></svg></button>
+        <button class="gn" data-rot="right" title="Rotate right"><svg class="ic"><use href="#i-chev-right"/></svg></button>
+        <button class="gn" data-rot="down" title="Rotate down" style="grid-column:2"><svg class="ic"><use href="#i-chev-down"/></svg></button>
       </div>
-      <div id="mpList"></div>
-      <div class="mp-foot">
-        <span class="muted">Export</span>
-        <button id="mpGeojson" class="mfbtn" title="Export all measurements as GeoJSON">GeoJSON</button>
-        <button id="mpDxf" class="mfbtn" title="Export all measurements as DXF (CAD)">DXF</button>
-        <button id="mpCsv" class="mfbtn" title="Export measurement summary as CSV">CSV</button>
+      <div id="imgview"><div id="imgwrap"></div><div id="imghint"></div></div>
+      <div id="orthoview"><img id="orthoimg" alt=""><canvas id="orthocanvas"></canvas><div id="orthohint"></div></div>
+      <div id="mapview"><div id="leaflet"></div>
+        <div id="mapctl"><label style="margin:0">overlay <input id="mapOpacity" type="range" min="0" max="1" step="0.05" value="0.85" style="width:90px; vertical-align:middle"></label></div>
       </div>
-    </div>
-    <div id="profpanel" class="hidden">
-      <div class="mp-head">
-        <svg class="ic"><use href="#i-chart"/></svg>
-        <span id="proftitle">Cross-section</span>
-        <span style="flex:1"></span>
-        <button id="profCsv" class="iconbtn" title="Export stations CSV"><svg class="ic"><use href="#i-save"/></svg></button>
-        <button id="profClose" class="iconbtn" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+      <div id="measure"></div>
+      <div id="viewbar">
+        <span id="vbcount" class="muted"></span>
+        <span class="vbsep"></span>
+        <label>size <input id="vbSize" type="range" min="1" max="8" step="0.5" value="1.5"></label>
+        <label>color
+          <select id="vbColor"><option value="rgb">RGB</option><option value="elev">Elevation</option></select>
+        </label>
+        <select id="vbRamp" title="Elevation ramp">
+          <option value="viridis">viridis</option><option value="turbo">turbo</option>
+          <option value="terrain">terrain</option><option value="grayscale">grayscale</option>
+        </select>
+        <button class="tgl iconbtn" id="vbEdl" title="Eye-dome lighting (depth shading)">EDL</button>
       </div>
-      <svg id="profsvg" viewBox="0 0 520 150" preserveAspectRatio="none"></svg>
+      <div id="mpanel" class="hidden">
+        <div class="mp-head">
+          <svg class="ic"><use href="#i-ruler"/></svg>
+          <span>Measurements</span><span id="mpCount" class="muted"></span>
+          <span style="flex:1"></span>
+          <button id="mpClose" class="iconbtn" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+        </div>
+        <div id="mpList"></div>
+        <div class="mp-foot">
+          <span class="muted">Export</span>
+          <button id="mpGeojson" class="mfbtn" title="Export all measurements as GeoJSON">GeoJSON</button>
+          <button id="mpDxf" class="mfbtn" title="Export all measurements as DXF (CAD)">DXF</button>
+          <button id="mpCsv" class="mfbtn" title="Export measurement summary as CSV">CSV</button>
+        </div>
+      </div>
+      <div id="profpanel" class="hidden">
+        <div class="mp-head">
+          <svg class="ic"><use href="#i-chart"/></svg>
+          <span id="proftitle">Cross-section</span>
+          <span style="flex:1"></span>
+          <button id="profCsv" class="iconbtn" title="Export stations CSV"><svg class="ic"><use href="#i-save"/></svg></button>
+          <button id="profClose" class="iconbtn" title="Close"><svg class="ic"><use href="#i-x"/></svg></button>
+        </div>
+        <svg id="profsvg" viewBox="0 0 520 150" preserveAspectRatio="none"></svg>
+      </div>
     </div>
   </div>
   <!-- right: properties -->

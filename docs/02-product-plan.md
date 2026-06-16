@@ -6,9 +6,9 @@
 > **photorealistic, real-time** model you can show anyone in a browser — reproducible to the last
 > parameter, runnable on the hardware you already own.
 
-## Positioning vs the reference tool
+## Positioning vs commercial suites
 
-| Axis | the reference tool | OpenReco intent |
+| Axis | commercial suites | OpenReco intent |
 |---|---|---|
 | Hardware | Local GPU/RAM-bound; weak on laptops; Rosetta on Mac | Out-of-core + GPU-agnostic (wgpu) + native ARM64 path |
 | Collaboration | Single-user, license-per-seat, giant file hand-off | Local-first now; cloud-native projects + browser review later |

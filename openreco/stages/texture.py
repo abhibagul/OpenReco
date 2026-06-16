@@ -3,7 +3,7 @@
 Turns a (vertex-colored) dense mesh into a properly textured model: decimate to a workable face
 count (fast-simplification), UV-unwrap (xatlas), then bake a texture atlas by projecting each
 face into its most front-facing source image. Output is a textured OBJ + MTL + atlas PNG — the
-flagship industry-standard visual deliverable, at far higher fidelity than per-vertex colors.
+flagship familiar visual deliverable, at far higher fidelity than per-vertex colors.
 
 v1 uses pinhole projection (ignores lens distortion) and a single best image per face (no
 multi-band blending / de-lighting yet). Inputs resolved by role: mesh, model, images.

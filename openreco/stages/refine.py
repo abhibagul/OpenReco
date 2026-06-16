@@ -1,6 +1,6 @@
 """Sparse-cloud filtering + camera re-optimization ("gradual selection").
 
-A survey-grade accuracy step (professional tools's tie-point gradual selection): remove unreliable
+A survey-grade accuracy step (a pro tool's tie-point gradual selection): remove unreliable
 3D tie points — those with high reprojection error or short tracks — then re-run bundle
 adjustment so the camera parameters and remaining points are re-fit to the cleaner set. This
 typically lowers reprojection error and tightens the calibration before georeferencing.

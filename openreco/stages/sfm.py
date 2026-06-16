@@ -82,7 +82,7 @@ class Sfm(Stage):
         best_idx = max(recons, key=lambda i: recons[i].num_reg_images())
         rec = recons[best_idx]
         # orient the sparse model upright + metric using camera GPS (so Tie Points aren't in the
-        # arbitrary SfM gauge — matches the reference tool's "aligned" view). Georef later sets the exact CRS.
+        # arbitrary SfM gauge — matches a pro tool's "aligned" view). Georef later sets the exact CRS.
         if ctx.params.get("orient_with_gps", True):
             self._orient_with_gps(pycolmap, rec, data, ctx)
         # canonical single-model location for downstream stages
@@ -113,7 +113,7 @@ class Sfm(Stage):
         )
 
     def _extract_and_match(self, ctx, pycolmap, db_path, image_dir, names, device) -> bool:
-        """Extract SIFT features + match. Prefers a CUDA COLMAP binary (GPU SIFT, ~the reference tool speed);
+        """Extract SIFT features + match. Prefers a CUDA COLMAP binary (GPU SIFT, ~commercial suites speed);
         falls back to the CPU-only pycolmap wheel. Returns True if the GPU path was used."""
         from openreco import compute
 

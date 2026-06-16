@@ -2,7 +2,7 @@
 
 Classifies the dense cloud into ground / non-ground (LAS codes 2 / 1), writes a classified LAS,
 and rasterises the ground points into a bare-earth DTM (a truer DTM than the morphological
-DSM-based one, since it uses actual ground returns). A core the reference tool capability.
+DSM-based one, since it uses actual ground returns). A core commercial suites capability.
 
 Inputs: a stage providing "points" (mvs) + "model"/georef for CRS & origin.
 Outputs: classified.las, dtm_ground.tif, classify.json

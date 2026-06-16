@@ -411,7 +411,7 @@ class AppState:
         return {"ok": True, "moved": name, "to": to_chunk, "id": added.get("id")}
 
     def estimate_quality(self, chunk: str | None) -> dict:
-        """Sharpness (variance-of-Laplacian) per photo in a chunk — the reference tool's 'Estimate Image
+        """Sharpness (variance-of-Laplacian) per photo in a chunk — a pro tool's 'Estimate Image
         Quality'. Computed on a downscaled copy for speed; higher = sharper."""
         import numpy as np
         from PIL import Image
@@ -435,7 +435,7 @@ class AppState:
         return {"median": med, "images": out}
 
     def cameras_for_chunk(self, chunk: str | None) -> dict:
-        """Camera positions for the 3D view (the reference tool 'show cameras'). Prefers solved poses from
+        """Camera positions for the 3D view (commercial suites 'show cameras'). Prefers solved poses from
         an sfm/georef reconstruction (centers + orientation); falls back to EXIF GPS as a local
         ENU preview before alignment."""
         last = self._last_run()

@@ -4,7 +4,7 @@
 
 A clean-room photogrammetry / 3D-reconstruction platform — desktop & (eventually) cloud — that:
 
-1. **Matches** the reference tool Standard + Pro capability over a multi-year horizon.
+1. **Matches** commercial-suite Standard + Pro capability over a multi-year horizon.
 2. **Eliminates** its structural pain points (hardware lock-in, no native Apple Silicon, weak
    collaboration, manual drudgery, slow large-job SfM/MVS, hard-surface failure, steep UI,
    reproducibility gaps).

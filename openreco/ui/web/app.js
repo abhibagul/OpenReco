@@ -1,4 +1,4 @@
-// OpenReco UI — industry-standard layout: menu bar, Workspace/Reference tree, Model/Photo viewport,
+// OpenReco UI — familiar layout: menu bar, Workspace/Reference tree, Model/Photo viewport,
 // Console/Photos/Jobs dock, Property pane. Plus CRS picker, layer visibility, measurement, GCP picking.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -14,7 +14,7 @@ let ACTIVE_CHUNK = "Chunk 1";
 const visible = new Set();          // layer ids currently shown in the 3D view
 const objects = new Map();          // layer id -> THREE object (cached once loaded)
 
-// industry-standard tree categories: stage type -> tree group label.
+// familiar tree categories: stage type -> tree group label.
 const CATEGORY = {
   ingest: "Cameras", sfm: "Tie Points", refine: "Tie Points", markers: "Markers",
   mvs: "Dense Cloud", fuse: "Dense Cloud", merge_chunks: "Dense Cloud", classify: "Point Cloud",
@@ -132,7 +132,7 @@ addEventListener('resize', resize);
 // track the actual size of the viewport pane — fires on pane-splitter drags, dock resize, window, etc.
 new ResizeObserver(() => resize()).observe($('center'));
 
-// // ---- navigation cube (CAD-style navigation cube) -----------------------------
+// // ---- navigation cube (orientation cube) -----------------------------
 // const gizmoR = new THREE.WebGLRenderer({ canvas: $('gizmo'), antialias: true, alpha: true });
 // gizmoR.setPixelRatio(devicePixelRatio); gizmoR.setSize(96, 96);
 // const gizmoScene = new THREE.Scene();
@@ -140,7 +140,7 @@ new ResizeObserver(() => resize()).observe($('center'));
 // gizmoCam.position.set(0, 0, 5);
 // // gizmoScene.add(new THREE.AmbientLight(0xffffff, 10));
 // // const gizmoLight = new THREE.DirectionalLight(0xffffff, 0.6); gizmoLight.position.set(2, 3, 4); gizmoScene.add(gizmoLight);
-// function faceTex(label) {            // brand navigation cube: cobalt/azure face, white centered label
+// function faceTex(label) {            // brand orientation cube: cobalt/azure face, white centered label
 //   const c = document.createElement('canvas'); c.width = c.height = 128;
 //   const x = c.getContext('2d');
 //   x.fillStyle = '#163fa8'; x.fillRect(0, 0, 128, 128);
@@ -149,7 +149,7 @@ new ResizeObserver(() => resize()).observe($('center'));
 //   x.fillText(label, 64, 66);
 //   return new THREE.CanvasTexture(c);
 // }
-// // BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z. Z-up world, CAD labels.
+// // BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z. Z-up world, face labels.
 // const gizmoFaces = ['RIGHT', 'LEFT', 'BACK', 'FRONT', 'TOP', 'BOTTOM'];
 // const gizmoCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2),
 //   gizmoFaces.map(l => new THREE.MeshBasicMaterial({ map: faceTex(l) })));
@@ -213,7 +213,7 @@ new ResizeObserver(() => resize()).observe($('center'));
 //   camera.position.copy(controls.target).add(n.multiplyScalar(d));
 //   camera.lookAt(controls.target); controls.update();
 // }
-// // 90-degree rotations (CAD nav arrows): orbit around an axis, or roll the view
+// // 90-degree rotations (navigation arrows): orbit around an axis, or roll the view
 // function orbitView(axis, deg) {
 //   const off = camera.position.clone().sub(controls.target);
 //   const q = new THREE.Quaternion().setFromAxisAngle(axis, deg * Math.PI / 180);
@@ -247,7 +247,7 @@ new ResizeObserver(() => resize()).observe($('center'));
 //   gizmoR.render(gizmoScene, gizmoCam);
 // })();
 
-// ---- navigation cube (CAD-style navigation cube) -----------------------------
+// ---- navigation cube (orientation cube) -----------------------------
 const gizmoR = new THREE.WebGLRenderer({ canvas: $('gizmo'), antialias: true, alpha: true });
 gizmoR.setPixelRatio(devicePixelRatio); gizmoR.setSize(96, 96);
 const gizmoScene = new THREE.Scene();
@@ -255,7 +255,7 @@ const gizmoCam = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 100);
 gizmoCam.position.set(0, 0, 5);
 // gizmoScene.add(new THREE.AmbientLight(0xffffff, 10));
 // const gizmoLight = new THREE.DirectionalLight(0xffffff, 0.6); gizmoLight.position.set(2, 3, 4); gizmoScene.add(gizmoLight);
-function faceTex(label) {            // brand navigation cube: cobalt/azure face, white centered label
+function faceTex(label) {            // brand orientation cube: cobalt/azure face, white centered label
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d');
   x.fillStyle = '#1d4ed8'; x.fillRect(0, 0, 128, 128);
@@ -266,7 +266,7 @@ function faceTex(label) {            // brand navigation cube: cobalt/azure face
   tex.colorSpace = THREE.SRGBColorSpace;   // FIX 1: tag canvas pixels as sRGB so they aren't double-encoded
   return tex;
 }
-// BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z. Z-up world, CAD labels.
+// BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z. Z-up world, face labels.
 const gizmoFaces = ['RIGHT', 'LEFT', 'BACK', 'FRONT', 'TOP', 'BOTTOM'];
 const gizmoCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2),
   gizmoFaces.map(l => new THREE.MeshBasicMaterial({ map: faceTex(l) })));
@@ -363,7 +363,7 @@ function snapView(n) {
   camera.position.copy(controls.target).add(n.multiplyScalar(d));
   camera.lookAt(controls.target); controls.update();
 }
-// 90-degree rotations (CAD nav arrows): orbit around an axis, or roll the view
+// 90-degree rotations (navigation arrows): orbit around an axis, or roll the view
 function orbitView(axis, deg) {
   const off = camera.position.clone().sub(controls.target);
   const q = new THREE.Quaternion().setFromAxisAngle(axis, deg * Math.PI / 180);
@@ -1248,7 +1248,7 @@ async function loadProject() {
   if (!PROJECT.chunks.includes(ACTIVE_CHUNK)) ACTIVE_CHUNK = PROJECT.chunks[0] || "Chunk 1";
   renderWorkspace();
 }
-// industry-standard icons per category / item
+// familiar icons per category / item
 const ic = (n) => `<svg class="ic"><use href="#i-${n}"/></svg>`;   // line-icon helper
 const CAT_ICON = { Cameras:'camera', "Tie Points":'dots', "Dense Cloud":'cloud', "Point Cloud":'mountain',
   "3D Model":'triangle', "Tiled Model":'grid', DEM:'layers', Orthomosaic:'map', Shapes:'hex',
@@ -1445,7 +1445,7 @@ function openLayer(L) {
   if (L.type === 'ingest') { showCameras(L); return; }         // cameras -> 3D positions
   selectDock('console'); log(`${L.id}: nothing to display yet (run it first)`);
 }
-// show/hide camera positions (frustums) in the 3D view, like the reference tool "Show Cameras"
+// show/hide camera positions (frustums) in the 3D view, like commercial suites "Show Cameras"
 async function showCameras(_L) {
   const key = 'cameras:' + ACTIVE_CHUNK;
   if (objects.has(key)) {                       // toggle off if already shown
@@ -1603,7 +1603,7 @@ $('addBtn').onclick = async () => {
   if (r.ok) { $('newId').value = ''; log(`added ${id} (${type})`); await loadProject(); selectLayer(id); }
 };
 
-// ---- run progress popup (industry-standard, minimizable) --------------------
+// ---- run progress popup (familiar, minimizable) --------------------
 function progShow(title) {
   $('progTitle').textContent = title || 'Processing…';
   $('progStage').textContent = ''; $('progPct').textContent = '';
@@ -2138,7 +2138,7 @@ async function loadPhotos() {
     el.appendChild(t);
   });
 }
-// right-click menu on a photo thumbnail (industry-standard, scoped to what we support)
+// right-click menu on a photo thumbnail (familiar, scoped to what we support)
 function photoCtx(im) {
   const items = [
     { label: 'Open / preview', icon: 'image', fn: () => openPhoto(im) },
@@ -2592,7 +2592,7 @@ async function submitOp(op, run) {
   if (!r.ok) { log(`build error: ${j.error}`); return; }
   $('modal').classList.add('hidden'); log(`built ${id} (${op.op})`);
   await loadProject(); selectLayer(id);
-  if (run) await runPipeline();           // industry-standard: process the step right away (cache-aware)
+  if (run) await runPipeline();           // familiar: process the step right away (cache-aware)
 }
 
 // ---- resizable panes (drag the splitters; persisted in localStorage) ------

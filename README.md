@@ -3,11 +3,11 @@
 **An open-source photogrammetry & 3D reconstruction platform** — drone/aerial photos →
 georeferenced point cloud, mesh, DSM/DTM, orthomosaic, contours, and a shareable 3D web view.
 
-The mission: build a genuinely better, fully **open-source** alternative to the reference photogrammetry suite —
+The mission: build a genuinely better, fully **open-source** alternative to commercial photogrammetry suites —
 GPU-agnostic, scriptable, reproducible, and fusing classic survey-grade geometry (SfM/MVS) with
 modern neural appearance (3D Gaussian Splatting) over time. Built **clean-room** from published
 research and **permissively-licensed** open source only (BSD/MIT/Apache — no copyleft, no
-non-commercial). No the reference tool code, UI assets, or trademarks: capability parity, not copying.
+non-commercial). No third-party code, UI assets, or trademarks: capability parity, not copying.
 
 > Status: **functional end-to-end** for the UAV mapping pipeline and validated on real drone
 > data. Early but real — see [Maturity](#maturity) for the honest picture of what's solid vs.
