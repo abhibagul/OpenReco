@@ -32,7 +32,8 @@ for pkg in ("rasterio", "pyproj", "pycolmap", "scipy", "skimage",
 # our own package data + the stages that are imported dynamically (registration by import).
 # Paths are relative to the repo root (run `pyinstaller packaging/openreco.spec` from there).
 datas += [(os.path.join(ROOT, "openreco/ui/web"), "openreco/ui/web"),
-          (os.path.join(ROOT, "openreco/viewer/template"), "openreco/viewer/template")]
+          (os.path.join(ROOT, "openreco/viewer/template"), "openreco/viewer/template"),
+          (os.path.join(ROOT, "openreco/engine/report_template.html"), "openreco/engine")]
 hiddenimports += collect_submodules("openreco")
 
 # bundle a CUDA COLMAP binary when one is present (Windows: tools/bin/colmap.exe). Kept under

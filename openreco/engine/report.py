@@ -205,55 +205,37 @@ def _system_section(d) -> str:
     return f"<h2>System</h2><table><tbody>{body}</tbody></table>"
 
 
-def write_report(outcome: "RunOutcome", path: Path) -> None:
-    d = outcome.to_dict()
+def _stages_table(stages) -> str:
+    return ("<table><thead><tr><th>stage</th><th>type</th><th>status</th><th>time</th><th>metrics</th>"
+            f"</tr></thead><tbody>{_stage_rows(stages)}</tbody></table>")
+
+
+_TEMPLATE = Path(__file__).with_name("report_template.html")
+
+
+def report_html(d: dict) -> str:
+    """Render the run record `d` into the HTML report by filling {{tokens}} in report_template.html.
+    Edit that template to customize the report's look — this only substitutes values."""
     ok = d["ok"]
-    badge = (f"<span class='badge {'ok' if ok else 'fail'}'>{'OK' if ok else 'FAILED'}</span>")
     total_time = sum(s["seconds"] for s in d["stages"])
-    body = f"""<!doctype html>
-<html lang=en><head><meta charset=utf-8>
-<title>OpenReco report — {_e(d['project'])}</title>
-<link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
-<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
-<style>
- :root {{ --ink:#142233; --muted:#5b6b82; --line:#e2e9f4; --accent:#1d4ed8; --paper:#f5f7fb; }}
- * {{ box-sizing:border-box; }}
- body {{ font: 14px/1.6 "Space Grotesk","Segoe UI",system-ui,sans-serif; margin:0; color:var(--ink); background:var(--paper); }}
- .wrap {{ max-width: 1000px; margin: 0 auto; padding: 28px 30px 64px; }}
- .brandbar {{ display:flex; align-items:center; gap:12px; border-bottom:2px solid var(--accent); padding-bottom:14px; }}
- .brandbar .ttl {{ font-weight:700; font-size:22px; letter-spacing:.3px; }} .brandbar .ttl .lr {{ color:var(--accent); }}
- .badge {{ margin-left:auto; font-weight:700; padding:3px 14px; border-radius:20px; font-size:13px; }}
- .badge.ok {{ color:#16a34a; background:#16a34a1c; }} .badge.fail {{ color:#dc2626; background:#dc26261c; }}
- h1 {{ font-size:19px; margin:16px 0 .1rem; }}
- h2 {{ font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-top:30px;
-       border-bottom:1px solid var(--line); padding-bottom:6px; }}
- h3 {{ font-size:.95rem; margin:.8rem 0 .3rem; }}
- table {{ border-collapse: collapse; width: 100%; margin-top: .6rem; }}
- th, td {{ text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--line); vertical-align:top; }}
- th {{ color:var(--muted); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.03em; }}
- code {{ font-family:"JetBrains Mono",ui-monospace,monospace; background:#eef2fb; border:1px solid var(--line);
-         padding:0 5px; border-radius:4px; font-size:12.5px; }}
- .muted {{ color:#9aa7ba; }} .hint {{ color:var(--muted); }} .meta {{ color:var(--muted); }}
- .cards {{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }}
- .card {{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; min-width:150px;
-          box-shadow:0 1px 3px rgba(20,45,90,.05); }}
- .cval {{ font-size:21px; font-weight:700; }} .clabel {{ color:var(--muted); font-size:11px;
-          text-transform:uppercase; letter-spacing:.03em; }}
- ul {{ margin:.2rem 0; }}
- .hero {{ margin-top:16px; }} .hero img {{ width:100%; border:1px solid var(--line); border-radius:10px; }}
- .hero .cap {{ color:var(--muted); font-size:12px; text-align:center; margin-top:6px; }}
-</style></head><body><div class=wrap>
-<div class=brandbar>{_LOGO_SVG}<span class=ttl>Open<span class=lr>Reco</span></span>{badge}</div>
-<h1>{_e(d['project'])}</h1>
-<p class=meta>started {_e(d['started'])} · {total_time:.1f}s total · {len(d['stages'])} stages</p>
-{_hero_img(d['stages'])}
-{_summary_cards(d['stages'])}
-{_cameras_section(d['stages'])}
-{_issues_section(d['stages'])}
-<h2>Stages</h2>
-<table><thead><tr><th>stage</th><th>type</th><th>status</th><th>time</th><th>metrics</th></tr></thead>
-<tbody>{_stage_rows(d['stages'])}</tbody></table>
-{_repro_block(d)}
-{_system_section(d)}
-</div></body></html>"""
-    path.write_text(body, encoding="utf-8")
+    tokens = {
+        "project": _e(d["project"]),
+        "logo": _LOGO_SVG,
+        "badge": f"<span class='badge {'ok' if ok else 'fail'}'>{'OK' if ok else 'FAILED'}</span>",
+        "meta": f"started {_e(d['started'])} · {total_time:.1f}s total · {len(d['stages'])} stages",
+        "hero": _hero_img(d["stages"]),
+        "summary_cards": _summary_cards(d["stages"]),
+        "cameras": _cameras_section(d["stages"]),
+        "issues": _issues_section(d["stages"]),
+        "stages": _stages_table(d["stages"]),
+        "repro": _repro_block(d),
+        "system": _system_section(d),
+    }
+    out = _TEMPLATE.read_text(encoding="utf-8")
+    for k, v in tokens.items():
+        out = out.replace("{{" + k + "}}", v)
+    return out
+
+
+def write_report(outcome: "RunOutcome", path: Path) -> None:
+    path.write_text(report_html(outcome.to_dict()), encoding="utf-8")

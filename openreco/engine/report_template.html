@@ -1,0 +1,54 @@
+<!doctype html>
+<!--
+  OpenReco processing-report template. The report builder (openreco/engine/report.py) substitutes
+  double-brace tokens and writes the result as report.html. Edit the CSS / layout below freely to
+  customize the report — the tokens are the only dynamic parts; everything else is yours to restyle.
+
+  Available tokens (wrap each in double braces, e.g. project -> the project name):
+    project  badge  logo  meta  hero  summary_cards  cameras  issues  stages  repro  system
+-->
+<html lang="en"><head><meta charset="utf-8">
+<title>OpenReco report — {{project}}</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+ :root { --ink:#142233; --muted:#5b6b82; --line:#e2e9f4; --accent:#1d4ed8; --paper:#f5f7fb; }
+ * { box-sizing:border-box; }
+ body { font:14px/1.6 "Space Grotesk","Segoe UI",system-ui,sans-serif; margin:0; color:var(--ink); background:var(--paper); }
+ .wrap { max-width:1000px; margin:0 auto; padding:28px 30px 64px; }
+ .brandbar { display:flex; align-items:center; gap:12px; border-bottom:2px solid var(--accent); padding-bottom:14px; }
+ .brandbar svg { width:42px; height:42px; }
+ .brandbar .ttl { font-weight:700; font-size:22px; letter-spacing:.3px; } .brandbar .ttl .lr { color:var(--accent); }
+ .badge { margin-left:auto; font-weight:700; padding:3px 14px; border-radius:20px; font-size:13px; }
+ .badge.ok { color:#16a34a; background:#16a34a1c; } .badge.fail { color:#dc2626; background:#dc26261c; }
+ h1 { font-size:19px; margin:16px 0 .1rem; }
+ h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-top:30px;
+      border-bottom:1px solid var(--line); padding-bottom:6px; }
+ h3 { font-size:.95rem; margin:.8rem 0 .3rem; }
+ table { border-collapse:collapse; width:100%; margin-top:.6rem; }
+ th, td { text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--line); vertical-align:top; }
+ th { color:var(--muted); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.03em; }
+ code { font-family:"JetBrains Mono",ui-monospace,monospace; background:#eef2fb; border:1px solid var(--line);
+        padding:0 5px; border-radius:4px; font-size:12.5px; }
+ .muted { color:#9aa7ba; } .hint { color:var(--muted); } .meta { color:var(--muted); }
+ .cards { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+ .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; min-width:150px;
+         box-shadow:0 1px 3px rgba(20,45,90,.05); }
+ .cval { font-size:21px; font-weight:700; } .clabel { color:var(--muted); font-size:11px;
+         text-transform:uppercase; letter-spacing:.03em; }
+ ul { margin:.2rem 0; }
+ .hero { margin-top:16px; } .hero img { width:100%; border:1px solid var(--line); border-radius:10px; }
+ .hero .cap { color:var(--muted); font-size:12px; text-align:center; margin-top:6px; }
+</style></head><body><div class="wrap">
+<div class="brandbar">{{logo}}<span class="ttl">Open<span class="lr">Reco</span></span>{{badge}}</div>
+<h1>{{project}}</h1>
+<p class="meta">{{meta}}</p>
+{{hero}}
+{{summary_cards}}
+{{cameras}}
+{{issues}}
+<h2>Stages</h2>
+{{stages}}
+{{repro}}
+{{system}}
+</div></body></html>

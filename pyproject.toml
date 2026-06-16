@@ -38,7 +38,7 @@ openreco = "openreco.cli:main"
 include = ["openreco*"]
 
 [tool.setuptools.package-data]
-openreco = ["ui/web/*", "viewer/template/*"]
+openreco = ["ui/web/*", "viewer/template/*", "engine/report_template.html"]
 
 [tool.ruff]
 line-length = 100
