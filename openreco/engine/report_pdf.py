@@ -67,6 +67,29 @@ class _Doc:
         self._new()
         self.f_title, self.f_h, self.f_b = _font(34, True), _font(21, True), _font(16)
         self.f_bb, self.f_s, self.f_card = _font(16, True), _font(13), _font(24, True)
+        self.f_xl = _font(46, True)
+
+    def center(self, s, font, color, y):
+        w = self.d.textlength(str(s), font=font)
+        self.d.text(((self.W - w) / 2, y), str(s), font=font, fill=color)
+
+    def figure(self, pil, caption=None, max_h=560):
+        """Paste an image fitted to the content width, centered, with an optional caption."""
+        cw = self.W - 2 * self.M
+        w, h = pil.size
+        scale = min(cw / w, max_h / h)
+        nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
+        self.need(nh + (28 if caption else 10))
+        try:
+            rim = pil.resize((nw, nh), self._Image.LANCZOS)
+        except Exception:  # noqa: BLE001
+            rim = pil.resize((nw, nh))
+        x = int(self.M + (cw - nw) / 2)
+        self.pages[-1].paste(rim, (x, int(self.y)))
+        self.y += nh + 8
+        if caption:
+            self.center(caption, self.f_s, GREY, self.y)
+            self.y += 22
 
     def _new(self):
         img = self._Image.new("RGB", (self.W, self.H), "white")
@@ -241,6 +264,85 @@ def _brand_header(doc, badge=None) -> None:
     doc.y = y + 16
 
 
+def _artifact(stages, stype: str, key: str):
+    for s in stages:
+        if s.get("type") == stype:
+            p = s.get("artifacts", {}).get(key)
+            if p and Path(p).is_file():
+                return p
+    return None
+
+
+def _open_raster(path, max_dim: int = 1500):
+    """Render a GeoTIFF artifact to a PIL image for embedding (None if unavailable)."""
+    if not path:
+        return None
+    try:
+        from PIL import Image
+
+        from openreco.io.raster import raster_to_png
+        return Image.open(io.BytesIO(raster_to_png(Path(path), max_dim=max_dim))).convert("RGB")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cameras(stages):
+    """Distinct camera models (from the ingest EXIF table) with resolution / focal length / count."""
+    p = _artifact(stages, "ingest", "images")
+    if not p:
+        return []
+    try:
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return []
+    groups: dict = {}
+    for im in data.get("images", []):
+        model = (im.get("model") or im.get("make") or "Unknown camera").strip()
+        res = f"{im.get('width', '?')} × {im.get('height', '?')}"
+        fl = im.get("focal_mm")
+        groups.setdefault((model, res, fl), 0)
+        groups[(model, res, fl)] += 1
+    return [[model, res, (f"{fl} mm" if fl else "—"), str(n)]
+            for (model, res, fl), n in groups.items()]
+
+
+def _title_page(doc: _Doc, data, ortho):
+    y = doc.M + 40
+    _logo(doc.d, (doc.W - 120) / 2, y, 120)
+    y += 158
+    doc.center(data.get("project", "Project"), doc.f_xl, INK, y)
+    y += 64
+    doc.center("Processing Report", doc.f_h, BLUE, y)
+    y += 34
+    doc.center((data.get("started") or "")[:10], doc.f_b, GREY, y)
+    y += 44
+    if ortho is not None:
+        doc.y = y
+        doc.figure(ortho, max_h=940)
+    doc._new()                              # the body starts on a fresh page
+
+
+def _system_section(doc: _Doc, data):
+    doc.gap(12)
+    doc.text("System", doc.f_h)
+    plat = data.get("platform", {})
+    rows = [["software", f"OpenReco {data.get('openreco_version', '')}"],
+            ["python", plat.get("python", "")],
+            ["OS", f"{plat.get('system', '')} {plat.get('machine', '')}".strip()]]
+    try:
+        from openreco import compute
+        d = compute.describe()
+        if d.get("gpu_name"):
+            rows.append(["GPU", str(d["gpu_name"])])
+        elif d.get("nvidia_gpu"):
+            rows.append(["GPU", "NVIDIA GPU"])
+        rows.append(["CPU cores", str(d.get("cpu_count", ""))])
+        rows.append(["dense backend", str(d.get("auto_dense_backend", ""))])
+    except Exception:  # noqa: BLE001
+        pass
+    _table(doc, ["component", "value"], rows, [0.3, 0.7])
+
+
 def write_report_pdf(data: dict[str, Any] | None, measurements=None) -> bytes:
     """Render a run record (latest.json dict) to PDF bytes. None -> a 'no report yet' page.
     `measurements` (the persisted list) are appended as their own section when present."""
@@ -253,16 +355,32 @@ def write_report_pdf(data: dict[str, Any] | None, measurements=None) -> bytes:
         _measurements_section(doc, measurements)
         return _save(doc)
 
+    stages = data["stages"]
+    ortho = _open_raster(_artifact(stages, "ortho", "ortho"), 1600)
+    dem = _open_raster(_artifact(stages, "dsm", "dsm"), 1400)
+
+    _title_page(doc, data, ortho)           # page 1: logo + project + ortho hero
+
     _brand_header(doc, ("OK", OK) if data.get("ok") else ("FAILED", ERR))
     doc.text(str(data.get("project", "project")), doc.f_h)
-    total = sum(s.get("seconds", 0) for s in data["stages"])
-    plat = data.get("platform", {})
-    doc.text(f"started {data.get('started', '')}   ·   {total:.1f}s total   ·   {len(data['stages'])} stages",
+    total = sum(s.get("seconds", 0) for s in stages)
+    doc.text(f"started {data.get('started', '')}   ·   {total:.1f}s total   ·   {len(stages)} stages",
              doc.f_s, GREY)
-    doc.text(f"openreco {data.get('openreco_version', '')}   ·   python {plat.get('python', '')} "
-             f"· {plat.get('system', '')}/{plat.get('machine', '')}", doc.f_s, GREY)
     doc.gap(10)
-    _cards(doc, _summary(data["stages"]))
+    _cards(doc, _summary(stages))
+
+    # Survey data: cameras used
+    cams = _cameras(stages)
+    if cams:
+        doc.gap(12)
+        doc.text("Survey data", doc.f_h)
+        _table(doc, ["camera", "resolution", "focal length", "images"], cams, [0.42, 0.22, 0.2, 0.16])
+
+    # Digital elevation model figure
+    if dem is not None:
+        doc.gap(12)
+        doc.text("Digital Elevation Model", doc.f_h)
+        doc.figure(dem, "Reconstructed digital elevation model.", max_h=620)
 
     # QA issues
     buckets = {"error": [], "warning": [], "info": []}
@@ -298,6 +416,8 @@ def write_report_pdf(data: dict[str, Any] | None, measurements=None) -> bytes:
     rows = [[s["id"], (s.get("key", "") or "")[:16], ", ".join(f"{k}={v}" for k, v in s.get("params", {}).items()) or "—"]
             for s in data["stages"]]
     _table(doc, ["stage", "cache key", "resolved parameters"], rows, [0.18, 0.2, 0.62])
+
+    _system_section(doc, data)
     return _save(doc)
 
 

@@ -9,6 +9,7 @@ for every stage). Everything here is derived from the run record — no recomput
 from __future__ import annotations
 
 import html
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -142,6 +143,68 @@ def _repro_block(d: dict) -> str:
     )
 
 
+def _artifact(stages, stype, key):
+    for s in stages:
+        if s.get("type") == stype:
+            p = s.get("artifacts", {}).get(key)
+            if p and Path(p).is_file():
+                return p
+    return None
+
+
+def _hero_img(stages) -> str:
+    """Embed the orthomosaic (or DEM) as a base64 figure — keeps the report self-contained."""
+    import base64
+    path = _artifact(stages, "ortho", "ortho") or _artifact(stages, "dsm", "dsm")
+    if not path:
+        return ""
+    try:
+        from openreco.io.raster import raster_to_png
+        b64 = base64.b64encode(raster_to_png(Path(path), max_dim=1400)).decode()
+    except Exception:  # noqa: BLE001
+        return ""
+    return (f"<div class=hero><img src='data:image/png;base64,{b64}' alt='preview'>"
+            "<div class=cap>Orthomosaic / elevation preview.</div></div>")
+
+
+def _cameras_section(stages) -> str:
+    p = _artifact(stages, "ingest", "images")
+    if not p:
+        return ""
+    try:
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return ""
+    groups: dict = {}
+    for im in data.get("images", []):
+        key = ((im.get("model") or im.get("make") or "Unknown camera").strip(),
+               f"{im.get('width', '?')} × {im.get('height', '?')}", im.get("focal_mm"))
+        groups[key] = groups.get(key, 0) + 1
+    if not groups:
+        return ""
+    rows = "".join(f"<tr><td>{_e(m)}</td><td>{_e(r)}</td><td>{_e(f'{fl} mm' if fl else '—')}</td>"
+                   f"<td>{n}</td></tr>" for (m, r, fl), n in groups.items())
+    return ("<h2>Survey data</h2><table><thead><tr><th>camera</th><th>resolution</th>"
+            f"<th>focal length</th><th>images</th></tr></thead><tbody>{rows}</tbody></table>")
+
+
+def _system_section(d) -> str:
+    plat = d.get("platform", {})
+    rows = [("software", f"OpenReco {d.get('openreco_version', '')}"),
+            ("python", plat.get("python", "")),
+            ("OS", f"{plat.get('system', '')} {plat.get('machine', '')}".strip())]
+    try:
+        from openreco import compute
+        c = compute.describe()
+        rows.append(("GPU", c.get("gpu_name") or ("NVIDIA GPU" if c.get("nvidia_gpu") else "none")))
+        rows.append(("CPU cores", str(c.get("cpu_count", ""))))
+        rows.append(("dense backend", str(c.get("auto_dense_backend", ""))))
+    except Exception:  # noqa: BLE001
+        pass
+    body = "".join(f"<tr><td>{_e(k)}</td><td>{_e(v)}</td></tr>" for k, v in rows)
+    return f"<h2>System</h2><table><tbody>{body}</tbody></table>"
+
+
 def write_report(outcome: "RunOutcome", path: Path) -> None:
     d = outcome.to_dict()
     ok = d["ok"]
@@ -177,15 +240,20 @@ def write_report(outcome: "RunOutcome", path: Path) -> None:
  .cval {{ font-size:21px; font-weight:700; }} .clabel {{ color:var(--muted); font-size:11px;
           text-transform:uppercase; letter-spacing:.03em; }}
  ul {{ margin:.2rem 0; }}
+ .hero {{ margin-top:16px; }} .hero img {{ width:100%; border:1px solid var(--line); border-radius:10px; }}
+ .hero .cap {{ color:var(--muted); font-size:12px; text-align:center; margin-top:6px; }}
 </style></head><body><div class=wrap>
 <div class=brandbar>{_LOGO_SVG}<span class=ttl>Open<span class=lr>Reco</span></span>{badge}</div>
 <h1>{_e(d['project'])}</h1>
 <p class=meta>started {_e(d['started'])} · {total_time:.1f}s total · {len(d['stages'])} stages</p>
+{_hero_img(d['stages'])}
 {_summary_cards(d['stages'])}
+{_cameras_section(d['stages'])}
 {_issues_section(d['stages'])}
 <h2>Stages</h2>
 <table><thead><tr><th>stage</th><th>type</th><th>status</th><th>time</th><th>metrics</th></tr></thead>
 <tbody>{_stage_rows(d['stages'])}</tbody></table>
 {_repro_block(d)}
+{_system_section(d)}
 </div></body></html>"""
     path.write_text(body, encoding="utf-8")

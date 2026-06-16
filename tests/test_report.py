@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from openreco.engine.context import Issue, Severity
 from openreco.engine.report import write_report
+from openreco.engine.report_pdf import write_report_pdf
 from openreco.engine.runner import RunOutcome, StageRun, StageStatus
 
 
@@ -42,6 +43,21 @@ def test_report_has_cards_qa_and_repro(tmp_path):
     # reproducibility block surfaces resolved params + cache keys
     assert "Reproducibility" in h and "resolved parameters" in h
     assert "matcher=exhaustive" in h and "abc123def456ghi7"[:16] in h
+
+
+def test_report_is_branded_with_system_section(tmp_path):
+    out = _outcome(tmp_path)
+    p = tmp_path / "report.html"
+    write_report(out, p)
+    h = p.read_text(encoding="utf-8")
+    assert "Space+Grotesk" in h and "brandbar" in h and "<polygon" in h   # brand fonts + logo
+    assert "<h2>System</h2>" in h and "OpenReco 0" in h                   # system section
+
+
+def test_pdf_report_renders_multipage(tmp_path):
+    out = _outcome(tmp_path)
+    pdf = write_report_pdf(out.to_dict())
+    assert pdf[:5] == b"%PDF-" and len(pdf) > 5000                        # branded multi-section PDF
 
 
 def test_report_handles_no_metrics(tmp_path):
