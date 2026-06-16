@@ -10,11 +10,20 @@ the frozen build. A single OS cannot cross-build the others — run this on each
 """
 import glob
 import os
+import sys
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # absolute paths derived from the spec location, so the build works from any CWD
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))  # noqa: F821 — SPECPATH is injected by PyInstaller
+
+# application icon: Windows wants .ico, macOS wants .icns; Linux onefile embeds none.
+if sys.platform == "win32":
+    icon = os.path.join(ROOT, "packaging/openreco.ico")
+elif sys.platform == "darwin":
+    icon = os.path.join(ROOT, "packaging/openreco.icns")
+else:
+    icon = None
 
 datas, binaries, hiddenimports = [], [], []
 
@@ -60,4 +69,5 @@ exe = EXE(
     onefile=True,
     upx=False,
     disable_windowed_traceback=False,
+    icon=icon,
 )

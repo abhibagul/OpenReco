@@ -13,6 +13,13 @@ non-commercial). No third-party code, UI assets, or trademarks: capability parit
 > data. Early but real — see [Maturity](#maturity) for the honest picture of what's solid vs.
 > approximate vs. not-yet-built.
 
+## Contents
+
+[What works today](#what-works-today) · [Install](#install-options) · [Quickstart](#quickstart-from-source) ·
+[Neural branch](#neural-branch-3d-gaussian-splatting) · [Maturity](#maturity) ·
+[Repository layout](#repository-layout) · [Contributing](#contributing) ·
+[Roadmap](#roadmap-highlights-next) · [License](#license)
+
 ## What works today
 
 ```
@@ -168,7 +175,7 @@ openreco/
   api.py      Project (open/create/add_stage/run/diff/save) ; cli.py
   viewer/     static three.js template
 docs/         01 discovery · 02 product plan · 03 architecture · 04 pipeline spec · 05 roadmap
-tests/        55 tests (engine + stage math); `pytest -m "not slow"` for the fast set
+tests/        200+ tests (engine + stage math); `pytest -m "not slow"` for the fast set
 scripts/      fetch_sample.py · check_licenses.py (permissive-only CI gate)
 ```
 Design and decisions live in [docs/](docs/) — start with [03-architecture.md](docs/03-architecture.md)
