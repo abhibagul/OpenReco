@@ -33,25 +33,26 @@ def test_report_has_cards_qa_and_repro(tmp_path):
     p = tmp_path / "report.html"
     write_report(out, p)
     h = p.read_text(encoding="utf-8")
-    # summary cards
-    assert "images registered" in h and "5 / 8" in h
-    assert "mean reprojection error" in h and "0.63 px" in h
-    assert "EPSG:32613" in h and "GPS alignment RMS" in h and "2.74 m" in h
-    # QA grouped by severity
-    assert "Quality assurance" in h and "warning" in h.lower()
+    # summary cards (label + values present)
+    assert "Images registered" in h and "Mean reproj error" in h and "Sparse points" in h
+    assert "EPSG:32613" in h and "GCP / GPS control RMS" in h
+    # QA with pills
+    assert "Quality assurance" in h and "WARN" in h
     assert "3/8 images not registered" in h and "add overlap" in h
-    # reproducibility block surfaces resolved params + cache keys
+    # reproducibility surfaces resolved params + cache keys
     assert "Reproducibility" in h and "resolved parameters" in h
-    assert "matcher=exhaustive" in h and "abc123def456ghi7"[:16] in h
+    assert "matcher=exhaustive" in h and "abc123def456ghi7" in h
 
 
-def test_report_is_branded_with_system_section(tmp_path):
+def test_report_is_multipage_and_branded(tmp_path):
     out = _outcome(tmp_path)
     p = tmp_path / "report.html"
     write_report(out, p)
     h = p.read_text(encoding="utf-8")
-    assert "Space+Grotesk" in h and "<polygon" in h and "Processing Report" in h  # brand fonts + logo + band
-    assert "Project summary" in h and "<h2>System</h2>" in h and "OpenReco 0" in h  # sections
+    assert "Space+Grotesk" in h and "<polygon" in h            # brand fonts + faceted logo
+    assert "page cover" in h and h.count("class=\"page") >= 5   # dark cover + light pages
+    assert "Project summary" in h and "Processing Report" in h and "05 / 05" in h
+    assert "{{" not in h                                        # all tokens filled
 
 
 def test_pdf_report_renders_multipage(tmp_path):

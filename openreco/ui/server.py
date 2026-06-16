@@ -859,6 +859,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._measurements_export(parse_qs(u.query))
         if route == "/api/report":
             return self._report()
+        if route == "/api/report_html":
+            return self._report_html()
         if route == "/api/cesium":
             return self._cesium(parse_qs(u.query).get("layer", [""])[0])
         if route.startswith("/tiles3d/"):
@@ -1198,6 +1200,25 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(pdf)))
         self.end_headers()
         self.wfile.write(pdf)
+
+    def _report_html(self):
+        """Serve the most recent run's processing report as the multi-page HTML (print to PDF)."""
+        from openreco.engine.report import report_html
+        latest = self.state.project.manifest.runs_dir / "latest.json"
+        data = None
+        if latest.exists():
+            try:
+                data = json.loads(latest.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                data = None
+        if not data:
+            return self._send(200, "<p style='font:15px system-ui;padding:40px'>No processing run yet — "
+                              "press <b>Run</b>, then open the report.</p>", "text/html")
+        try:
+            html_doc = report_html(data, measurements=self.state.load_measurements())
+        except Exception as exc:  # noqa: BLE001
+            return self._send(500, {"error": f"report build failed: {exc!r}"})
+        self._send(200, html_doc, "text/html")
 
     def _tiles3d(self, rest):
         """Serve a 3D-Tiles file (tileset.json / tile_*.glb) of a tiles layer for Cesium streaming."""

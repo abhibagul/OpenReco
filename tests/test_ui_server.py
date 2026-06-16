@@ -79,6 +79,19 @@ def test_run_streams_events_and_updates_status(server):
     assert statuses["total"] in ("executed", "cached")
 
 
+def test_report_html_endpoint(server):
+    base, _ = server
+    status, body = _get(base + "/api/report_html")           # no run yet -> placeholder
+    assert status == 200 and b"Run" in body
+    _post(base + "/api/run", {})
+    with urllib.request.urlopen(base + "/api/events", timeout=20) as r:
+        for raw in r:
+            if raw.decode().strip().startswith("event: eof"):
+                break
+    _, body = _get(base + "/api/report_html")                # after a run -> full multi-page report
+    assert b"page cover" in body and b"05 / 05" in body and b"{{" not in body
+
+
 def test_jobs_history_records_runs(server):
     base, _ = server
     assert json.loads(_get(base + "/api/jobs")[1])["jobs"] == []      # none before any run
@@ -720,6 +733,7 @@ def test_frontend_has_crs_and_marker_ui(server):
     assert b"Space+Grotesk" in html2 and b'id="i-logo"' in html2         # Blueprint brand: fonts + logo mark
     assert b"#1d4ed8" in html2 or b"--cobalt" in html2                   # brand cobalt accent
     assert b'id="modelEmpty"' in html2 and b"select a layer to display" in html2  # empty-state logo+hint
+    assert b"/api/report_html" in appjs                                  # multi-page HTML report
     assert b"abhibagul" in html2 and b"Abhishek Bagul" in html2          # About: developer credit
     assert b"/api/jobs" in appjs and b"loadJobs" in appjs                # jobs history panel
     assert b"showGuide" in appjs and b"guideFrame" in html2              # in-app user guide

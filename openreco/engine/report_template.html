@@ -1,81 +1,152 @@
 <!doctype html>
 <!--
-  OpenReco processing-report template. The report builder (openreco/engine/report.py) substitutes
-  double-brace tokens and writes the result as report.html. Edit the CSS / layout below freely to
-  customize the report — the tokens are the only dynamic parts; everything else is yours to restyle.
-
-  Available tokens (wrap each in double braces, e.g. project -> the project name):
-    project  badge  logo  meta  hero  summary_cards  cameras  issues  stages  repro  system
+  OpenReco processing-report template (multi-page, print-ready A4). The report builder
+  (openreco/engine/report.py) substitutes double-brace tokens. Edit CSS/layout freely.
+  Page 1 is the dark cover; pages 2-5 are light with a faint blueprint grid.
+  Tokens: project date crs runtime stages_n status status_cls logo hero hero_cap hero_epsg started
+          sum_meta cards survey dem dem_cap qa_suffix qa_rows measures stages_suffix stage_rows repro_rows
 -->
 <html lang="en"><head><meta charset="utf-8">
 <title>OpenReco report — {{project}}</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <style>
  :root { --ink:#0b1a2b; --fg:#142233; --muted:#5b6b82; --soft:#9fb2c9; --line:#e2e9f4; --line2:#eef2fb;
          --accent:#1d4ed8; --azure:#3b82f6; --sky:#7fb0ff; --paper:#f5f7fb;
-         --disp:"Space Grotesk","Segoe UI",system-ui,sans-serif;
-         --mono:"JetBrains Mono",ui-monospace,monospace; }
+         --disp:"Space Grotesk","Segoe UI",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace; }
  * { box-sizing:border-box; }
- body { font:14px/1.6 var(--disp); margin:0; color:var(--fg); background:var(--paper); }
- /* dark-navy header band */
- .band { background:var(--ink); color:#e6eef8;
-         background-image:linear-gradient(90deg, rgba(29,78,216,.25), transparent 55%); }
- .band .inner { max-width:1000px; margin:0 auto; padding:24px 30px; display:flex; align-items:center; gap:14px; }
- .band svg { width:46px; height:46px; }
- .band .wm { font-weight:700; font-size:22px; letter-spacing:.3px; } .band .wm .lr { color:var(--sky); }
- .band .eyebrow { color:var(--sky); font-family:var(--mono); font-size:11px; letter-spacing:.18em;
-                  text-transform:uppercase; }
- .band .tag { color:var(--soft); font-size:12px; }
- .badge { margin-left:auto; font-weight:700; padding:5px 16px; border-radius:20px; font-size:13px; }
- .badge.ok { color:#86efac; background:#16a34a33; } .badge.fail { color:#fca5a5; background:#e11d4833; }
- .wrap { max-width:1000px; margin:0 auto; padding:26px 30px 70px; }
- h1 { font-size:24px; margin:8px 0 .1rem; }
- h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); margin:34px 0 4px;
-      padding-bottom:7px; border-bottom:1px solid var(--line); }
- h3 { font-size:.95rem; margin:.8rem 0 .3rem; }
- .meta { color:var(--muted); font-size:13px; }
- table { border-collapse:collapse; width:100%; margin-top:.7rem; font-size:13px; }
- th, td { text-align:left; padding:.55rem .7rem; border-bottom:1px solid var(--line); vertical-align:top; }
- th { color:var(--muted); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.03em; }
- tr:hover td { background:var(--line2); }
- code { font-family:var(--mono); background:var(--line2); border:1px solid var(--line); padding:0 5px;
-        border-radius:4px; font-size:12.5px; color:#13325f; }
- .muted { color:var(--soft); } .hint { color:var(--muted); }
- .cards { display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; }
- .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:13px 16px; min-width:158px;
-         box-shadow:0 2px 20px rgba(11,26,43,.06); }
- .cval { font-size:22px; font-weight:700; color:var(--ink); } .clabel { color:var(--muted); font-size:11px;
-         text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
- ul { margin:.2rem 0; }
- .hero { margin-top:16px; } .hero img { width:100%; border:1px solid var(--line); border-radius:12px;
-         box-shadow:0 2px 20px rgba(11,26,43,.10); }
- .hero .cap { color:var(--muted); font-size:12px; text-align:center; margin-top:7px; }
- footer { max-width:1000px; margin:0 auto; padding:18px 30px 40px; color:var(--soft); font-size:12px;
-          border-top:1px solid var(--line); }
- footer .lr { color:var(--accent); }
+ html,body { margin:0; background:#dfe5ee; color:var(--fg); font-family:var(--disp);
+             font-size:13px; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+ .lab { font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+ .page { width:210mm; min-height:297mm; margin:14px auto; padding:18mm 16mm; position:relative;
+         background:var(--paper); box-shadow:0 2px 20px rgba(11,26,43,.16); overflow:hidden;
+         background-image:linear-gradient(rgba(29,78,216,.05) 1px,transparent 1px),
+                          linear-gradient(90deg,rgba(29,78,216,.05) 1px,transparent 1px);
+         background-size:19px 19px; }
+ /* dark cover */
+ .cover { background:var(--ink); color:#e6eef8;
+          background-image:linear-gradient(rgba(127,176,255,.06) 1px,transparent 1px),
+                           linear-gradient(90deg,rgba(127,176,255,.06) 1px,transparent 1px);
+          background-size:19px 19px; }
+ .lock { display:flex; align-items:center; gap:9px; font-family:var(--disp); font-weight:700; font-size:18px; }
+ .lock svg { width:26px; height:26px; } .lock .lr { color:var(--accent); }
+ .cover .lock { color:#fff; } .cover .lock .lr { color:var(--sky); }
+ .top { display:flex; align-items:center; justify-content:space-between; }
+ .top .ctx { color:var(--sky); } .cover hr, .page hr { border:0; border-top:1px solid var(--line); margin:12px 0 0; }
+ .cover .eyebrow { color:var(--sky); margin-top:46mm; }
+ .cover h1 { font-size:52px; font-weight:700; margin:6px 0 18px; color:#fff; letter-spacing:-.5px; }
+ .metarow { display:flex; flex-wrap:wrap; gap:26px; align-items:baseline; }
+ .metarow .k { color:var(--sky); margin-right:8px; }
+ .metarow .v { font-family:var(--mono); font-weight:600; color:#fff; font-size:13px; }
+ .metarow .v.ok { color:#86efac; } .metarow .v.fail { color:#fca5a5; }
+ .figwrap { position:relative; margin-top:22px; border:1px solid rgba(127,176,255,.25); border-radius:6px; overflow:hidden; }
+ .figwrap img { width:100%; display:block; }
+ .figcap { position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-between;
+           padding:8px 12px; background:rgba(11,26,43,.74); color:#cfe0ff; font-family:var(--mono); font-size:10px;
+           letter-spacing:.08em; }
+ .cover .foot { position:absolute; left:16mm; right:16mm; bottom:14mm; display:flex; justify-content:space-between;
+                color:var(--soft); font-family:var(--mono); font-size:10px; letter-spacing:.1em; }
+ /* light page header / footer */
+ .phead { display:flex; align-items:center; justify-content:space-between; }
+ .pfoot { position:absolute; left:16mm; right:16mm; bottom:12mm; display:flex; justify-content:space-between;
+          color:var(--soft); font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; }
+ .badge { font-family:var(--mono); font-weight:600; padding:4px 12px; border-radius:20px; font-size:11px; letter-spacing:.06em; }
+ .badge.ok { color:#16a34a; background:#16a34a1c; } .badge.fail { color:#dc2626; background:#dc26261c; }
+ .badge.ok::before { content:"● "; }
+ h2 { font-size:17px; font-weight:700; margin:26px 0 12px; display:flex; align-items:center; gap:9px; }
+ h2 .dot { width:9px; height:9px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--azure)); }
+ h2 .suf { font:500 11px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--soft); }
+ .summhead { display:flex; align-items:baseline; justify-content:space-between; margin-top:4px; }
+ .summhead h1 { font-size:26px; margin:2px 0; }
+ .summhead .r { text-align:right; color:var(--muted); font-family:var(--mono); font-size:10.5px; line-height:1.7; }
+ .cards { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line);
+          border-radius:8px; overflow:hidden; margin-top:6px; }
+ .metric { background:#fff; padding:14px 16px; } .metric.hl { background:#eaf0fe; }
+ .metric .v { font-weight:700; font-size:21px; color:var(--ink); } .metric .v .u { font:500 11px var(--mono); color:var(--muted); margin-left:3px; }
+ .metric .l { margin-top:5px; }
+ table { border-collapse:collapse; width:100%; margin-top:4px; }
+ th { text-align:left; padding:8px 8px; border-bottom:1px solid var(--line); font:600 10px var(--mono);
+      letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+ td { padding:9px 8px; border-bottom:1px solid var(--line2); vertical-align:top; font-size:12px; }
+ td.mono, .mono { font-family:var(--mono); } .key { color:var(--accent); font-family:var(--mono); font-size:11px; }
+ .unit { color:var(--azure); font-family:var(--mono); }
+ .pill { font-family:var(--mono); font-size:10px; letter-spacing:.04em; padding:2px 8px; border-radius:5px; text-transform:uppercase; }
+ .pill.warn { background:#f6ead2; color:#8a6d1f; } .pill.info { background:#e6eefb; color:var(--accent); }
+ .pill.cached { background:#eef2f7; color:var(--muted); } .pill.executed { background:#e6eefb; color:var(--accent); }
+ .pill.failed { background:#fde7ea; color:#dc2626; } .pill.type { background:#eef2f7; color:#3b5b8f; }
+ .qarow { display:grid; grid-template-columns:74px 1fr; gap:14px; padding:8px 0; border-bottom:1px solid var(--line2); align-items:start; }
+ .qarow .msg { color:var(--fg); } .qarow .msg b { color:var(--accent); font-weight:600; }
+ .legend { display:flex; align-items:center; gap:6px; font:500 9px var(--mono); letter-spacing:.1em; color:var(--muted); }
+ .legend .bar { width:120px; height:8px; border-radius:2px; background:linear-gradient(90deg,#222,#fff); border:1px solid var(--line); }
+ .intro { color:var(--muted); font-size:12px; max-width:680px; }
+ @media print { html,body { background:#fff; } .page { margin:0; box-shadow:none; page-break-after:always; } }
 </style></head><body>
-<div class="band"><div class="inner">
-  {{logo}}
-  <div>
-    <div class="eyebrow">Processing Report</div>
-    <div class="wm">Open<span class="lr">Reco</span></div>
-    <div class="tag">Photogrammetry · Reconstruction</div>
+
+<!-- ===== Page 1 · cover (dark) ===== -->
+<section class="page cover">
+  <div class="top"><div class="lock">{{logo}}<span>open<span class="lr">reco</span></span></div>
+    <div class="lab ctx">Processing Report</div></div>
+  <div class="lab eyebrow">Photogrammetry · Reconstruction</div>
+  <h1>{{project}}</h1>
+  <div class="metarow">
+    <div><span class="lab k">Date</span><span class="v">{{date}}</span></div>
+    <div><span class="lab k">CRS</span><span class="v">{{crs}}</span></div>
+    <div><span class="lab k">Runtime</span><span class="v">{{runtime}}</span></div>
+    <div><span class="lab k">Stages</span><span class="v">{{stages_n}}</span></div>
+    <div><span class="lab k">Status</span><span class="v {{status_cls}}">{{status}}</span></div>
   </div>
-  {{badge}}
-</div></div>
-<div class="wrap">
-<h1>{{project}}</h1>
-<p class="meta">{{meta}}</p>
-{{hero}}
-<h2>Project summary</h2>
-{{summary_cards}}
-{{cameras}}
-{{issues}}
-<h2>Stages</h2>
-{{stages}}
-{{repro}}
-{{system}}
-</div>
-<footer>Generated by <b>Open<span class="lr">Reco</span></b> — clean-room, reproducible photogrammetry.</footer>
+  <div class="figwrap">{{hero}}<div class="figcap"><span>{{hero_cap}}</span><span>{{hero_epsg}}</span></div></div>
+  <div class="foot"><span>{{project}} · started {{started}}</span><span>{{project_uc}}</span><span>openreco.app</span></div>
+</section>
+
+<!-- ===== Page 2 · project summary ===== -->
+<section class="page">
+  <div class="phead"><div class="lock">{{logo}}<span>open<span class="lr">reco</span></span></div>
+    <span class="badge {{status_cls}}">{{status}}</span></div><hr>
+  <div class="summhead"><div><div class="lab">Project summary</div><h1>{{project}}</h1></div>
+    <div class="r">{{sum_meta}}</div></div>
+  <div class="cards">{{cards}}</div>
+  <h2><span class="dot"></span>Survey data</h2>
+  <table><thead><tr><th>camera</th><th>resolution</th><th>focal length</th><th>images</th><th>sensor</th></tr></thead>
+    <tbody>{{survey}}</tbody></table>
+  <h2><span class="dot"></span>Digital Elevation Model</h2>
+  <div class="figwrap" style="border-color:var(--line)">{{dem}}
+    <div class="figcap" style="background:rgba(11,26,43,.72)"><span>{{dem_cap}}</span></div></div>
+  <div class="legend" style="justify-content:flex-end;margin-top:8px">LOW<span class="bar"></span>HIGH</div>
+  <div class="pfoot"><span>OpenReco · Processing Report</span><span>{{project_uc}}</span><span>02 / 05</span></div>
+</section>
+
+<!-- ===== Page 3 · QA & measurements ===== -->
+<section class="page">
+  <div class="phead"><div class="lock">{{logo}}<span>open<span class="lr">reco</span></span></div>
+    <span class="lab">{{project_uc}} · QA &amp; Measurements</span></div><hr>
+  <h2><span class="dot"></span>Quality assurance<span class="suf">{{qa_suffix}}</span></h2>
+  {{qa_rows}}
+  <h2><span class="dot"></span>Measurements</h2>
+  <table><thead><tr><th>name</th><th>type</th><th>result</th></tr></thead><tbody>{{measures}}</tbody></table>
+  <div class="pfoot"><span>OpenReco · Processing Report</span><span>{{project_uc}}</span><span>03 / 05</span></div>
+</section>
+
+<!-- ===== Page 4 · stages ===== -->
+<section class="page">
+  <div class="phead"><div class="lock">{{logo}}<span>open<span class="lr">reco</span></span></div>
+    <span class="lab">{{project_uc}} · Pipeline</span></div><hr>
+  <h2><span class="dot"></span>Stages<span class="suf">{{stages_suffix}}</span></h2>
+  <table><thead><tr><th>stage</th><th>type</th><th>status</th><th>time</th><th>metrics</th></tr></thead>
+    <tbody>{{stage_rows}}</tbody></table>
+  <div class="pfoot"><span>OpenReco · Processing Report</span><span>{{project_uc}}</span><span>04 / 05</span></div>
+</section>
+
+<!-- ===== Page 5 · reproducibility ===== -->
+<section class="page">
+  <div class="phead"><div class="lock">{{logo}}<span>open<span class="lr">reco</span></span></div>
+    <span class="lab">{{project_uc}} · Pipeline</span></div><hr>
+  <h2><span class="dot"></span>Reproducibility<span class="suf">· cache keys &amp; resolved parameters</span></h2>
+  <p class="intro">Every stage is content-addressed by a cache key derived from its inputs and resolved
+   parameters. Re-running with identical keys reuses cached results — guaranteeing a byte-for-byte
+   reproducible pipeline.</p>
+  <table><thead><tr><th>stage</th><th>cache key</th><th>resolved parameters</th></tr></thead>
+    <tbody>{{repro_rows}}</tbody></table>
+  <div class="pfoot"><span>OpenReco · Processing Report</span><span>{{project_uc}}</span><span>05 / 05</span></div>
+</section>
 </body></html>

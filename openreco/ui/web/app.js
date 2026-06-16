@@ -1719,7 +1719,9 @@ async function loadWorkflows() {
   menuEntry('m-file', 'New chunk', addChunk, null, 'folder-plus');
   menuEntry('m-file', 'Set coordinate system…', openCrsPicker, null, 'globe');
   menuSep('m-file');
-  menuEntry('m-file', 'Processing report (PDF)', () => window.open('/api/report', '_blank'), null, 'chart');
+  menuEntry('m-file', 'Processing report', () => window.open('/api/report_html', '_blank'),
+    'open the report — print / save as PDF from the browser', 'chart');
+  menuEntry('m-file', 'Processing report (quick PDF)', () => window.open('/api/report', '_blank'), null, 'chart');
   menuSep('m-file');
   menuEntry('m-file', 'Preferences…', openPrefs, null, 'wrench');
   // Workflow menu = the familiar operations
