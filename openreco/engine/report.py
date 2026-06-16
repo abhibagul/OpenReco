@@ -24,12 +24,19 @@ _SEV_COLOR = {"error": "#dc2626", "warning": "#b7791f", "info": "#1d4ed8"}
 
 # OpenReco brand logo (faceted-hexagon mark) — inlined so the report is self-contained/offline.
 _LOGO_SVG = (
-    '<svg viewBox="0 0 100 100" width="40" height="40" xmlns="http://www.w3.org/2000/svg">'
+    '<svg viewBox="0 0 100 100" width="46" height="46" xmlns="http://www.w3.org/2000/svg">'
     '<polygon points="15.4,32 50,12 50,52" fill="#7FB0FF"/>'
     '<polygon points="50,12 84.6,32 50,52" fill="#3B82F6"/>'
     '<polygon points="84.6,32 84.6,72 50,52" fill="#1D4ED8"/>'
+    '<line x1="50" y1="52" x2="84.6" y2="72" stroke="#9DB8E6" stroke-width="2" stroke-linecap="round"/>'
+    '<line x1="50" y1="52" x2="50" y2="92" stroke="#9DB8E6" stroke-width="2" stroke-linecap="round"/>'
+    '<line x1="50" y1="52" x2="15.4" y2="72" stroke="#9DB8E6" stroke-width="2" stroke-linecap="round"/>'
+    '<line x1="50" y1="52" x2="15.4" y2="32" stroke="#9DB8E6" stroke-width="2" stroke-linecap="round"/>'
     '<polygon points="50,12 84.6,32 84.6,72 50,92 15.4,72 15.4,32" fill="none" stroke="#1D4ED8" '
     'stroke-width="3" stroke-linejoin="round"/>'
+    '<circle cx="50" cy="12" r="3.4" fill="#1D4ED8"/><circle cx="84.6" cy="32" r="3.4" fill="#1D4ED8"/>'
+    '<circle cx="84.6" cy="72" r="3.4" fill="#1D4ED8"/><circle cx="50" cy="92" r="3.4" fill="#1D4ED8"/>'
+    '<circle cx="15.4" cy="72" r="3.4" fill="#1D4ED8"/><circle cx="15.4" cy="32" r="3.4" fill="#1D4ED8"/>'
     '<circle cx="50" cy="52" r="3.4" fill="#3B82F6"/></svg>'
 )
 
@@ -104,7 +111,7 @@ def _issues_section(stages: list[dict]) -> str:
                 f"<h3 style='color:{color}'>{sev}s ({len(buckets[sev])})</h3>"
                 f"<ul>{''.join(buckets[sev])}</ul>"
             )
-    return "<h2>QA issues</h2>" + ("".join(blocks) if blocks else "<p class=muted>none</p>")
+    return "<h2>Quality assurance</h2>" + ("".join(blocks) if blocks else "<p class=muted>No issues flagged.</p>")
 
 
 def _stage_rows(stages: list[dict]) -> str:

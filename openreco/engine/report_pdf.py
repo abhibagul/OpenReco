@@ -20,6 +20,7 @@ BLUE = (29, 78, 216)      # cobalt — primary accent
 AZURE = (59, 130, 246)
 SKY = (127, 176, 255)
 INK = (20, 34, 51)
+NAVY = (11, 26, 43)       # header band
 GREY = (91, 107, 130)
 LINE = (226, 233, 244)
 PAPER = (245, 247, 251)
@@ -253,15 +254,16 @@ def _measurements_section(doc: _Doc, measurements):
 
 
 def _brand_header(doc, badge=None) -> None:
-    """Logo mark + OpenReco wordmark + a cobalt rule across the top of the page."""
-    _logo(doc.d, doc.M, doc.M - 2, 46)
-    doc.d.text((doc.M + 60, doc.M + 4), "OpenReco", font=doc.f_title, fill=INK)
+    """Dark-navy header band with the logo mark, eyebrow + OpenReco wordmark, and status badge."""
+    h = 92
+    doc.d.rectangle([0, 0, doc.W, h], fill=NAVY)
+    _logo(doc.d, doc.M, (h - 46) // 2, 46)
+    doc.d.text((doc.M + 62, 24), "PROCESSING REPORT", font=doc.f_s, fill=SKY)
+    doc.d.text((doc.M + 62, 41), "OpenReco", font=doc.f_h, fill=(230, 238, 248))
     if badge:
-        doc.d.text((doc.W - doc.M - doc.d.textlength(badge[0], font=doc.f_h), doc.M + 12),
+        doc.d.text((doc.W - doc.M - doc.d.textlength(badge[0], font=doc.f_h), 40),
                    badge[0], font=doc.f_h, fill=badge[1])
-    y = doc.M + 54
-    doc.d.line([(doc.M, y), (doc.W - doc.M, y)], fill=BLUE, width=2)
-    doc.y = y + 16
+    doc.y = h + 18
 
 
 def _artifact(stages, stype: str, key: str):

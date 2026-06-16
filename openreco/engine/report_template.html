@@ -12,38 +12,63 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
- :root { --ink:#142233; --muted:#5b6b82; --line:#e2e9f4; --accent:#1d4ed8; --paper:#f5f7fb; }
+ :root { --ink:#0b1a2b; --fg:#142233; --muted:#5b6b82; --soft:#9fb2c9; --line:#e2e9f4; --line2:#eef2fb;
+         --accent:#1d4ed8; --azure:#3b82f6; --sky:#7fb0ff; --paper:#f5f7fb;
+         --disp:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+         --mono:"JetBrains Mono",ui-monospace,monospace; }
  * { box-sizing:border-box; }
- body { font:14px/1.6 "Space Grotesk","Segoe UI",system-ui,sans-serif; margin:0; color:var(--ink); background:var(--paper); }
- .wrap { max-width:1000px; margin:0 auto; padding:28px 30px 64px; }
- .brandbar { display:flex; align-items:center; gap:12px; border-bottom:2px solid var(--accent); padding-bottom:14px; }
- .brandbar svg { width:42px; height:42px; }
- .brandbar .ttl { font-weight:700; font-size:22px; letter-spacing:.3px; } .brandbar .ttl .lr { color:var(--accent); }
- .badge { margin-left:auto; font-weight:700; padding:3px 14px; border-radius:20px; font-size:13px; }
- .badge.ok { color:#16a34a; background:#16a34a1c; } .badge.fail { color:#dc2626; background:#dc26261c; }
- h1 { font-size:19px; margin:16px 0 .1rem; }
- h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-top:30px;
-      border-bottom:1px solid var(--line); padding-bottom:6px; }
+ body { font:14px/1.6 var(--disp); margin:0; color:var(--fg); background:var(--paper); }
+ /* dark-navy header band */
+ .band { background:var(--ink); color:#e6eef8;
+         background-image:linear-gradient(90deg, rgba(29,78,216,.25), transparent 55%); }
+ .band .inner { max-width:1000px; margin:0 auto; padding:24px 30px; display:flex; align-items:center; gap:14px; }
+ .band svg { width:46px; height:46px; }
+ .band .wm { font-weight:700; font-size:22px; letter-spacing:.3px; } .band .wm .lr { color:var(--sky); }
+ .band .eyebrow { color:var(--sky); font-family:var(--mono); font-size:11px; letter-spacing:.18em;
+                  text-transform:uppercase; }
+ .band .tag { color:var(--soft); font-size:12px; }
+ .badge { margin-left:auto; font-weight:700; padding:5px 16px; border-radius:20px; font-size:13px; }
+ .badge.ok { color:#86efac; background:#16a34a33; } .badge.fail { color:#fca5a5; background:#e11d4833; }
+ .wrap { max-width:1000px; margin:0 auto; padding:26px 30px 70px; }
+ h1 { font-size:24px; margin:8px 0 .1rem; }
+ h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); margin:34px 0 4px;
+      padding-bottom:7px; border-bottom:1px solid var(--line); }
  h3 { font-size:.95rem; margin:.8rem 0 .3rem; }
- table { border-collapse:collapse; width:100%; margin-top:.6rem; }
- th, td { text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--line); vertical-align:top; }
+ .meta { color:var(--muted); font-size:13px; }
+ table { border-collapse:collapse; width:100%; margin-top:.7rem; font-size:13px; }
+ th, td { text-align:left; padding:.55rem .7rem; border-bottom:1px solid var(--line); vertical-align:top; }
  th { color:var(--muted); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.03em; }
- code { font-family:"JetBrains Mono",ui-monospace,monospace; background:#eef2fb; border:1px solid var(--line);
-        padding:0 5px; border-radius:4px; font-size:12.5px; }
- .muted { color:#9aa7ba; } .hint { color:var(--muted); } .meta { color:var(--muted); }
- .cards { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
- .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; min-width:150px;
-         box-shadow:0 1px 3px rgba(20,45,90,.05); }
- .cval { font-size:21px; font-weight:700; } .clabel { color:var(--muted); font-size:11px;
-         text-transform:uppercase; letter-spacing:.03em; }
+ tr:hover td { background:var(--line2); }
+ code { font-family:var(--mono); background:var(--line2); border:1px solid var(--line); padding:0 5px;
+        border-radius:4px; font-size:12.5px; color:#13325f; }
+ .muted { color:var(--soft); } .hint { color:var(--muted); }
+ .cards { display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; }
+ .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:13px 16px; min-width:158px;
+         box-shadow:0 2px 20px rgba(11,26,43,.06); }
+ .cval { font-size:22px; font-weight:700; color:var(--ink); } .clabel { color:var(--muted); font-size:11px;
+         text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
  ul { margin:.2rem 0; }
- .hero { margin-top:16px; } .hero img { width:100%; border:1px solid var(--line); border-radius:10px; }
- .hero .cap { color:var(--muted); font-size:12px; text-align:center; margin-top:6px; }
-</style></head><body><div class="wrap">
-<div class="brandbar">{{logo}}<span class="ttl">Open<span class="lr">Reco</span></span>{{badge}}</div>
+ .hero { margin-top:16px; } .hero img { width:100%; border:1px solid var(--line); border-radius:12px;
+         box-shadow:0 2px 20px rgba(11,26,43,.10); }
+ .hero .cap { color:var(--muted); font-size:12px; text-align:center; margin-top:7px; }
+ footer { max-width:1000px; margin:0 auto; padding:18px 30px 40px; color:var(--soft); font-size:12px;
+          border-top:1px solid var(--line); }
+ footer .lr { color:var(--accent); }
+</style></head><body>
+<div class="band"><div class="inner">
+  {{logo}}
+  <div>
+    <div class="eyebrow">Processing Report</div>
+    <div class="wm">Open<span class="lr">Reco</span></div>
+    <div class="tag">Photogrammetry · Reconstruction</div>
+  </div>
+  {{badge}}
+</div></div>
+<div class="wrap">
 <h1>{{project}}</h1>
 <p class="meta">{{meta}}</p>
 {{hero}}
+<h2>Project summary</h2>
 {{summary_cards}}
 {{cameras}}
 {{issues}}
@@ -51,4 +76,6 @@
 {{stages}}
 {{repro}}
 {{system}}
-</div></body></html>
+</div>
+<footer>Generated by <b>Open<span class="lr">Reco</span></b> — clean-room, reproducible photogrammetry.</footer>
+</body></html>

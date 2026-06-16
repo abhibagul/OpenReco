@@ -38,7 +38,7 @@ def test_report_has_cards_qa_and_repro(tmp_path):
     assert "mean reprojection error" in h and "0.63 px" in h
     assert "EPSG:32613" in h and "GPS alignment RMS" in h and "2.74 m" in h
     # QA grouped by severity
-    assert "QA issues" in h and "warning" in h.lower()
+    assert "Quality assurance" in h and "warning" in h.lower()
     assert "3/8 images not registered" in h and "add overlap" in h
     # reproducibility block surfaces resolved params + cache keys
     assert "Reproducibility" in h and "resolved parameters" in h
@@ -50,8 +50,8 @@ def test_report_is_branded_with_system_section(tmp_path):
     p = tmp_path / "report.html"
     write_report(out, p)
     h = p.read_text(encoding="utf-8")
-    assert "Space+Grotesk" in h and "brandbar" in h and "<polygon" in h   # brand fonts + logo
-    assert "<h2>System</h2>" in h and "OpenReco 0" in h                   # system section
+    assert "Space+Grotesk" in h and "<polygon" in h and "Processing Report" in h  # brand fonts + logo + band
+    assert "Project summary" in h and "<h2>System</h2>" in h and "OpenReco 0" in h  # sections
 
 
 def test_pdf_report_renders_multipage(tmp_path):
@@ -68,4 +68,4 @@ def test_report_handles_no_metrics(tmp_path):
     p = tmp_path / "r.html"
     write_report(out, p)
     h = p.read_text(encoding="utf-8")
-    assert "OpenReco" in h and "QA issues" in h and "none" in h
+    assert "OpenReco" in h and "Quality assurance" in h and "No issues flagged." in h
