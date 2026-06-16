@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenReco — Open-source photogrammetry & 3D reconstruction</title>
+<meta name="description" content="OpenReco turns drone and camera photos into measurable, georeferenced 3D — dense clouds, meshes, orthomosaics, DEMs and vegetation indices. GPU-accelerated, reproducible, open source." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="site.css" />
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#0B1A2B">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0B1A2B"/>
+    <g transform="translate(600 330) scale(4.6) translate(-50 -52)">
+      <polygon points="15.4,32 50,12 50,52" fill="#7FB0FF"/>
+      <polygon points="50,12 84.6,32 50,52" fill="#3B82F6"/>
+      <polygon points="84.6,32 84.6,72 50,52" fill="#1D4ED8"/>
+      <line x1="50" y1="52" x2="84.6" y2="72" stroke="#3B5B8F" stroke-width="2" stroke-linecap="round"/>
+      <line x1="50" y1="52" x2="50" y2="92" stroke="#3B5B8F" stroke-width="2" stroke-linecap="round"/>
+      <line x1="50" y1="52" x2="15.4" y2="72" stroke="#3B5B8F" stroke-width="2" stroke-linecap="round"/>
+      <line x1="50" y1="52" x2="15.4" y2="32" stroke="#3B5B8F" stroke-width="2" stroke-linecap="round"/>
+      <polygon points="50,12 84.6,32 84.6,72 50,92 15.4,72 15.4,32" fill="none" stroke="#7FB0FF" stroke-width="3" stroke-linejoin="round"/>
+    </g>
+    <text x="600" y="560" font-family="'JetBrains Mono',monospace" font-size="32" letter-spacing="9" fill="#7FB0FF" text-anchor="middle">openreco</text>
+    <text x="600" y="606" font-family="'JetBrains Mono',monospace" font-size="17" letter-spacing="4" fill="#5B6B82" text-anchor="middle">PHOTOS INTO MEASURABLE 3D</text>
+  </svg>
+</template>
+
+<!-- ===================== NAV ===================== -->
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top"><span class="mk" data-mark="default"></span>openreco</a>
+    <nav class="nav-links">
+      <a href="#pipeline">Pipeline</a>
+      <a href="#reconstruct">Reconstruct</a>
+      <a href="#measure">Measure</a>
+      <a href="#visualize">Visualize</a>
+      <a href="#export">Export</a>
+    </nav>
+    <div class="nav-right">
+      <a class="ghpill" href="https://github.com/abhibagul/OpenReco"><span data-icon="github" style="width:15px;height:15px;display:inline-flex"></span> 
+        <!-- <b>4.2k</b> stars -->
+      </a>
+      <a class="btn primary" href="#download"><span data-icon="download"></span> Download</a>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== HERO ===================== -->
+<section class="hero" id="top">
+  <div class="grid-bg"></div>
+  <div class="glow"></div>
+  <div class="wrap hero-in">
+    <div class="kick rise" style="animation-delay:.04s">Open-source photogrammetry</div>
+    <h1 class="rise" style="margin-top:22px;animation-delay:.12s">Turn photos into <span class="hl">measurable 3D.</span></h1>
+    <p class="lead rise" style="animation-delay:.2s">OpenReco reconstructs drone and camera imagery into dense point clouds, textured meshes, orthomosaics and elevation models — georeferenced, measurable, and fully reproducible. One desktop app, the entire pipeline.</p>
+    <div class="cta rise" style="animation-delay:.28s">
+      <a class="btn primary" href="#download"><span data-icon="download"></span> Download for free</a>
+      <a class="btn onink" href="https://github.com/abhibagul/OpenReco" target="_blank"><span data-icon="github"></span> View on GitHub</a>
+    </div>
+    <div class="meta rise" style="animation-delay:.36s">
+      <span><span class="dot"></span><b>GPU-accelerated</b> dense MVS</span>
+      <span><span class="dot"></span><b>EPSG</b> georeferencing</span>
+      <span><span class="dot"></span><b>Reproducible</b> cache-keyed pipeline</span>
+      <span><span class="dot"></span><b>MIT</b> licensed</span>
+    </div>
+  </div>
+
+  <div class="shot">
+    <div class="callout c1"><span class="d"></span>Dense cloud · <b>483,902 pts</b></div>
+    <div class="callout c2"><span class="d"></span>Measure <b>volume &amp; area</b></div>
+    <div class="callout c3"><span class="d"></span><b>Georeferenced</b> · EPSG:32632</div>
+    <div class="shot-inner">
+      <div class="window">
+        <div class="winbar">
+          <div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+          <div class="title"><span class="mk" data-mark="ondark" style="width:14px;height:14px;display:inline-flex"></span> OpenReco — Chunk 1 · 483,902 pts</div>
+        </div>
+        <img src="site_assets/app-full.png" alt="The full OpenReco application — workspace tree, 3D viewport with a textured dense point cloud, properties panel and photo filmstrip" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TRUST STRIP ===================== -->
+<section class="band tight" style="padding-top:140px;">
+  <div class="wrap">
+    <p class="kick center" style="display:block;">Built for people who measure the real world</p>
+    <div class="trust stagger" style="margin-top:22px;">
+      <span class="chip"><span data-icon="map"></span>Surveying &amp; mapping</span>
+      <span class="chip"><span data-icon="veg"></span>Agriculture &amp; forestry</span>
+      <span class="chip"><span data-icon="model"></span>VFX &amp; heritage</span>
+      <span class="chip"><span data-icon="dem"></span>Construction &amp; earthworks</span>
+      <span class="chip"><span data-icon="gpu"></span>Robotics &amp; research</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PHOTOS → 3D PROMO BAND ===================== -->
+<section class="photos-band">
+  <div class="grid-bg"></div>
+  <div class="inner">
+    <div class="marquee-mask">
+      <div class="marquee-row a">
+        <img src="site_assets/photos/p01.jpg" alt="drone photo" /><img src="site_assets/photos/p02.jpg" alt="" /><img src="site_assets/photos/p03.jpg" alt="" /><img src="site_assets/photos/p04.jpg" alt="" /><img src="site_assets/photos/p05.jpg" alt="" /><img src="site_assets/photos/p06.jpg" alt="" /><img src="site_assets/photos/p08.jpg" alt="" /><img src="site_assets/photos/p09.jpg" alt="" />
+        <img src="site_assets/photos/p01.jpg" alt="" /><img src="site_assets/photos/p02.jpg" alt="" /><img src="site_assets/photos/p03.jpg" alt="" /><img src="site_assets/photos/p04.jpg" alt="" /><img src="site_assets/photos/p05.jpg" alt="" /><img src="site_assets/photos/p06.jpg" alt="" /><img src="site_assets/photos/p08.jpg" alt="" /><img src="site_assets/photos/p09.jpg" alt="" />
+      </div>
+    </div>
+
+    <div class="wrap reveal">
+      <div class="flow">
+        <div class="node"><div class="v">36<span class="u"></span></div><div class="k">Drone photos in</div></div>
+        <div class="arrow"><span data-icon="arrow"></span></div>
+        <div class="node"><div class="v">483,902</div><div class="k">3D points solved</div></div>
+        <div class="arrow"><span data-icon="arrow"></span></div>
+        <div class="node"><div class="v">1<span class="u"> model</span></div><div class="k">Measurable &amp; georeferenced</div></div>
+      </div>
+      <p class="lead center" style="max-width:62ch;margin:0 auto;color:#aebfd6;">Drop in a folder of overlapping images. OpenReco aligns the cameras, builds a dense cloud, meshes and textures it — then hands you a model you can measure, classify and export.</p>
+    </div>
+
+    <div class="marquee-mask" style="margin-top:44px;">
+      <div class="marquee-row b">
+        <img src="site_assets/photos/p16.jpg" alt="" /><img src="site_assets/photos/p17.jpg" alt="" /><img src="site_assets/photos/p18.jpg" alt="" /><img src="site_assets/photos/p19.jpg" alt="" /><img src="site_assets/photos/p20.jpg" alt="" /><img src="site_assets/photos/p21.jpg" alt="" /><img src="site_assets/photos/p10.jpg" alt="" /><img src="site_assets/photos/p11.jpg" alt="" />
+        <img src="site_assets/photos/p16.jpg" alt="" /><img src="site_assets/photos/p17.jpg" alt="" /><img src="site_assets/photos/p18.jpg" alt="" /><img src="site_assets/photos/p19.jpg" alt="" /><img src="site_assets/photos/p20.jpg" alt="" /><img src="site_assets/photos/p21.jpg" alt="" /><img src="site_assets/photos/p10.jpg" alt="" /><img src="site_assets/photos/p11.jpg" alt="" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PIPELINE GRID (all features) ===================== -->
+<section class="band" id="pipeline" style="padding-top:48px;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow"><span class="num">01</span><span class="kick">The workflow</span></div>
+      <h2 class="sec" style="margin-top:18px;">One pipeline, every stage.</h2>
+      <p class="lead">From raw images to georeferenced deliverables — every step lives in a single, node-based workspace. Run the whole graph or any stage on its own; results are cached and reproducible.</p>
+    </div>
+
+    <div class="pipe stagger">
+      <div class="pcard"><span class="step">01</span><div class="ic" data-icon="photos"></div><h3>Add Photos</h3><p>Add a folder of images to a chunk (ingest + quality check). The first step of any project.</p></div>
+      <div class="pcard"><span class="step">02</span><div class="ic" data-icon="align"></div><h3>Align Photos</h3><p>Detect features, match, and solve camera poses to produce a sparse point cloud.</p></div>
+      <div class="pcard"><span class="step">03</span><div class="ic" data-icon="georef"></div><h3>Georeference</h3><p>Place the model in a CRS from EXIF GPS or ground control points using the marker tool.</p></div>
+      <div class="pcard"><span class="step">04</span><div class="ic" data-icon="dense"></div><h3>Build Dense Cloud</h3><p>Dense multi-view stereo depth maps fused into a high-density point cloud.</p></div>
+      <div class="pcard"><span class="step">05</span><div class="ic" data-icon="model"></div><h3>Build Model</h3><p>Reconstruct a polygonal mesh surface from the dense cloud.</p></div>
+      <div class="pcard"><span class="step">06</span><div class="ic" data-icon="texture"></div><h3>Build Texture</h3><p>Bake a UV texture atlas onto the model from the source images.</p></div>
+      <div class="pcard"><span class="step">07</span><div class="ic" data-icon="dem"></div><h3>Build DEM</h3><p>Rasterize a digital elevation model (DSM) from the dense cloud or mesh.</p></div>
+      <div class="pcard"><span class="step">08</span><div class="ic" data-icon="ortho"></div><h3>Build Orthomosaic</h3><p>Orthorectified, georeferenced image mosaic ready for GIS.</p></div>
+      <div class="pcard"><span class="step">09</span><div class="ic" data-icon="veg"></div><h3>Vegetation Indices</h3><p>NDVI / ExG / VARI maps from the orthomosaic for agriculture &amp; health analysis.</p></div>
+      <div class="pcard"><span class="step">10</span><div class="ic" data-icon="classify"></div><h3>Classify Points</h3><p>Classify the dense cloud into ground, building and vegetation.</p></div>
+      <div class="pcard"><span class="step">11</span><div class="ic" data-icon="tiled"></div><h3>Build Tiled Model</h3><p>Split the model into streamable 3D Tiles for the web.</p></div>
+      <div class="pcard"><span class="step">12</span><div class="ic" data-icon="contours"></div><h3>Build Contours</h3><p>Generate contour lines at any interval from the DEM.</p></div>
+      <div class="pcard"><span class="step">13</span><div class="ic" data-icon="cleancloud"></div><h3>Clean Point Cloud</h3><p>Remove noise and stray points with statistical outlier removal.</p></div>
+      <div class="pcard"><span class="step">14</span><div class="ic" data-icon="cleanmesh"></div><h3>Clean Mesh</h3><p>Remove small floating mesh islands and keep the main surface.</p></div>
+      <div class="pcard"><span class="step">15</span><div class="ic" data-icon="merge"></div><h3>Merge Chunks</h3><p>Align separate chunks with ICP and merge their clouds into one.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SPOTLIGHT · RECONSTRUCT ===================== -->
+<section class="band ink-band" id="reconstruct">
+  <div class="wrap">
+    <div class="spot">
+      <div class="copy reveal">
+        <div class="eyebrow"><span class="num">02</span><span class="kick">Reconstruct</span></div>
+        <h2 style="margin-top:14px;">From sparse tie-points to a dense, textured surface.</h2>
+        <p class="lead">A GPU multi-view stereo engine (COLMAP CUDA) fuses depth maps into clouds of hundreds of thousands of points, then meshes and textures them — all from the same source photos.</p>
+        <div class="flist">
+          <div class="fl"><span data-icon="check"></span><span><b>Dense MVS</b> with geometric consistency and configurable plane-sweep depth.</span></div>
+          <div class="fl"><span data-icon="check"></span><span><b>Poisson meshing</b> into a watertight polygonal model with vertex counts in the millions.</span></div>
+          <div class="fl"><span data-icon="check"></span><span><b>UV texture baking</b> straight from the registered imagery.</span></div>
+        </div>
+      </div>
+      <div class="figframe reveal">
+        <img src="site_assets/shot-model.png" alt="Textured dense point cloud of buildings" />
+        <div class="figcap"><span data-icon="dense" style="width:14px;height:14px;display:inline-flex"></span> Dense cloud · mvs1 <span class="tagm">483,902 pts</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SPOTLIGHT · MEASURE ===================== -->
+<section class="band" id="measure" style="padding-top:72px;">
+  <div class="wrap">
+    <div class="spot rev">
+      <div class="copy reveal">
+        <div class="eyebrow"><span class="num">03</span><span class="kick">Measure</span></div>
+        <h2 class="sec" style="font-size:clamp(26px,3vw,38px);">Volumes, areas, profiles — straight off the model.</h2>
+        <p class="lead">Pick a tool, click on the 3D model, and read real-world quantities instantly. Every measurement is georeferenced and exportable.</p>
+        <div class="flist">
+          <div class="fl"><span data-icon="check"></span><span><b>Volume</b> with cut / fill breakdown for stockpiles and earthworks.</span></div>
+          <div class="fl"><span data-icon="check"></span><span><b>Profiles</b> with elevation graph, length, Δ-height and slope %.</span></div>
+          <div class="fl"><span data-icon="check"></span><span><b>Areas &amp; distances</b> annotated directly in the viewport.</span></div>
+          <div class="fl"><span data-icon="check"></span><span>Export to <b>GeoJSON, DXF or CSV</b> in a click.</span></div>
+        </div>
+      </div>
+      <div class="figframe reveal">
+        <img src="site_assets/shot-measure.png" alt="Measurement panel with volume, area and profile annotations on the model" />
+        <div class="figcap"><span data-icon="measure" style="width:14px;height:14px;display:inline-flex"></span> Measurements · volume · profile · area <span class="tagm">GeoJSON · DXF · CSV</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SPOTLIGHT · ORTHO + DEM ===================== -->
+<section class="band" id="ortho" style="padding-top:48px;">
+  <div class="wrap">
+    <div class="spot">
+      <div class="copy reveal">
+        <div class="eyebrow"><span class="num">04</span><span class="kick">Map &amp; analyze</span></div>
+        <h2 class="sec" style="font-size:clamp(26px,3vw,38px);">Orthomosaics, DEMs and vegetation maps.</h2>
+        <p class="lead">Produce survey-grade 2D deliverables from the same reconstruction — orthorectified imagery, elevation rasters, contours and crop-health indices.</p>
+        <div class="flist">
+          <div class="fl"><span data-icon="check"></span><span><b>Orthomosaic</b> — georeferenced, seam-aware image mosaic at your chosen GSD.</span></div>
+          <div class="fl"><span data-icon="check"></span><span><b>DSM + contours</b> — elevation model with contour lines at any interval.</span></div>
+          <div class="fl"><span data-icon="check"></span><span><b>NDVI / ExG / VARI</b> — vegetation indices for agriculture and forestry.</span></div>
+        </div>
+      </div>
+      <div class="reveal" style="display:grid;grid-template-columns:1.35fr 1fr;gap:16px;">
+        <div class="figframe" style="grid-row:span 2;">
+          <img src="site_assets/ortho.png" alt="Top-down orthomosaic" style="height:100%;object-fit:cover;" />
+          <div class="figcap"><span data-icon="ortho" style="width:14px;height:14px;display:inline-flex"></span> Orthomosaic <span class="tagm">EPSG:32632</span></div>
+        </div>
+        <div class="figframe">
+          <img src="site_assets/dem.png" alt="Digital elevation model" />
+          <div class="figcap"><span data-icon="dem" style="width:14px;height:14px;display:inline-flex"></span> DSM</div>
+        </div>
+        <div class="figframe grid-fig" style="display:flex;align-items:center;justify-content:center;padding:18px;">
+          <div style="display:flex;flex-direction:column;gap:8px;width:100%;">
+            <div class="mono" style="font-size:10px;letter-spacing:.1em;color:var(--sub);text-transform:uppercase;">Vegetation index · ExG</div>
+            <div style="height:54px;border-radius:7px;background:linear-gradient(90deg,#7a3b14,#caa53a,#9ccb4a,#2f8f2f,#0b5c1f);box-shadow:inset 0 0 0 1px rgba(11,26,43,.08);"></div>
+            <div class="mono" style="display:flex;justify-content:space-between;font-size:10px;color:var(--faint);"><span>BARE</span><span>CANOPY</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== VISUALIZE (ink) ===================== -->
+<section class="band ink-band" id="visualize">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow"><span class="num">05</span><span class="kick">Visualize</span></div>
+      <h2 class="sec" style="margin-top:18px;">A viewport built for point clouds.</h2>
+      <p class="lead">Inspect hundreds of thousands of points at a smooth frame rate, with the controls photogrammetrists actually reach for.</p>
+    </div>
+
+    <div class="spot" style="padding-bottom:0;">
+      <div class="figframe reveal">
+        <img src="site_assets/shot-classify.png" alt="Point cloud colored by elevation" />
+        <div class="figcap"><span data-icon="layers" style="width:14px;height:14px;display:inline-flex"></span> Color by elevation · viridis <span class="tagm">EDL on</span></div>
+      </div>
+      <div class="viz reveal" style="grid-template-columns:repeat(2,1fr);margin-top:0;">
+        <div class="vcard"><div class="ic" data-icon="color"></div><h3>RGB &amp; Elevation</h3><p>Color points by true RGB or by height to read terrain at a glance.</p></div>
+        <div class="vcard"><div class="ic" data-icon="layers"></div><h3>Scientific colormaps</h3><p>viridis and friends for perceptually-uniform elevation shading.</p></div>
+        <div class="vcard"><div class="ic" data-icon="eye"></div><h3>Eye-Dome Lighting</h3><p>EDL shading brings out depth and structure in dense clouds.</p></div>
+        <div class="vcard"><div class="ic" data-icon="sliders"></div><h3>Model · Ortho · Map · Photo</h3><p>Switch views, adjust point size, and orbit with the nav cube.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== REPRODUCIBLE / PRECISE (metrics) ===================== -->
+<section class="band ink-band" id="reproducible" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow"><span class="num">06</span><span class="kick">Precise &amp; reproducible</span></div>
+      <h2 class="sec" style="margin-top:18px;">Engineered like a measuring instrument.</h2>
+      <p class="lead">Every stage is content-addressed by a cache key derived from its inputs and resolved parameters. Re-run a project and identical stages are reused — byte-for-byte reproducible, every time.</p>
+    </div>
+    <div class="viz stagger">
+      <div class="vcard"><div class="ic" data-icon="gpu"></div><h3>GPU dense MVS</h3><p>COLMAP CUDA backend with an automatic CPU fallback.</p></div>
+      <div class="vcard"><div class="ic" data-icon="crs"></div><h3>CRS aware</h3><p>EPSG georeferencing from EXIF GPS or ground control points.</p></div>
+      <div class="vcard"><div class="ic" data-icon="cache"></div><h3>Cache-keyed</h3><p>Resolved parameters hashed per stage for instant re-runs.</p></div>
+      <div class="vcard"><div class="ic" data-icon="chunks"></div><h3>Chunks &amp; presets</h3><p>Quality presets and multi-chunk projects that merge cleanly.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== EXPORT ===================== -->
+<section class="band" id="export">
+  <div class="wrap">
+      <div class="sec-head reveal">
+      <div class="eyebrow"><span class="num">07</span><span class="kick">Export</span></div>
+      <h2 class="sec" style="margin-top:18px;">Open formats, no lock-in.</h2>
+      <p class="lead">Every artifact leaves OpenReco in a standard format your GIS, CAD or web stack already speaks.</p>
+    </div>
+    <div class="formats stagger">
+      <span class="fmt"><span class="d"></span>LAS / LAZ</span>
+      <span class="fmt"><span class="d"></span>PLY</span>
+      <span class="fmt"><span class="d"></span>OBJ</span>
+      <span class="fmt"><span class="d"></span>GeoTIFF</span>
+      <span class="fmt"><span class="d"></span>GeoJSON</span>
+      <span class="fmt"><span class="d"></span>DXF</span>
+      <span class="fmt"><span class="d"></span>CSV</span>
+      <span class="fmt"><span class="d"></span>3D Tiles</span>
+      <span class="fmt"><span class="d"></span>Contours (SHP)</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FINAL CTA ===================== -->
+<section class="band" id="download" style="padding-top:24px;">
+  <div class="wrap">
+    <div class="cta-final reveal">
+      <div class="grid-bg"></div>
+      <div class="glow"></div>
+      <div class="cta-final-in">
+        <div class="kick">Free &amp; open source</div>
+        <h2 style="margin-top:16px;">Start reconstructing in minutes.</h2>
+        <p class="lead">Download OpenReco for your platform, drop in a folder of photos, and run the pipeline. No account, no subscription.</p>
+        <div class="os">
+          <a class="btn primary" target="_blank" href="https://github.com/abhibagul/OpenReco/releases"><span data-icon="win"></span> Windows</a>
+          <a class="btn onink" target="_blank"  href="https://github.com/abhibagul/OpenReco/releases"><span data-icon="apple"></span> macOS</a>
+          <a class="btn onink" target="_blank"  href="https://github.com/abhibagul/OpenReco/releases"><span data-icon="linux"></span> Linux</a>
+        </div>
+        <p class="mono" style="margin-top:22px;font-size:12px;color:#7e93b1;letter-spacing:.04em;">MIT licensed · build from source on GitHub</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FOOTER ===================== -->
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="brand" href="#top"><span class="mk" data-mark="ondark"></span>openreco</a>
+        <p>Open-source photogrammetry &amp; 3D reconstruction for everyone who measures the real world.</p>
+      </div>
+      <div class="fcol">
+        <h4>Product</h4>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#reconstruct">Reconstruct</a>
+        <a href="#measure">Measure</a>
+        <a href="#export">Export</a>
+      </div>
+      <div class="fcol">
+        <h4>Resources</h4>
+        <!-- <a href="#">Documentation</a>
+        <a href="#">Tutorials</a>
+        <a href="#">Sample data</a>
+        <a href="#">Changelog</a> -->
+      </div>
+      <div class="fcol">
+        <h4>Community</h4>
+        <a href="https://github.com/abhibagul/OpenReco">GitHub</a>
+        <!-- <a href="#">Discussions</a>
+        <a href="#">Issues</a>
+        <a href="#">Contribute</a> -->
+      </div>
+    </div>
+    <div class="foot-bot">
+      <span>© 2026 OpenReco · MIT License</span>
+      <span>openreco</span>
+    </div>
+  </div>
+</footer>
+
+<script src="icons.js"></script>
+</body>
+</html>
