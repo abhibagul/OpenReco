@@ -16,10 +16,21 @@ if TYPE_CHECKING:
     from openreco.engine.runner import RunOutcome
 
 _STATUS_COLOR = {
-    "executed": "#2563eb", "cached": "#16a34a", "failed": "#dc2626",
+    "executed": "#1d4ed8", "cached": "#16a34a", "failed": "#dc2626",
     "skipped": "#a16207", "cancelled": "#6b7280",
 }
-_SEV_COLOR = {"error": "#dc2626", "warning": "#d97706", "info": "#2563eb"}
+_SEV_COLOR = {"error": "#dc2626", "warning": "#b7791f", "info": "#1d4ed8"}
+
+# OpenReco brand logo (faceted-hexagon mark) — inlined so the report is self-contained/offline.
+_LOGO_SVG = (
+    '<svg viewBox="0 0 100 100" width="40" height="40" xmlns="http://www.w3.org/2000/svg">'
+    '<polygon points="15.4,32 50,12 50,52" fill="#7FB0FF"/>'
+    '<polygon points="50,12 84.6,32 50,52" fill="#3B82F6"/>'
+    '<polygon points="84.6,32 84.6,72 50,52" fill="#1D4ED8"/>'
+    '<polygon points="50,12 84.6,32 84.6,72 50,92 15.4,72 15.4,32" fill="none" stroke="#1D4ED8" '
+    'stroke-width="3" stroke-linejoin="round"/>'
+    '<circle cx="50" cy="52" r="3.4" fill="#3B82F6"/></svg>'
+)
 
 
 def _e(x: Any) -> str:
@@ -133,28 +144,42 @@ def _repro_block(d: dict) -> str:
 
 def write_report(outcome: "RunOutcome", path: Path) -> None:
     d = outcome.to_dict()
-    badge = ("<span style='color:#16a34a'>OK</span>" if d["ok"]
-             else "<span style='color:#dc2626'>FAILED</span>")
+    ok = d["ok"]
+    badge = (f"<span class='badge {'ok' if ok else 'fail'}'>{'OK' if ok else 'FAILED'}</span>")
     total_time = sum(s["seconds"] for s in d["stages"])
     body = f"""<!doctype html>
 <html lang=en><head><meta charset=utf-8>
 <title>OpenReco report — {_e(d['project'])}</title>
+<link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
+<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
- body {{ font: 14px/1.55 system-ui, sans-serif; margin: 2rem; color: #111; max-width: 1000px; }}
- h1 {{ font-size: 1.5rem; margin-bottom: .2rem; }}
- h2 {{ font-size: 1.1rem; margin-top: 1.8rem; border-bottom: 1px solid #e5e7eb; padding-bottom: .3rem; }}
- h3 {{ font-size: .95rem; margin: .8rem 0 .3rem; }}
+ :root {{ --ink:#142233; --muted:#5b6b82; --line:#e2e9f4; --accent:#1d4ed8; --paper:#f5f7fb; }}
+ * {{ box-sizing:border-box; }}
+ body {{ font: 14px/1.6 "Space Grotesk","Segoe UI",system-ui,sans-serif; margin:0; color:var(--ink); background:var(--paper); }}
+ .wrap {{ max-width: 1000px; margin: 0 auto; padding: 28px 30px 64px; }}
+ .brandbar {{ display:flex; align-items:center; gap:12px; border-bottom:2px solid var(--accent); padding-bottom:14px; }}
+ .brandbar .ttl {{ font-weight:700; font-size:22px; letter-spacing:.3px; }} .brandbar .ttl .lr {{ color:var(--accent); }}
+ .badge {{ margin-left:auto; font-weight:700; padding:3px 14px; border-radius:20px; font-size:13px; }}
+ .badge.ok {{ color:#16a34a; background:#16a34a1c; }} .badge.fail {{ color:#dc2626; background:#dc26261c; }}
+ h1 {{ font-size:19px; margin:16px 0 .1rem; }}
+ h2 {{ font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-top:30px;
+       border-bottom:1px solid var(--line); padding-bottom:6px; }}
+ h3 {{ font-size:.95rem; margin:.8rem 0 .3rem; }}
  table {{ border-collapse: collapse; width: 100%; margin-top: .6rem; }}
- th, td {{ text-align: left; padding: .45rem .7rem; border-bottom: 1px solid #eee; vertical-align: top; }}
- th {{ background: #f9fafb; }}
- code {{ background: #f3f4f6; padding: 0 .25rem; border-radius: 3px; }}
- .muted {{ color: #9ca3af; }} .hint {{ color: #6b7280; }} .meta {{ color: #4b5563; }}
- .cards {{ display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1rem; }}
- .card {{ background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: .7rem 1rem; min-width: 140px; }}
- .cval {{ font-size: 1.25rem; font-weight: 700; }} .clabel {{ color: #6b7280; font-size: .8rem; }}
- ul {{ margin: .2rem 0; }}
-</style></head><body>
-<h1>OpenReco — {_e(d['project'])} {badge}</h1>
+ th, td {{ text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--line); vertical-align:top; }}
+ th {{ color:var(--muted); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.03em; }}
+ code {{ font-family:"JetBrains Mono",ui-monospace,monospace; background:#eef2fb; border:1px solid var(--line);
+         padding:0 5px; border-radius:4px; font-size:12.5px; }}
+ .muted {{ color:#9aa7ba; }} .hint {{ color:var(--muted); }} .meta {{ color:var(--muted); }}
+ .cards {{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }}
+ .card {{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 14px; min-width:150px;
+          box-shadow:0 1px 3px rgba(20,45,90,.05); }}
+ .cval {{ font-size:21px; font-weight:700; }} .clabel {{ color:var(--muted); font-size:11px;
+          text-transform:uppercase; letter-spacing:.03em; }}
+ ul {{ margin:.2rem 0; }}
+</style></head><body><div class=wrap>
+<div class=brandbar>{_LOGO_SVG}<span class=ttl>Open<span class=lr>Reco</span></span>{badge}</div>
+<h1>{_e(d['project'])}</h1>
 <p class=meta>started {_e(d['started'])} · {total_time:.1f}s total · {len(d['stages'])} stages</p>
 {_summary_cards(d['stages'])}
 {_issues_section(d['stages'])}
@@ -162,5 +187,5 @@ def write_report(outcome: "RunOutcome", path: Path) -> None:
 <table><thead><tr><th>stage</th><th>type</th><th>status</th><th>time</th><th>metrics</th></tr></thead>
 <tbody>{_stage_rows(d['stages'])}</tbody></table>
 {_repro_block(d)}
-</body></html>"""
+</div></body></html>"""
     path.write_text(body, encoding="utf-8")

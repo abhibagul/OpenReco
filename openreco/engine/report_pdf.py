@@ -12,13 +12,33 @@ import json
 from pathlib import Path
 from typing import Any
 
-OK = (38, 166, 91)
-ERR = (220, 38, 38)
-WARN = (217, 119, 6)
-BLUE = (37, 99, 235)
-INK = (17, 17, 17)
-GREY = (110, 116, 128)
-LINE = (224, 226, 232)
+# OpenReco "Blueprint" brand palette
+OK = (22, 163, 74)
+ERR = (225, 29, 72)
+WARN = (183, 121, 31)
+BLUE = (29, 78, 216)      # cobalt — primary accent
+AZURE = (59, 130, 246)
+SKY = (127, 176, 255)
+INK = (20, 34, 51)
+GREY = (91, 107, 130)
+LINE = (226, 233, 244)
+PAPER = (245, 247, 251)
+
+
+def _logo(d, ox: float, oy: float, s: float) -> None:
+    """Draw the faceted-hexagon brand mark with PIL (s = size in px)."""
+    k = s / 100.0
+
+    def P(pts):
+        return [(ox + px * k, oy + py * k) for px, py in pts]
+
+    d.polygon(P([(15.4, 32), (50, 12), (50, 52)]), fill=SKY)
+    d.polygon(P([(50, 12), (84.6, 32), (50, 52)]), fill=AZURE)
+    d.polygon(P([(84.6, 32), (84.6, 72), (50, 52)]), fill=BLUE)
+    d.polygon(P([(50, 12), (84.6, 32), (84.6, 72), (50, 92), (15.4, 72), (15.4, 32)]),
+              outline=BLUE, width=max(1, int(round(3 * k))))
+    r, cx, cy = 3.4 * k, ox + 50 * k, oy + 52 * k
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=AZURE)
 
 
 def _font(size: int, bold: bool = False):
@@ -209,21 +229,32 @@ def _measurements_section(doc: _Doc, measurements):
     _table(doc, ["name", "type", "value"], rows, [0.26, 0.16, 0.58])
 
 
+def _brand_header(doc, badge=None) -> None:
+    """Logo mark + OpenReco wordmark + a cobalt rule across the top of the page."""
+    _logo(doc.d, doc.M, doc.M - 2, 46)
+    doc.d.text((doc.M + 60, doc.M + 4), "OpenReco", font=doc.f_title, fill=INK)
+    if badge:
+        doc.d.text((doc.W - doc.M - doc.d.textlength(badge[0], font=doc.f_h), doc.M + 12),
+                   badge[0], font=doc.f_h, fill=badge[1])
+    y = doc.M + 54
+    doc.d.line([(doc.M, y), (doc.W - doc.M, y)], fill=BLUE, width=2)
+    doc.y = y + 16
+
+
 def write_report_pdf(data: dict[str, Any] | None, measurements=None) -> bytes:
     """Render a run record (latest.json dict) to PDF bytes. None -> a 'no report yet' page.
     `measurements` (the persisted list) are appended as their own section when present."""
     doc = _Doc()
     if not data:
-        doc.text("OpenReco — Processing report", doc.f_title)
+        _brand_header(doc)
+        doc.text("Processing report", doc.f_h)
         doc.gap(6)
         doc.text("No processing report yet. Run the pipeline (Run), then open it again.", doc.f_b, GREY)
         _measurements_section(doc, measurements)
         return _save(doc)
 
-    badge = ("OK", OK) if data.get("ok") else ("FAILED", ERR)
-    doc.text(f"OpenReco — {data.get('project', 'project')}", doc.f_title)
-    doc.d.text((doc.W - doc.M - doc.d.textlength(badge[0], font=doc.f_h), doc.M + 6), badge[0],
-               font=doc.f_h, fill=badge[1])
+    _brand_header(doc, ("OK", OK) if data.get("ok") else ("FAILED", ERR))
+    doc.text(str(data.get("project", "project")), doc.f_h)
     total = sum(s.get("seconds", 0) for s in data["stages"])
     plat = data.get("platform", {})
     doc.text(f"started {data.get('started', '')}   ·   {total:.1f}s total   ·   {len(data['stages'])} stages",
