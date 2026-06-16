@@ -17,15 +17,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Install (engine + dev tools only — no heavy native deps in Phase 0)
+      - name: Install (engine + reconstruction deps + dev tools — all permissive wheels)
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      - name: License gate (permissive-only, incl. slice extras if installed)
+          pip install -e ".[slice,dev]"
+      - name: License gate (permissive-only, incl. slice extras)
         run: python scripts/check_licenses.py --extras slice
       - name: Lint
         run: ruff check .
-      - name: Tests (fast — slow/integration tests need sample data + pycolmap)
+      - name: Tests (fast — slow/integration tests need sample imagery)
         run: pytest -q -m "not slow"
       - name: Smoke — run the dummy pipeline end to end
         run: |

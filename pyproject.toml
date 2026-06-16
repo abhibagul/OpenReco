@@ -28,6 +28,7 @@ slice = [
   "xatlas",     # MIT — UV unwrapping (texturing)
   "fast-simplification",  # MIT — mesh decimation (texturing)
   "scikit-image",  # BSD — SIFT + matching for panorama stitching
+  "opencv-contrib-python-headless",  # Apache-2.0 — ArUco/AprilTag marker (GCP target) detection
 ]
 dev = ["pytest", "ruff"]
 
