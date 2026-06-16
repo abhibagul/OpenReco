@@ -1,12 +1,15 @@
 name: build-binaries
 
-# Build a single self-contained `openreco` executable for Windows, macOS and Linux.
-# A host can only build its own OS (PyInstaller is not a cross-compiler), so this fans out
-# across three runners and uploads one artifact each. Triggers on a version tag or manually.
+# Build a single self-contained `openreco` executable for Windows, macOS and Linux. PyInstaller is
+# not a cross-compiler, so each OS is built on its own runner. Push a version tag (v1.2.3) to build
+# all three and publish a GitHub Release with the archives attached; or run manually for test builds.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: write          # the release job needs to create a Release on tag
 
 jobs:
   build:
@@ -15,18 +18,17 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: openreco-windows
+            name: windows-x64
             binary: dist/openreco.exe
           - os: macos-latest
-            artifact: openreco-macos
+            name: macos-arm64
             binary: dist/openreco
           - os: ubuntu-latest
-            artifact: openreco-linux
+            name: linux-x64
             binary: dist/openreco
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -46,8 +48,33 @@ jobs:
           "${{ matrix.binary }}" doctor
         shell: bash
 
+      - name: Archive (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist/openreco.exe -DestinationPath openreco-${{ matrix.name }}.zip
+        shell: pwsh
+
+      - name: Archive (macOS / Linux)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x dist/openreco
+          tar -C dist -czf "openreco-${{ matrix.name }}.tar.gz" openreco
+
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.binary }}
+          name: openreco-${{ matrix.name }}
+          path: openreco-${{ matrix.name }}.*
           if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish release with binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/openreco-*
+          generate_release_notes: true

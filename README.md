@@ -55,10 +55,20 @@ reproducible and auditable). Same engine drives the **CLI** and the **Python API
 ./openreco ui myproject              # or:  ./openreco run myproject
 ```
 
-Each OS's binary is built on its own runner (PyInstaller can't cross-compile) by the
-`build-binaries` GitHub Actions workflow. `torch` is excluded to keep the size down — NVIDIA dense
-runs via the bundled CUDA COLMAP, CPU sparse always works. (GPU acceleration still needs the
-machine's own NVIDIA driver — that can't be bundled.)
+**Builds for all three platforms** come from the `build-binaries` GitHub Actions workflow — push a
+version tag (`v1.2.3`) and it builds on Windows, macOS and Linux runners (PyInstaller can't
+cross-compile) and publishes a Release with:
+
+| Platform | Asset | Notes |
+|----------|-------|-------|
+| Windows  | `openreco-windows-x64.zip` (`openreco.exe`) | SmartScreen → *More info ▸ Run anyway* (unsigned) |
+| macOS    | `openreco-macos-arm64.tar.gz` (`openreco`)  | Gatekeeper: `xattr -dr com.apple.quarantine ./openreco`, or right-click ▸ Open (unsigned/un-notarized) |
+| Linux    | `openreco-linux-x64.tar.gz` (`openreco`)    | runs on a recent glibc (Ubuntu 22.04+) |
+
+`torch` is excluded to keep the size down — NVIDIA dense runs via a CUDA COLMAP binary (Windows/
+Linux + NVIDIA driver), and CPU sparse always works. GPU acceleration needs the machine's own NVIDIA
+driver (can't be bundled); macOS has no CUDA, so it uses the CPU path. Run `openreco doctor` to see
+what's active on any machine.
 
 **2. From Python.** If you already run Python, `openreco bootstrap` detects and pip-installs the
 reconstruction deps for you:
