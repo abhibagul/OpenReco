@@ -4,7 +4,7 @@ Phase 0: the pipeline engine. A typed DAG of stages with content-addressed cachi
 checkpoint/resume, deterministic re-runs, and a project-as-code manifest.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 
 def __getattr__(name: str):
