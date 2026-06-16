@@ -116,7 +116,7 @@ let helpers = true;
 // eye-dome lighting state — declared here (above resize/loop) to avoid a temporal-dead-zone ReferenceError
 let edlOn = false, composer = null, edlReady = false;
 function resize() {
-  const w = $('center').clientWidth, h = $('center').clientHeight;
+  const w = $('innerwrapcenter').clientWidth, h = $('innerwrapcenter').clientHeight;
   if (!w || !h) return;
   // canvas is position:absolute filling #center via CSS, so only update the draw buffer (no inline px)
   renderer.setSize(w, h, false);
@@ -132,36 +132,186 @@ addEventListener('resize', resize);
 // track the actual size of the viewport pane — fires on pane-splitter drags, dock resize, window, etc.
 new ResizeObserver(() => resize()).observe($('center'));
 
+// // ---- navigation cube (CAD-style navigation cube) -----------------------------
+// const gizmoR = new THREE.WebGLRenderer({ canvas: $('gizmo'), antialias: true, alpha: true });
+// gizmoR.setPixelRatio(devicePixelRatio); gizmoR.setSize(96, 96);
+// const gizmoScene = new THREE.Scene();
+// const gizmoCam = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 100);
+// gizmoCam.position.set(0, 0, 5);
+// // gizmoScene.add(new THREE.AmbientLight(0xffffff, 10));
+// // const gizmoLight = new THREE.DirectionalLight(0xffffff, 0.6); gizmoLight.position.set(2, 3, 4); gizmoScene.add(gizmoLight);
+// function faceTex(label) {            // brand navigation cube: cobalt/azure face, white centered label
+//   const c = document.createElement('canvas'); c.width = c.height = 128;
+//   const x = c.getContext('2d');
+//   x.fillStyle = '#163fa8'; x.fillRect(0, 0, 128, 128);
+//   x.strokeStyle = '#163fa8'; x.lineWidth = 4; x.strokeRect(2, 2, 124, 124);
+//   x.fillStyle = '#ffffff'; x.font = 'bold 22px "Space Grotesk",system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+//   x.fillText(label, 64, 66);
+//   return new THREE.CanvasTexture(c);
+// }
+// // BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z. Z-up world, CAD labels.
+// const gizmoFaces = ['RIGHT', 'LEFT', 'BACK', 'FRONT', 'TOP', 'BOTTOM'];
+// const gizmoCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2),
+//   gizmoFaces.map(l => new THREE.MeshBasicMaterial({ map: faceTex(l) })));
+// gizmoScene.add(gizmoCube);
+// gizmoScene.add(new THREE.LineSegments(new THREE.EdgesGeometry(gizmoCube.geometry),
+//   new THREE.LineBasicMaterial({ color: 0xdbe7ff, opacity: 1, transparent: true })));
+
+// // per-region hover highlight (faces / edges / corners), child of the cube so it rotates with it
+// const GZ_M = 0.66;                   // face half-extent; outer band [M,1] = edges/corners
+// const gizmoHi = new THREE.Mesh(new THREE.BufferGeometry(),
+//   new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 1, depthTest: false }));
+// gizmoHi.renderOrder = 2; gizmoHi.visible = false; gizmoCube.add(gizmoHi);
+// function gizmoZone(p) {              // p in cube-local [-1,1]^3 -> region normal (-1/0/1 per axis)
+//   const s = (v) => (Math.abs(v) > GZ_M ? Math.sign(v) : 0);
+//   const n = [s(p.x), s(p.y), s(p.z)];
+//   // the face axis (|coord|~1) is always part of the zone even if exactly on M
+//   [0, 1, 2].forEach(i => { if (Math.abs([p.x, p.y, p.z][i]) > 0.999) n[i] = Math.sign([p.x, p.y, p.z][i]); });
+//   return n;
+// }
+// function gizmoHighlight(n) {         // build highlight quads on the cube surface for zone n
+//   const verts = [];
+//   const rng = (k) => (n[k] === 0 ? [-GZ_M, GZ_M] : (n[k] > 0 ? [GZ_M, 1] : [-1, -GZ_M]));
+//   for (let fa = 0; fa < 3; fa++) {
+//     if (n[fa] === 0) continue;
+//     const o = [0, 1, 2].filter(i => i !== fa);
+//     const [a0, a1] = rng(o[0]), [b0, b1] = rng(o[1]);
+//     const mk = (av, bv) => { const q = [0, 0, 0]; q[fa] = n[fa] * 1.02; q[o[0]] = av; q[o[1]] = bv; return q; };
+//     const c = [mk(a0, b0), mk(a1, b0), mk(a1, b1), mk(a0, b1)];
+//     verts.push(...c[0], ...c[1], ...c[2], ...c[0], ...c[2], ...c[3]);
+//   }
+//   gizmoHi.geometry.dispose();
+//   gizmoHi.geometry = new THREE.BufferGeometry();
+//   gizmoHi.geometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+//   gizmoHi.visible = verts.length > 0;
+// }
+// const gizmoRay = new THREE.Raycaster();
+// let gizmoHoverN = null;
+// function gizmoPick(e) {
+//   const r = $('gizmo').getBoundingClientRect();
+//   const ndc = new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+//   gizmoRay.setFromCamera(ndc, gizmoCam);
+//   const hit = gizmoRay.intersectObject(gizmoCube)[0];
+//   if (!hit) return null;
+//   return gizmoZone(gizmoCube.worldToLocal(hit.point.clone()));
+// }
+// $('gizmo').addEventListener('pointermove', (e) => {
+//   const n = gizmoPick(e);
+//   gizmoHoverN = n;
+//   if (n && (n[0] || n[1] || n[2])) gizmoHighlight(n); else gizmoHi.visible = false;
+// });
+// $('gizmo').addEventListener('pointerleave', () => { gizmoHi.visible = false; gizmoHoverN = null; });
+// $('gizmo').addEventListener('pointerdown', (e) => {
+//   const n = gizmoPick(e);
+//   if (n && (n[0] || n[1] || n[2])) snapView(new THREE.Vector3(n[0], n[1], n[2]));
+// });
+// function snapView(n) {
+//   const d = camera.position.distanceTo(controls.target) || 10;
+//   n = n.clone().normalize();
+//   camera.up.set(0, 0, 1);                                          // Z-up world
+//   if (Math.abs(n.z) > 0.9) camera.up.set(0, 1, 0);                 // straight top/bottom: north up
+//   camera.position.copy(controls.target).add(n.multiplyScalar(d));
+//   camera.lookAt(controls.target); controls.update();
+// }
+// // 90-degree rotations (CAD nav arrows): orbit around an axis, or roll the view
+// function orbitView(axis, deg) {
+//   const off = camera.position.clone().sub(controls.target);
+//   const q = new THREE.Quaternion().setFromAxisAngle(axis, deg * Math.PI / 180);
+//   off.applyQuaternion(q); camera.up.applyQuaternion(q);
+//   camera.position.copy(controls.target).add(off);
+//   camera.lookAt(controls.target); controls.update();
+// }
+// function rotateGizmo(kind) {
+//   const fwd = controls.target.clone().sub(camera.position).normalize();
+//   const right = new THREE.Vector3().crossVectors(fwd, camera.up).normalize();
+//   if (kind === 'left') orbitView(new THREE.Vector3(0, 0, 1), 90);
+//   else if (kind === 'right') orbitView(new THREE.Vector3(0, 0, 1), -90);
+//   else if (kind === 'up') orbitView(right, -90);
+//   else if (kind === 'down') orbitView(right, 90);
+//   else if (kind === 'rollL') orbitView(fwd, -90);
+//   else if (kind === 'rollR') orbitView(fwd, 90);
+//   else if (kind === 'home') snapView(new THREE.Vector3(1, -1, 0.8));
+// }
+// document.querySelectorAll('#gizmoNav .gn').forEach(b => b.onclick = () => rotateGizmo(b.dataset.rot));
+
+// (function loop(){ requestAnimationFrame(loop); controls.update();
+//   if (grid.visible) {                    // keep the infinite grid under the view + scale fade to zoom
+//     const u = grid.material.uniforms;
+//     u.uCam.value.copy(camera.position);
+//     u.uFade.value = Math.max(30, camera.position.distanceTo(controls.target) * 4.5);
+//     grid.position.x = controls.target.x; grid.position.y = controls.target.y;
+//   }
+//   if (edlOn && composer) composer.render(); else renderer.render(scene, camera);
+//   labelRenderer.render(scene, camera);                     // floating measurement labels
+//   gizmoCube.quaternion.copy(camera.quaternion).invert();   // cube mirrors the main camera
+//   gizmoR.render(gizmoScene, gizmoCam);
+// })();
+
 // ---- navigation cube (CAD-style navigation cube) -----------------------------
 const gizmoR = new THREE.WebGLRenderer({ canvas: $('gizmo'), antialias: true, alpha: true });
 gizmoR.setPixelRatio(devicePixelRatio); gizmoR.setSize(96, 96);
 const gizmoScene = new THREE.Scene();
 const gizmoCam = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 100);
 gizmoCam.position.set(0, 0, 5);
-gizmoScene.add(new THREE.AmbientLight(0xffffff, 0.9));
-const gizmoLight = new THREE.DirectionalLight(0xffffff, 0.6); gizmoLight.position.set(2, 3, 4); gizmoScene.add(gizmoLight);
+// gizmoScene.add(new THREE.AmbientLight(0xffffff, 10));
+// const gizmoLight = new THREE.DirectionalLight(0xffffff, 0.6); gizmoLight.position.set(2, 3, 4); gizmoScene.add(gizmoLight);
 function faceTex(label) {            // brand navigation cube: cobalt/azure face, white centered label
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d');
   x.fillStyle = '#1d4ed8'; x.fillRect(0, 0, 128, 128);
-  x.strokeStyle = '#163fa8'; x.lineWidth = 4; x.strokeRect(2, 2, 124, 124);
+  x.strokeStyle = '#1d4ed8'; x.lineWidth = 4; x.strokeRect(2, 2, 124, 124);
   x.fillStyle = '#ffffff'; x.font = 'bold 22px "Space Grotesk",system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
   x.fillText(label, 64, 66);
-  return new THREE.CanvasTexture(c);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;   // FIX 1: tag canvas pixels as sRGB so they aren't double-encoded
+  return tex;
 }
 // BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z. Z-up world, CAD labels.
 const gizmoFaces = ['RIGHT', 'LEFT', 'BACK', 'FRONT', 'TOP', 'BOTTOM'];
 const gizmoCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2),
   gizmoFaces.map(l => new THREE.MeshBasicMaterial({ map: faceTex(l) })));
 gizmoScene.add(gizmoCube);
-gizmoScene.add(new THREE.LineSegments(new THREE.EdgesGeometry(gizmoCube.geometry),
-  new THREE.LineBasicMaterial({ color: 0xdbe7ff })));
+gizmoCube.add(new THREE.LineSegments(new THREE.EdgesGeometry(gizmoCube.geometry),   // FIX 2: child of cube, not scene, so edges rotate with it
+  new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.5, transparent: true })));
 
 // per-region hover highlight (faces / edges / corners), child of the cube so it rotates with it
 const GZ_M = 0.66;                   // face half-extent; outer band [M,1] = edges/corners
 const gizmoHi = new THREE.Mesh(new THREE.BufferGeometry(),
-  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.38, depthTest: false }));
+  new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.45, depthTest: false, side: THREE.DoubleSide })); // semi-transparent so the label shows through on hover
 gizmoHi.renderOrder = 2; gizmoHi.visible = false; gizmoCube.add(gizmoHi);
+
+// persistent highlight for the face currently facing the camera (the active view)
+const gizmoActive = new THREE.Mesh(new THREE.BufferGeometry(),
+  new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.35, depthTest: false, side: THREE.DoubleSide }));
+gizmoActive.renderOrder = 1; gizmoCube.add(gizmoActive);   // renderOrder 1 < 2, so hover tint stacks on top
+function faceQuadVerts(n) {           // full-face quad on local face with normal n (e.g. [0,0,1])
+  const fa = n.findIndex(v => v !== 0);
+  const o = [0, 1, 2].filter(i => i !== fa);
+  const mk = (av, bv) => { const q = [0, 0, 0]; q[fa] = n[fa] * 1.015; q[o[0]] = av; q[o[1]] = bv; return q; };
+  const c = [mk(-1, -1), mk(1, -1), mk(1, 1), mk(-1, 1)];
+  return [...c[0], ...c[1], ...c[2], ...c[0], ...c[2], ...c[3]];
+}
+const _invQ = new THREE.Quaternion(), _zUp = new THREE.Vector3();
+function activeFaceNormal() {         // local face axis whose world normal points at the gizmo camera (+Z)
+  _invQ.copy(gizmoCube.quaternion).invert();
+  _zUp.set(0, 0, 1).applyQuaternion(_invQ);
+  const ax = Math.abs(_zUp.x), ay = Math.abs(_zUp.y), az = Math.abs(_zUp.z);
+  const n = [0, 0, 0];
+  if (ax >= ay && ax >= az) n[0] = Math.sign(_zUp.x);
+  else if (ay >= az) n[1] = Math.sign(_zUp.y);
+  else n[2] = Math.sign(_zUp.z);
+  return n;
+}
+let gizmoActiveN = null;
+function updateActiveFace() {         // call once per frame, after the cube quaternion is set
+  const n = activeFaceNormal();
+  if (gizmoActiveN && n[0] === gizmoActiveN[0] && n[1] === gizmoActiveN[1] && n[2] === gizmoActiveN[2]) return;
+  gizmoActiveN = n;
+  gizmoActive.geometry.dispose();
+  gizmoActive.geometry = new THREE.BufferGeometry();
+  gizmoActive.geometry.setAttribute('position', new THREE.Float32BufferAttribute(faceQuadVerts(n), 3));
+  gizmoActive.visible = true;
+}
 function gizmoZone(p) {              // p in cube-local [-1,1]^3 -> region normal (-1/0/1 per axis)
   const s = (v) => (Math.abs(v) > GZ_M ? Math.sign(v) : 0);
   const n = [s(p.x), s(p.y), s(p.z)];
@@ -242,9 +392,16 @@ document.querySelectorAll('#gizmoNav .gn').forEach(b => b.onclick = () => rotate
     grid.position.x = controls.target.x; grid.position.y = controls.target.y;
   }
   if (edlOn && composer) composer.render(); else renderer.render(scene, camera);
-  labelRenderer.render(scene, camera);                     // floating measurement labels
+  // labelRenderer.render(scene, camera);                     // floating measurement labels
+  // gizmoCube.quaternion.copy(camera.quaternion).invert();   // cube mirrors the main camera
+
+    labelRenderer.render(scene, camera);                     // floating measurement labels
   gizmoCube.quaternion.copy(camera.quaternion).invert();   // cube mirrors the main camera
+  updateActiveFace(); 
+
   gizmoR.render(gizmoScene, gizmoCam);
+
+  
 })();
 
 // ---- point-cloud display controls (size / color-by / ramp / eye-dome) ------
@@ -365,7 +522,7 @@ function loadObject(layer) {
         const col = geo.getAttribute('color');
         o.userData.origColor = col ? col.array.slice() : null;   // keep for RGB/elevation toggle
       }
-      if (!geo.getAttribute('color')) o.material.color.set(0x89b4fa);
+      if (!geo.getAttribute('color')) o.material.color.set(0x3b82f6);
       if (o.isPoints) styleCloud(o);
       resolve(o);
     }, undefined, () => resolve(null));
@@ -443,7 +600,7 @@ function overlayClear() { const c = $('editoverlay'); c.getContext('2d').clearRe
 function overlayDraw(pts, closed) {
   const c = $('editoverlay'), g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
   if (pts.length < 2) return;
-  g.strokeStyle = '#5694ff'; g.lineWidth = 1.5; g.fillStyle = 'rgba(86,148,255,0.15)';
+  g.strokeStyle = '#1d4ed8'; g.lineWidth = 1.5; g.fillStyle = 'rgba(29,78,216,0.15)';
   g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
   if (closed) g.closePath();
@@ -536,13 +693,13 @@ function updateSelHi() {
     const arr = new Float32Array(selSet.size * 3); let k = 0;
     selSet.forEach(i => { arr[k++] = pos.getX(i); arr[k++] = pos.getY(i); arr[k++] = pos.getZ(i); });
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-    selHi = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xff3b30, size: 4, sizeAttenuation: false, depthTest: false }));
+    selHi = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xe11d48, size: 4, sizeAttenuation: false, depthTest: false }));
   } else {
     const arr = new Float32Array(selSet.size * 9); let k = 0;
     selSet.forEach(f => faceVerts(selObj.geometry, f).forEach(vi => {
       arr[k++] = pos.getX(vi); arr[k++] = pos.getY(vi); arr[k++] = pos.getZ(vi); }));
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-    selHi = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xff3b30, opacity: 0.6, transparent: true,
+    selHi = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xe11d48, opacity: 0.6, transparent: true,
       depthTest: false, side: THREE.DoubleSide }));
   }
   selHi.applyMatrix4(selObj.matrixWorld); selHi.renderOrder = 3; scene.add(selHi);
@@ -699,6 +856,7 @@ function buildMeasure(m, isDraft) {
     else text = isDraft ? `${m.name} · double-click to finish` : `${m.name} · …`;
     const lbl = mkLabel(text, 'tot', col); lbl.position.copy(centroid(pts)); m.group.add(lbl);
   }
+  if (m.visible === false) setMeasureVisible(m, false);   // keep hidden after a rebuild
 }
 
 // ---- drafting -------------------------------------------------------------
@@ -859,10 +1017,16 @@ function removeMeasure(id) {
   scene.remove(measurements[i].group); measurements[i].group.clear();
   measurements.splice(i, 1); renderMPanel(); persistMeasures(); drawOrthoMeasures(); drawMapMeasures();
 }
+// hide/show a measurement: group.visible covers the WebGL geometry, but CSS2DRenderer re-applies
+// each label's display from the label's OWN .visible every frame — so set that too.
+function setMeasureVisible(m, on) {
+  m.group.visible = on;
+  m.group.traverse(o => { if (o.isCSS2DObject) { o.visible = on; if (o.element) o.element.style.display = on ? '' : 'none'; } });
+}
 function toggleMeasure(id) {
   const m = measurements.find(x => x.id === id); if (!m) return;
-  m.visible = !m.visible; m.group.visible = m.visible;
-  m.group.traverse(o => { if (o.isCSS2DObject && o.element) o.element.style.display = m.visible ? '' : 'none'; });
+  m.visible = !m.visible;
+  setMeasureVisible(m, m.visible);
   renderMPanel(); persistMeasures(); drawOrthoMeasures(); drawMapMeasures();
 }
 function renameMeasure(id) {
@@ -956,8 +1120,7 @@ async function loadMeasurements() {
       pts: (s.points || []).map(a => new THREE.Vector3(a[0], a[1], a[2])),
       group: new THREE.Group() };
     scene.add(m.group); buildMeasure(m, false);
-    if (!m.visible) { m.group.visible = false;
-      m.group.traverse(o => { if (o.isCSS2DObject && o.element) o.element.style.display = 'none'; }); }
+    if (!m.visible) setMeasureVisible(m, false);
     measurements.push(m);
   });
   ['dist', 'area', 'vol', 'prof'].forEach(t => { mSeq[t] = measurements.filter(m => m.type === t).length; });
@@ -993,7 +1156,7 @@ async function renderCompute() {
   const el = $('prefCompute'); el.textContent = 'probing…';
   try {
     const d = await (await fetch('/api/compute')).json();
-    const ok = (b) => b ? '<span style="color:var(--ok,#a6e3a1)">✓</span>' : '<span style="color:var(--muted)">—</span>';
+    const ok = (b) => b ? '<span style="color:var(--ok,#16a34a)">✓</span>' : '<span style="color:var(--muted)">—</span>';
     const rows = [];
     if (d.gpu_name) rows.push(`<b>GPU</b> ${d.gpu_name}${d.cuda_version ? ` · CUDA ${d.cuda_version}` : ''}${d.vram_mb ? ` · ${(d.vram_mb / 1024).toFixed(1)} GB` : ''}`);
     else if (d.nvidia_gpu) rows.push(`<b>GPU</b> NVIDIA GPU present (install torch for name/VRAM)`);
@@ -1142,7 +1305,7 @@ function row({ depth, id, hasKids, icon, label, count, cls = '', sel = false, di
 
 function renderWorkspace() {
   const el = $('workspace'); el.innerHTML = '';
-  $('activeChunk').textContent = `active: ${ACTIVE_CHUNK}`;
+  $('activeChunk').innerHTML = `active: <b class="activechunkname">${ACTIVE_CHUNK}</b>`;
   const byChunk = {}; PROJECT.chunks.forEach(c => byChunk[c] = []);
   PROJECT.layers.forEach(L => { (byChunk[L.chunk] = byChunk[L.chunk] || []).push(L); });
 
@@ -1300,7 +1463,7 @@ function buildCameras(cams) {
   const grp = new THREE.Group();
   const pts = cams.map(c => new THREE.Vector3(c.c[0], c.c[1], c.c[2]));
   grp.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts),
-    new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x89dceb })));
+    new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x1d4ed8 })));
   const bb = new THREE.Box3().setFromPoints(pts);
   const sz = bb.getSize(new THREE.Vector3());
   const diag = sz.length() || 1;
@@ -1311,8 +1474,8 @@ function buildCameras(cams) {
   const drop = [];
   pts.forEach(C => drop.push(C, new THREE.Vector3(C.x, C.y, groundZ)));
   grp.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(drop),
-    new THREE.LineBasicMaterial({ color: 0x45506a })));
-  const mat = new THREE.LineBasicMaterial({ color: 0x89dceb });
+    new THREE.LineBasicMaterial({ color: 0x9db8e6 })));
+  const mat = new THREE.LineBasicMaterial({ color: 0x1d4ed8 });
   const segs = [];
   cams.forEach(c => {
     if (!c.fwd || !c.up) return;                // no orientation -> just the position point
@@ -1674,7 +1837,7 @@ function selectVtab(name) {
   $('mapview').classList.toggle('show', name === 'map');
   $('c').style.display = name === 'model' ? 'block' : 'none';
   // orientation cube + point-cloud view-bar only belong to the 3D view
-  const showGz = name === 'model' ? 'block' : 'none';
+  const showGz = name === 'model' ? 'grid' : 'none';
   $('gizmo').style.display = showGz; $('gizmoNav').style.display = showGz;
   $('viewbar').style.display = name === 'model' ? 'flex' : 'none';
   labelRenderer.domElement.style.display = showGz;     // 3D measurement labels live in the model view
@@ -1846,7 +2009,7 @@ async function contourView(L) {
     const cv = $('orthocanvas'), g = cv.getContext('2d');
     const sx = img.naturalWidth / data.width, sy = img.naturalHeight / data.height;
     g.clearRect(0, 0, cv.width, cv.height);
-    g.strokeStyle = '#f9e2af'; g.lineWidth = Math.max(1, img.naturalWidth / 1200);
+    g.strokeStyle = '#f59e0b'; g.lineWidth = Math.max(1, img.naturalWidth / 1200);
     g.beginPath();
     for (const [c0, r0, c1, r1] of data.segments) {
       g.moveTo(c0 * sx, r0 * sy); g.lineTo(c1 * sx, r1 * sy);
@@ -2256,7 +2419,7 @@ $('crsSearch').oninput = () => {
       const d = document.createElement('div'); d.className = 'crsrow';
       d.textContent = `EPSG:${code} — ${name}`;
       d.onclick = () => { crsChoice = `EPSG:${code}`; $('crsOk').disabled = false;
-        [...box.children].forEach(c => c.style.background = ''); d.style.background = '#1d2738';
+        [...box.children].forEach(c => c.style.background = ''); d.style.background = 'rgba(29,78,216,0.13)';
         $('crsInfo').textContent = `selected ${crsChoice}`; };
       box.appendChild(d);
     });
@@ -2435,7 +2598,7 @@ const PANES = { left: 300, right: 330, dock: 190 };
 function layoutPanes() {
   const app = $('app');
   app.style.gridTemplateColumns = `${PANES.left}px 1fr ${PANES.right}px`;
-  app.style.gridTemplateRows = `28px 34px 1fr ${PANES.dock}px`;
+  app.style.gridTemplateRows = `46px 52px 1fr ${PANES.dock}px`;
   // reposition the drag handles to match
   $('splitL').style.left = (PANES.left - 5) + 'px';
   $('splitR').style.right = (PANES.right - 5) + 'px';
