@@ -65,8 +65,29 @@ a = Analysis(
     noarchive=False,
 )
 pyz = PYZ(a.pure)
+
+# splash screen shown by the bootloader *during* the one-file unpack (so launch isn't a blank
+# screen). Windows/Linux only — PyInstaller has no macOS splash. Text is updated from Python via
+# the `pyi_splash` module and closed once the UI is up.
+splash = None
+if sys.platform in ("win32", "linux"):
+    try:
+        splash = Splash(  # noqa: F821 — Splash is injected by PyInstaller
+            os.path.join(ROOT, "packaging/splash.png"),
+            binaries=a.binaries, datas=a.datas,
+            text_pos=(140, 278), text_size=11, text_color="#0b1a2b",
+            text_default="Starting OpenReco…",
+        )
+    except Exception as exc:
+        print(f"[spec] splash skipped: {exc}")
+
+exe_inputs = [pyz, a.scripts]
+if splash:
+    exe_inputs += [splash, splash.binaries]
+exe_inputs += [a.binaries, a.datas, []]
+
 exe = EXE(
-    pyz, a.scripts, a.binaries, a.datas, [],
+    *exe_inputs,
     name="openreco",
     console=True,
     onefile=True,

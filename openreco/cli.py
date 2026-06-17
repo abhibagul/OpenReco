@@ -64,8 +64,26 @@ def _print_banner() -> None:
     print(f"  OpenReco {__version__} — open-source photogrammetry & 3D reconstruction\n")
 
 
+def _splash(text: str | None = None, *, close: bool = False) -> None:
+    """Drive the PyInstaller boot splash (frozen build only): update its status line, or close it.
+    A no-op everywhere else (the `pyi_splash` module exists only inside a splash-enabled bundle)."""
+    try:
+        import pyi_splash  # noqa: PLC0415
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        if close:
+            pyi_splash.close()
+        elif text:
+            pyi_splash.update_text(text)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def cmd_run(args: argparse.Namespace) -> int:
+    _splash("Loading engine…")
     _print_banner()
+    _splash(close=True)
     _preflight_dependencies()
     _register_stages()
     manifest = load_manifest(args.project)
@@ -178,6 +196,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
     from openreco.ui.desktop import launch
 
     _print_banner()
+    _splash("Loading engine…")
     _register_stages()
 
     # no project given (e.g. double-clicked the app) -> a friendly default workspace in the home dir
@@ -188,6 +207,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
     proj = Project.open(project) if manifest.is_file() else Project.create(project)
     _preflight_dependencies()
     mode = "browser" if args.browser else "window" if args.window else "auto"
+    _splash(close=True)                              # hand off to the UI window/browser
     launch(proj, host=args.host, port=args.port, mode=mode, open_browser=not args.no_browser)
     return 0
 

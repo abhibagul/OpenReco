@@ -10,6 +10,8 @@ samples/*/images/
 *.png
 *.tif
 *.tiff
+# but DO keep the packaged-app splash image
+!packaging/splash.png
 # generated shareable bundles (any project)
 **/output/
 # machine-generated GCP files derived from user data
