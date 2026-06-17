@@ -47,7 +47,26 @@ def _setup_logging(verbose: bool) -> None:
     )
 
 
+_BANNER = r"""
+   ___                    ___
+  / _ \ _ __  ___ _ _    | _ \ ___ __ ___
+ | (_) | '_ \/ -_) ' \   |   / -_) _/ _ \
+  \___/| .__/\___|_||_|  |_|_\___\__\___/
+       |_|
+"""
+
+
+def _print_banner() -> None:
+    """Show the OpenReco ASCII logo on launch (only to an interactive terminal — keeps pipes/CI clean)."""
+    if not (sys.stdout and sys.stdout.isatty()):
+        return
+    print(_BANNER)
+    print(f"  OpenReco {__version__} — open-source photogrammetry & 3D reconstruction\n")
+
+
 def cmd_run(args: argparse.Namespace) -> int:
+    _print_banner()
+    _preflight_dependencies()
     _register_stages()
     manifest = load_manifest(args.project)
     force = ["*"] if args.force_all else (args.force or [])
@@ -158,6 +177,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
     from openreco.api import Project
     from openreco.ui.desktop import launch
 
+    _print_banner()
     _register_stages()
 
     # no project given (e.g. double-clicked the app) -> a friendly default workspace in the home dir

@@ -4,9 +4,10 @@
   pip install pyinstaller
   pyinstaller packaging/openreco.spec        # -> dist/openreco(.exe)
 
-torch is excluded on purpose (~4.7 GB CUDA build): NVIDIA dense runs via the bundled CUDA COLMAP
-binary, and CPU sparse always works; the torch plane-sweep / Gaussian-splat backends are not in
-the frozen build. A single OS cannot cross-build the others — run this on each (see CI).
+The CPU torch build is bundled so the portable plane-sweep dense backend works out of the box
+(no end-user pip step). The CUDA torch build (~4.7 GB) and the Gaussian-splat path stay out; NVIDIA
+users get higher-quality dense via an external CUDA COLMAP (`openreco fetch-colmap`). A single OS
+cannot cross-build the others — run this on each (see CI).
 """
 import glob
 import os
@@ -27,9 +28,11 @@ else:
 
 datas, binaries, hiddenimports = [], [], []
 
-# heavy native packages: grab their data files, dynamic libs and submodules
+# heavy native packages: grab their data files, dynamic libs and submodules.
+# torch (CPU build) is bundled so the portable plane-sweep dense MVS backend works out of the box on
+# any machine — no pip step for end users. cv2 powers ArUco/AprilTag (GCP marker) detection.
 for pkg in ("rasterio", "pyproj", "pycolmap", "scipy", "skimage",
-            "laspy", "xatlas", "fast_simplification", "PIL", "numpy"):
+            "laspy", "xatlas", "fast_simplification", "PIL", "numpy", "torch", "cv2"):
     try:
         d, b, h = collect_all(pkg)
         datas += d
@@ -57,7 +60,7 @@ a = Analysis(
     datas=datas,
     binaries=binaries,
     hiddenimports=hiddenimports,
-    excludes=["torch", "torchvision", "torchaudio", "gsplat", "matplotlib",
+    excludes=["torchvision", "torchaudio", "gsplat", "matplotlib",
               "tkinter", "pytest", "IPython", "notebook"],
     noarchive=False,
 )

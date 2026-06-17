@@ -34,9 +34,17 @@ jobs:
           python-version: "3.11"
 
       - name: Install OpenReco + reconstruction deps + PyInstaller
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[slice]"
+          # CPU torch so the portable plane-sweep dense backend is bundled (works with no GPU).
+          # macOS arm64 gets MPS from the default wheel; elsewhere pin the CPU index to avoid CUDA.
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            pip install torch
+          else
+            pip install torch --index-url https://download.pytorch.org/whl/cpu
+          fi
           pip install pyinstaller
 
       - name: Build single-file executable
