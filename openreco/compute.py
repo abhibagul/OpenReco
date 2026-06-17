@@ -52,6 +52,13 @@ def find_colmap() -> Path | None:
                 hits = sorted(tools.rglob(name))
                 if hits:
                     return hits[0]
+    try:                                              # a per-user copy from `openreco fetch-colmap`
+        from openreco import provision
+        user = provision.find_user_colmap()
+        if user:
+            return user
+    except Exception:  # noqa: BLE001 — never let provisioning break detection
+        pass
     found = shutil.which("colmap")
     return Path(found) if found else None
 

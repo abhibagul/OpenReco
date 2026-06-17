@@ -139,8 +139,12 @@ the **Run** button (and `init`) validate the stage wiring up front, so mis-wirin
 with fixes instead of failing mid-run.
 
 **GPU dense reconstruction (NVIDIA):** PatchMatch stereo is CUDA-only and the PyPI pycolmap is
-CPU-only, so dense MVS is driven by a CUDA-enabled COLMAP binary. Point `OPENRECO_COLMAP` at a
-`colmap` executable (or drop the official `colmap-x64-windows-cuda` build under `tools/`); the
+CPU-only, so dense MVS is driven by a CUDA-enabled COLMAP binary. The easiest path on **Windows** is
+`openreco fetch-colmap`, which downloads the official CUDA build into your user data dir and wires
+it in automatically (the UI also offers this on launch when an NVIDIA GPU is present but COLMAP is
+missing). Otherwise point `OPENRECO_COLMAP` at a `colmap` executable (or drop the official
+`colmap-x64-windows-cuda` build under `tools/`). On **Linux** install COLMAP via apt/conda or a
+CUDA source build; **macOS** has no CUDA, so it uses the portable plane-sweep backend instead. The
 `mvs` stage then runs real dense reconstruction automatically and falls back to the sparse cloud
 when no GPU is present.
 

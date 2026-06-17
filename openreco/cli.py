@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -165,9 +166,28 @@ def cmd_ui(args: argparse.Namespace) -> int:
     path = Path(project)
     manifest = path if path.suffix == ".toml" else path / "project.toml"
     proj = Project.open(project) if manifest.is_file() else Project.create(project)
+    _maybe_offer_gpu_setup()
     mode = "browser" if args.browser else "window" if args.window else "auto"
     launch(proj, host=args.host, port=args.port, mode=mode, open_browser=not args.no_browser)
     return 0
+
+
+def _maybe_offer_gpu_setup() -> None:
+    """On launch, if an NVIDIA GPU is present but no COLMAP is found, offer to fetch the CUDA build.
+    Silent when disabled, non-interactive, or already provisioned (so it never blocks startup)."""
+    if os.environ.get("OPENRECO_NO_AUTOSETUP"):
+        return
+    try:
+        from openreco import compute, provision
+        if compute.find_colmap() or not compute.has_nvidia_gpu():
+            return
+        if not (sys.stdin and sys.stdin.isatty()):
+            return
+        print("\nNVIDIA GPU detected, but no COLMAP found — GPU dense MVS is currently unavailable.")
+        provision.ensure_colmap(yes=False)
+        print()
+    except Exception:  # noqa: BLE001 — provisioning must never stop the UI from launching
+        pass
 
 
 def cmd_doctor(_args: argparse.Namespace) -> int:
@@ -199,6 +219,8 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     print(f"  {mark(d['torch_device'] is not None)} torch {d['torch_version'] or '(missing)'} "
           f"· device {d['torch_device'] or '-'}")
     print(f"     CPU: {d['cpu_count']} cores  ·  auto dense backend: {d['auto_dense_backend']}")
+    if d["nvidia_gpu"] and not d["colmap"]:
+        print("     -> run `openreco fetch-colmap` to download GPU dense support (CUDA COLMAP)")
 
     from openreco.bootstrap import SLICE_DEPS, missing_deps
     print("\nDependencies (the 'slice' extra)")
@@ -240,6 +262,13 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     still = missing_deps()
     print("done — all dependencies present." if not still else f"still missing: {', '.join(still)}")
     return 0
+
+
+def cmd_fetch_colmap(args: argparse.Namespace) -> int:
+    """Download a CUDA COLMAP binary for GPU dense MVS (Windows), or print setup guidance."""
+    from openreco import provision
+    exe = provision.ensure_colmap(yes=args.yes)
+    return 0 if exe else 1
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -401,6 +430,11 @@ def build_parser() -> argparse.ArgumentParser:
     pboot.add_argument("-y", "--yes", action="store_true", help="install without confirmation")
     pboot.add_argument("--upgrade", action="store_true", help="reinstall/upgrade all slice deps")
     pboot.set_defaults(func=cmd_bootstrap)
+
+    pfc = sub.add_parser("fetch-colmap",
+                         help="download a CUDA COLMAP for GPU dense MVS (Windows; guidance on Linux/macOS)")
+    pfc.add_argument("-y", "--yes", action="store_true", help="download without confirmation")
+    pfc.set_defaults(func=cmd_fetch_colmap)
 
     pin = sub.add_parser("init", help="scaffold a new project (optionally a full pipeline)")
     pin.add_argument("project", help="directory to create the project in")
