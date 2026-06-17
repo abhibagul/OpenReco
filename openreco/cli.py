@@ -166,27 +166,23 @@ def cmd_ui(args: argparse.Namespace) -> int:
     path = Path(project)
     manifest = path if path.suffix == ".toml" else path / "project.toml"
     proj = Project.open(project) if manifest.is_file() else Project.create(project)
-    _maybe_offer_gpu_setup()
+    _preflight_dependencies()
     mode = "browser" if args.browser else "window" if args.window else "auto"
     launch(proj, host=args.host, port=args.port, mode=mode, open_browser=not args.no_browser)
     return 0
 
 
-def _maybe_offer_gpu_setup() -> None:
-    """On launch, if an NVIDIA GPU is present but no COLMAP is found, offer to fetch the CUDA build.
-    Silent when disabled, non-interactive, or already provisioned (so it never blocks startup)."""
+def _preflight_dependencies() -> None:
+    """On launch, list what's missing for full functionality and (with consent) install it.
+    Silent when disabled or non-interactive, so it never blocks startup."""
     if os.environ.get("OPENRECO_NO_AUTOSETUP"):
         return
+    if not (sys.stdin and sys.stdin.isatty()):     # don't print/prompt in scripted/windowed launches
+        return
     try:
-        from openreco import compute, provision
-        if compute.find_colmap() or not compute.has_nvidia_gpu():
-            return
-        if not (sys.stdin and sys.stdin.isatty()):
-            return
-        print("\nNVIDIA GPU detected, but no COLMAP found — GPU dense MVS is currently unavailable.")
-        provision.ensure_colmap(yes=False)
-        print()
-    except Exception:  # noqa: BLE001 — provisioning must never stop the UI from launching
+        from openreco import provision
+        provision.run_preflight(yes=False)
+    except Exception:  # noqa: BLE001 — setup must never stop the UI from launching
         pass
 
 
@@ -269,6 +265,16 @@ def cmd_fetch_colmap(args: argparse.Namespace) -> int:
     from openreco import provision
     exe = provision.ensure_colmap(yes=args.yes)
     return 0 if exe else 1
+
+
+def cmd_setup(args: argparse.Namespace) -> int:
+    """Detect everything missing for full functionality (dense MVS deps) and install it, with consent."""
+    from openreco import provision
+    if not provision.dependency_plan():
+        print("everything needed is already present. (run `openreco doctor` for details)")
+        return 0
+    provision.run_preflight(yes=args.yes)
+    return 0
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -435,6 +441,10 @@ def build_parser() -> argparse.ArgumentParser:
                          help="download a CUDA COLMAP for GPU dense MVS (Windows; guidance on Linux/macOS)")
     pfc.add_argument("-y", "--yes", action="store_true", help="download without confirmation")
     pfc.set_defaults(func=cmd_fetch_colmap)
+
+    pset = sub.add_parser("setup", help="install everything needed for full functionality (dense MVS)")
+    pset.add_argument("-y", "--yes", action="store_true", help="install without confirmation")
+    pset.set_defaults(func=cmd_setup)
 
     pin = sub.add_parser("init", help="scaffold a new project (optionally a full pipeline)")
     pin.add_argument("project", help="directory to create the project in")

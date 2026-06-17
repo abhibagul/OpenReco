@@ -111,9 +111,12 @@ class Mvs(Stage):
                             raise
                         else:
                             ctx.logger.warning("COLMAP CUDA dense failed (%r) — trying next backend", exc)
-            elif forced:
+            elif forced and not ctx.params["allow_sparse_fallback"]:
                 raise RuntimeError("dense_backend=colmap_cuda but no CUDA GPU + COLMAP binary "
-                                   "(set OPENRECO_COLMAP or install the CUDA build)")
+                                   "(set OPENRECO_COLMAP or run `openreco fetch-colmap`)")
+            elif forced:
+                ctx.logger.warning("dense_backend=colmap_cuda but no CUDA GPU + COLMAP binary — "
+                                   "trying next backend (run `openreco fetch-colmap` to enable GPU dense)")
 
         if backend == "planesweep" or (backend == "colmap_cuda" and compute.torch_device()):
             if compute.torch_device():
@@ -126,8 +129,11 @@ class Mvs(Stage):
                     if forced and not ctx.params["allow_sparse_fallback"]:
                         raise
                     ctx.logger.warning("plane-sweep dense failed (%r) — falling back to sparse", exc)
-            elif forced:
+            elif forced and not ctx.params["allow_sparse_fallback"]:
                 raise RuntimeError("dense_backend=planesweep but torch is not installed")
+            elif forced:
+                ctx.logger.warning("dense_backend=planesweep but torch is not installed — "
+                                   "falling back to sparse (install torch, or use dense_backend=auto)")
 
         if not ctx.params["allow_sparse_fallback"]:
             raise RuntimeError("dense MVS unavailable and sparse fallback disabled")

@@ -158,6 +158,118 @@ def _clear_caches() -> None:
             clear()
 
 
+def _pip_install(args: list[str]) -> bool:
+    """pip-install into the current interpreter. No-op (False) inside the frozen binary, which has
+    no importable site-packages to install into."""
+    if getattr(sys, "frozen", False):
+        return False
+    import subprocess
+    cmd = [sys.executable, "-m", "pip", "install", *args]
+    print("  $ " + " ".join(cmd))
+    return subprocess.run(cmd).returncode == 0
+
+
+def install_torch() -> bool:
+    """Install PyTorch for the portable plane-sweep dense backend. CPU build off the NVIDIA path
+    (Apple Silicon gets MPS from the default wheel)."""
+    if sys.platform == "darwin":
+        return _pip_install(["torch"])
+    return _pip_install(["torch", "--index-url", "https://download.pytorch.org/whl/cpu"])
+
+
+def _install_slice(pkgs: list[str]) -> bool:
+    from openreco.bootstrap import install
+    return install(pkgs) == 0
+
+
+def dependency_plan() -> list[dict]:
+    """What this machine is missing for a fully working pipeline (esp. dense reconstruction).
+
+    Each item: {title, detail, size, action}. `action` is a no-arg callable that installs it, or
+    None when the step can't be automated here (manual setup; we still surface it)."""
+    from openreco import compute
+    from openreco.bootstrap import missing_deps
+
+    frozen = bool(getattr(sys, "frozen", False))
+    plan: list[dict] = []
+
+    miss = [] if frozen else missing_deps()           # bundled in the frozen app; pip-only otherwise
+    if miss:
+        plan.append({
+            "title": "Reconstruction libraries",
+            "detail": f"{len(miss)} Python package(s): {', '.join(miss)}",
+            "size": "~80 MB", "action": lambda m=miss: _install_slice(m)})
+
+    has_colmap = compute.find_colmap() is not None
+    nvidia = compute.has_nvidia_gpu()
+    torch_ok = compute.torch_device() is not None
+
+    if nvidia and not has_colmap:
+        if sys.platform == "win32":
+            plan.append({
+                "title": "CUDA COLMAP — GPU dense MVS",
+                "detail": "official NVIDIA build; enables high-quality dense 3D reconstruction",
+                "size": "~250 MB", "action": install_colmap_windows})
+        else:
+            plan.append({
+                "title": "CUDA COLMAP — GPU dense MVS",
+                "detail": "no auto-download on this OS — install via apt/conda or a CUDA source build",
+                "size": "", "action": None})
+    elif not nvidia and not torch_ok:
+        if frozen:
+            plan.append({
+                "title": "Dense MVS on this (non-NVIDIA) machine",
+                "detail": "needs PyTorch, which can't be added to the packaged app — run the Python "
+                          'install: pip install -e ".[slice]" && pip install torch',
+                "size": "", "action": None})
+        else:
+            plan.append({
+                "title": "PyTorch — portable (CPU/Apple-GPU) dense MVS",
+                "detail": "plane-sweep dense reconstruction without an NVIDIA GPU",
+                "size": "~200 MB", "action": install_torch})
+    return plan
+
+
+def run_preflight(yes: bool = False) -> None:
+    """Show what's needed for full functionality and, with consent, install it. Always returns
+    (skipping never blocks the app); manual-only items are surfaced but don't prompt."""
+    try:
+        plan = dependency_plan()
+    except Exception:  # noqa: BLE001
+        return
+    if not plan:
+        return
+
+    bar = "=" * 66
+    print(f"\n{bar}\nOpenReco — setup\n")
+    print("For full functionality (including dense 3D reconstruction), the following")
+    print("need to be installed on this machine:\n")
+    for it in plan:
+        size = f"   [{it['size']}]" if it["size"] else ""
+        print(f"  • {it['title']}{size}\n      {it['detail']}")
+
+    actionable = [it for it in plan if it["action"]]
+    if not actionable:
+        print("\nThese need manual setup (see notes above). Starting OpenReco…\n" + bar + "\n")
+        return
+
+    print()
+    if not _confirm("Download & install these now?", yes):
+        print("\nSkipped — starting OpenReco without them. Install later with `openreco setup`,")
+        print("`openreco fetch-colmap`, or `openreco bootstrap`. (Disable this with OPENRECO_NO_AUTOSETUP=1.)")
+        print(bar + "\n")
+        return
+
+    for it in actionable:
+        print(f"\n-> {it['title']}")
+        try:
+            it["action"]()
+        except Exception as exc:  # noqa: BLE001 — one failed item shouldn't abort the rest / the app
+            print(f"   failed: {exc!r}")
+    _clear_caches()
+    print("\nSetup done. Starting OpenReco…\n" + bar + "\n")
+
+
 def ensure_colmap(yes: bool = False) -> Path | None:
     """Make a CUDA COLMAP available for GPU dense MVS, downloading it on Windows (with consent).
 
