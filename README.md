@@ -1,4 +1,4 @@
-# OpenReco (Incomplete Version - v0.1.0)
+# OpenReco (Incomplete Version - v0.1.1)
 
 [![CI](https://github.com/abhibagul/OpenReco/actions/workflows/ci.yml/badge.svg)](https://github.com/abhibagul/OpenReco/actions/workflows/ci.yml)
 [![Build Binaries](https://github.com/abhibagul/OpenReco/actions/workflows/build-binaries.yml/badge.svg)](https://github.com/abhibagul/OpenReco/actions/workflows/build-binaries.yml)
